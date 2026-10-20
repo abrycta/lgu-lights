@@ -7,11 +7,11 @@ const log = process.argv[2], variants = process.argv.slice(3);
 mkdirSync("out", { recursive: true });
 const b = await chromium.launch({ executablePath: exe, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 for (const v of variants) {
-  const [pm, mode = "props"] = v.split(":");
+  const [pm, mode = "props", ...rest] = v.split(":"); const base = rest.join(":");
   writeFileSync(log, "");
   const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
   const errs = []; p.on("pageerror", (e) => errs.push(String(e))); p.on("console", (m) => m.type() === "error" && errs.push(m.text()));
-  await p.goto(`http://127.0.0.1:8765/bench-web/map.html?pm=${pm}&mode=${mode}`);
+  await p.goto(`http://127.0.0.1:8765/bench-web/map.html?pm=${pm}&mode=${mode}${base ? `&base=${encodeURIComponent(base)}` : ""}`);
   const r = await (await p.waitForFunction(() => window.RESULT, null, { timeout: 300000 })).jsonValue();
   await p.screenshot({ path: `out/${pm}-${mode}.png` });
   await p.close();

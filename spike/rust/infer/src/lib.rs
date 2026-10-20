@@ -149,8 +149,8 @@ pub fn predict_all(gru: &Gru, trees: &Trees, inputs: &[f32], out_gru: &mut [f32]
     }
 }
 
-// ---- wasm32 exports (no wasm-bindgen: plain C ABI, timed from JS) ----
-#[cfg(target_arch = "wasm32")]
+// ---- wasm32 bench exports (feature `wasm-bench`; no wasm-bindgen: plain C ABI, timed from JS) ----
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bench"))]
 mod wasm {
     use super::*;
     use std::sync::OnceLock;

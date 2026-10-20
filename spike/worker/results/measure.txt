@@ -1,0 +1,6 @@
+ready_after_s=2.02  (includes cargo/worker-build no-op rebuild)
+cold_first_lgu: http=200 total_ms=0.005166
+warm n=200 p50=0.86 ms p95=1.36 ms max=2.58 ms (loopback wall time per request)
+healthz n=200 p50=0.76 ms p95=1.17 ms (router-only baseline)
+404 unknown psgc: 404
+{"psgc":"0102801000","years":[{"year":2012,"estimate":6.053301,"lo":-5.081236,"hi":17.187838,"tier":2},{"year":2013,"estimate":14.97182,"lo":6.106848,"hi":23.836792,"tier":2},{"year":2014,"estimate":48.275192,"lo":44.29187,"hi":52.258514,"tier":0},{"year":2015,"estimate":35.34756,"lo":30.236595,"hi":40.458527,"tier":2},{"year":2016,"estimate":6.55359,"lo":5.3857384,"hi":7.7214413,"tier":1},{"year"

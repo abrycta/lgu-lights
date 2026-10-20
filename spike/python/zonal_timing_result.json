@@ -1,0 +1,13 @@
+{
+ "date": "2026-10-21",
+ "grid": "4800x7200 float32 @ 15 arc-sec",
+ "polygons": 1642,
+ "vertices_full": 13847420,
+ "read_polygons_s": 2.1,
+ "exactextract_full_s": 78.54,
+ "rows_full": 1642,
+ "exactextract_simplified_0.001deg_s": 4.38,
+ "vertices_simplified_0.001deg": 147810,
+ "rows_simplified_0.001deg": 1642,
+ "max_rel_diff_mean_simplified_vs_full": 0.14542202900889833
+}

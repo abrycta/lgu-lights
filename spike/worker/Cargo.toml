@@ -1,0 +1,23 @@
+[package]
+name = "lgu-worker-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+worker = { version = "=0.8.7", features = ["http", "axum"] }
+worker-macros = { version = "=0.8.7", features = ["http"] }
+axum = { version = "0.8.9", default-features = false, features = ["json", "matched-path"] }
+tower-service = "0.3.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+spike-infer = { path = "../rust/infer" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+panic = "abort"

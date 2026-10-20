@@ -39,5 +39,8 @@ s = performance.now(); await mark("lgu"); map.jumpTo({ center: [123.86, 9.66], z
 await mark("end");
 const f = map.queryRenderedFeatures({ layers: ["fill"] });
 t.rendered_features_at_lgu = f.length; t.sample_props = f[0] ? Object.keys(f[0].properties).length : null;
+const res = performance.getEntriesByType("resource").filter((e) => e.name.includes(".pmtiles") || e.name.includes("hf.co"));
+t.resource_entries = res.length; t.resource_p50_ms = Math.round(res.map((e) => e.duration).sort((a, b) => a - b)[Math.floor(res.length / 2)] ?? 0);
+t.base = base;
 window.RESULT = t;
 </script>

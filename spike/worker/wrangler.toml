@@ -1,0 +1,7 @@
+# Spike only: run with `npx wrangler dev` (local). Never deployed.
+name = "lgu-worker-spike"
+main = "build/index.js"
+compatibility_date = "2026-10-01"
+
+[build]
+command = "worker-build --release"
