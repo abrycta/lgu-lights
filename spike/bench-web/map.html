@@ -1,0 +1,43 @@
+<!doctype html><meta charset="utf-8"><title>pmtiles session</title>
+<link rel="stylesheet" href="/bench-web/node_modules/maplibre-gl/dist/maplibre-gl.css">
+<style>html,body,#m{margin:0;width:100%;height:100%}</style>
+<script type="importmap">{"imports":{"fflate":"/bench-web/node_modules/fflate/esm/browser.js"}}</script>
+<div id="m"></div>
+<script type="module">
+// Spike: a typical session (national view -> province -> one LGU) against one PMTiles variant.
+// ?pm=<file in tiles/out without .pmtiles>&mode=props|state&base=<url prefix of the pmtiles>
+import * as maplibregl from "/bench-web/node_modules/maplibre-gl/dist/maplibre-gl.mjs";
+import { Protocol } from "/bench-web/node_modules/pmtiles/dist/esm/index.js";
+const q = new URLSearchParams(location.search);
+const pm = q.get("pm"), mode = q.get("mode") ?? "props";
+const base = q.get("base") ?? `${location.origin}/tiles/out/`;
+const proto = new Protocol(); maplibregl.addProtocol("pmtiles", proto.tile);
+const mark = (s) => fetch(`/__mark/${pm}/${s}`).catch(() => {});
+const breaks = [0, "#fff7ec", 10, "#fdd49e", 20, "#fc8d59", 30, "#d7301f", 40, "#7f0000"];
+const val = mode === "state" ? ["coalesce", ["feature-state", "p"], 0] : ["get", ["concat", "p", ["global-state", "yy"]]];
+const map = new maplibregl.Map({ container: "m", canvasContextAttributes: { preserveDrawingBuffer: true },
+  style: { version: 8, state: { yy: { default: "23" } }, sources: { lgu: { type: "vector", url: `pmtiles://${base}${pm}.pmtiles` } },
+    layers: [{ id: "bg", type: "background", paint: { "background-color": "#0b1020" } },
+      { id: "fill", type: "fill-extrusion", source: "lgu", "source-layer": "lgu",
+        paint: { "fill-extrusion-color": ["interpolate", ["linear"], val, ...breaks], "fill-extrusion-height": ["*", 300, val], "fill-extrusion-opacity": 0.9 } },
+      { id: "line", type: "line", source: "lgu", "source-layer": "lgu", paint: { "line-color": "#223", "line-width": 0.4 } }] },
+  center: [122.5, 12.3], zoom: 4.6, pitch: 0, attributionControl: false });
+const idle = () => new Promise((r) => map.once("idle", r));
+const t = {};
+let s = performance.now();
+await mark("national"); await idle(); t.national_ms = Math.round(performance.now() - s);
+if (mode === "state") {  // per-feature values from one JSON (tiles carry ids only)
+  s = performance.now();
+  const a = await (await fetch("/tiles/out/attrs_all.json")).json(); const k = a.keys.indexOf("p23");
+  for (const [psgc, row] of Object.entries(a.rows)) map.setFeatureState({ source: "lgu", sourceLayer: "lgu", id: Number(psgc) }, { p: row[k] });
+  await idle(); t.state_apply_ms = Math.round(performance.now() - s);
+} else {  // year switch through global-state: one call, no per-feature work
+  s = performance.now(); map.setGlobalStateProperty("yy", "15"); await idle(); t.year_switch_ms = Math.round(performance.now() - s);
+}
+s = performance.now(); await mark("province"); map.jumpTo({ center: [124.2, 9.85], zoom: 9.2, pitch: 45 }); await idle(); t.province_ms = Math.round(performance.now() - s);
+s = performance.now(); await mark("lgu"); map.jumpTo({ center: [123.86, 9.66], zoom: 12.5, pitch: 50 }); await idle(); t.lgu_ms = Math.round(performance.now() - s);
+await mark("end");
+const f = map.queryRenderedFeatures({ layers: ["fill"] });
+t.rendered_features_at_lgu = f.length; t.sample_props = f[0] ? Object.keys(f[0].properties).length : null;
+window.RESULT = t;
+</script>

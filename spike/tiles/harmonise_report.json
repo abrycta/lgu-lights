@@ -1,0 +1,86 @@
+{
+ "date": "2026-10-21",
+ "geoboundaries": {
+  "commit": "9469f09",
+  "features": 1647,
+  "boundaryYearRepresented": "2020"
+ },
+ "hdx_cod_ab": {
+  "version": "v03",
+  "valid_on": "2025-02-13",
+  "adm3_features": 1642
+ },
+ "gb_unmatched": [],
+ "gb_points_in_two_hdx_polygons": 0,
+ "psgc_hit_by_more_than_one_gb_feature": {
+  "1303901000": [
+   "Binondo",
+   "Ermita",
+   "Intramuros",
+   "Malate",
+   "Paco",
+   "Pandacan",
+   "Port Area",
+   "Quiapo",
+   "Sampaloc",
+   "San Miguel",
+   "San Nicolas",
+   "Santa Ana",
+   "Santa Cruz",
+   "Tondo I / II"
+  ]
+ },
+ "hdx_psgc_without_gb_feature": [
+  [
+   "1204712000",
+   "Pikit",
+   "Cotabato (North Cotabato)"
+  ],
+  [
+   "1909901000",
+   "Special Geographic Area - Carmen",
+   "Special Geographic Area"
+  ],
+  [
+   "1909902000",
+   "Special Geographic Area - Kabacan",
+   "Special Geographic Area"
+  ],
+  [
+   "1909903000",
+   "Special Geographic Area - Midsayap I",
+   "Special Geographic Area"
+  ],
+  [
+   "1909904000",
+   "Special Geographic Area - Midsayap II",
+   "Special Geographic Area"
+  ],
+  [
+   "1909905000",
+   "Special Geographic Area - Pigkawayan",
+   "Special Geographic Area"
+  ],
+  [
+   "1909907000",
+   "Special Geographic Area - Pikit II",
+   "Special Geographic Area"
+  ],
+  [
+   "1909908000",
+   "Special Geographic Area - Pikit III",
+   "Special Geographic Area"
+  ]
+ ],
+ "name_exact_match_share": 0.8931,
+ "area_ratio_gb_over_hdx": {
+  "median": 1.0,
+  "p05": 1.0,
+  "p95": 1.0,
+  "n_outside_0.9_1.1": 21
+ },
+ "vertices": {
+  "gb": 12030386,
+  "hdx": 13847420
+ }
+}
