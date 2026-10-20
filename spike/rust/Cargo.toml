@@ -1,0 +1,12 @@
+[workspace]
+resolver = "3"
+members = ["infer", "oracle"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.wasm]
+inherits = "release"
+opt-level = "z"

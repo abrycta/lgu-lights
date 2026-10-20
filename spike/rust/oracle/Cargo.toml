@@ -1,0 +1,9 @@
+[package]
+name = "spike-oracle"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+spike-infer = { path = "../infer" }
+tract-onnx = "=0.23.9"

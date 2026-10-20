@@ -1,0 +1,16 @@
+[project]
+name = "lgu-lights-spike"
+version = "0.0.0"
+description = "Throwaway measurement-spike scripts for LGU Lights (2026-10-21)"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy>=2.3",
+  "onnx>=1.19",
+  "onnxruntime>=1.23",
+]
+
+[dependency-groups]
+geo = ["geopandas>=1.1", "rasterio>=1.4", "exactextract>=0.3", "shapely>=2.1", "pyogrio>=0.11"]
+
+[tool.uv]
+package = false

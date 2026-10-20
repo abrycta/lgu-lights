@@ -6,3 +6,9 @@ dist/
 __pycache__/
 .venv/
 data/
+
+# spike outputs
+spike/**/out/
+spike/**/*.pmtiles
+spike/**/requests*.jsonl
+spike/rust/Cargo.lock.bak

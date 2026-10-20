@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><title>wasm bench</title>
+<script type="module">
+import { run } from "./bench.mjs";
+const get = async (u) => new Uint8Array(await (await fetch(u)).arrayBuffer());
+const f32 = async (u) => new Float32Array((await get(u)).buffer);
+const out = [];
+for (const [prof, dir] of [["wasm", "target"], ["release", "target"], ["release+simd128", "target-simd"]]) {
+  const p = prof === "wasm" ? "wasm" : "release";
+  out.push({ host: navigator.userAgent.match(/(HeadlessChrome|Chrome)\/[\d.]+/)[0], profile: prof,
+    ...(await run(await get(`/rust/${dir}/wasm32-unknown-unknown/${p}/spike_infer.wasm`), await f32("/rust/fixtures/ref_gru.bin"), await f32("/rust/fixtures/ref_trees.bin"))) });
+}
+window.RESULT = out;
+</script>
