@@ -14,3 +14,7 @@ Decided 2026-10-21 by Kurt, after `ARCHITECTURE-RESEARCH.md`, `MODELING-PLAN.md`
 | Q7 | Narration | **Captions first**; browser speech where a voice exists; Kokoro-82M pre-rendered clips for EN/JA intros; **no MMS-TTS**. |
 | Q10 | Before building | **1-day measurement spike first**; every `[U]` estimate is replaced by a measurement, and this file gets an addendum with the results. |
 | Q9, Q11–Q15 | Defaults | Accepted as documented in OPEN-QUESTIONS.md (CV 10/20 % reliability tiers; what-if sliders labelled hypothetical; archivekit format proposals; proceed with PSA attribution and email PSA in parallel; no OSM covariates in the headline model; Zenodo DOI per data release). |
+
+## Update 2026-10-21: single Rust implementation
+
+Asked whether LGU Lights should also have multiple backends like Typhoon Replay: **no**. Keep one Rust core (Architecture B as decided above: CLI + browser WASM + Cloudflare Worker). No per-language reimplementations (they would break bit-identical numbers) and no language bindings (PyO3, Panama, etc.) for now. Bindings remain a possible later addition without changing the architecture.
