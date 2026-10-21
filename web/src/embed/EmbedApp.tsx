@@ -2,8 +2,9 @@
 // (scripts/build-embed.mjs), without the Header or footer. It is wholly inert with nothing to focus (live
 // embeds carry no link: the portfolio around the frame links to the app), and the map is non-interactive.
 // It tours a few places (TOUR, chosen in build-embed.mjs): the same view, only the place changes, every
-// DWELL_MS. It starts on the screenshot's place (the parent's poster), stays there under reduced motion,
-// and pauses while the frame is out of sight or the tab is hidden.
+// DWELL_MS. It starts on the first place, stays there under reduced motion (a still view), and pauses while
+// the parent says so (off-screen, or another embed is the one moving on a touch device), while the frame is out
+// of sight, or while the tab is hidden.
 // Phones and tablets get the frame at the portfolio's picture slot's real size: the compact layout (layout.ts),
 // the map over a two-line caption with its own lighter pack, never the desktop view scaled down.
 
@@ -24,7 +25,13 @@ import { type EmbedPack, seedFromPack } from "@/data/load";
 
 import { COMPACT_PADDING, useLayout } from "./layout";
 import { TOUR, VIEW } from "./pack.gen";
-import { COOKIE_DOMAIN, listenToParent, postReady } from "./parent-bridge";
+import {
+  COOKIE_DOMAIN,
+  listenToParent,
+  onPauseChange,
+  pausedByParent,
+  postReady,
+} from "./parent-bridge";
 
 const MapPage = lazy(() => import("@/pages/MapPage"));
 
@@ -109,7 +116,7 @@ const reducedMotion = () =>
 
 /**
  * Steps through TOUR while the frame is in sight (IntersectionObserver: the parent scrolls it away; the
- * tab's visibility) and motion is allowed; each step fades the map and panel out, selects the next place
+ * tab's visibility), the parent has not paused it, and motion is allowed; each step fades the map and panel out, selects the next place
  * (the real app's selection: zoomed to its province, its panel open), and fades them back in.
  */
 function useTour(frame: RefObject<HTMLDivElement | null>) {
@@ -140,7 +147,10 @@ function useTour(frame: RefObject<HTMLDivElement | null>) {
     };
     const ready = () => "embedReady" in document.documentElement.dataset;
     const running = () =>
-      inView && document.visibilityState === "visible" && !reducedMotion();
+      inView &&
+      document.visibilityState === "visible" &&
+      !pausedByParent() &&
+      !reducedMotion();
     const schedule = () => {
       clearTimeout(timer);
       timer = undefined;
@@ -171,6 +181,7 @@ function useTour(frame: RefObject<HTMLDivElement | null>) {
     };
     motion.addEventListener("change", onMotion);
     document.addEventListener("visibilitychange", schedule);
+    const offPause = onPauseChange(schedule);
     document.documentElement.dataset.tourStep = "0";
     schedule();
     return () => {
@@ -178,6 +189,7 @@ function useTour(frame: RefObject<HTMLDivElement | null>) {
       io.disconnect();
       motion.removeEventListener("change", onMotion);
       document.removeEventListener("visibilitychange", schedule);
+      offPause();
     };
   }, [frame]);
 }

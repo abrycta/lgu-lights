@@ -103,6 +103,41 @@ test("embed: reduced motion stays on the first place", async ({ page }) => {
   await expect(page.getByTestId("lgu-panel")).toContainText("Abra de Ilog");
 });
 
+// The parent (krtmtthw.dev) starts the frame still (?paused=1) and pauses or resumes it by message: a stand-in
+// parent page on the real origin frames the local build. Messages from any other origin are ignored.
+test("embed: the parent pauses and resumes the tour, and only the parent", async ({ page, baseURL }) => {
+  test.setTimeout(60_000);
+  // Both on public https origins (Chrome won't let a public page frame 127.0.0.1): the app's is proxied to the build.
+  const app = "https://lights.krtmtthw.dev";
+  await page.route(`${app}/**`, async (r) => {
+    const u = new URL(r.request().url());
+    r.fulfill({ response: await r.fetch({ url: `${baseURL}${u.pathname}${u.search}` }) });
+  });
+  const src = `${app}/embed?year=2023&lgu=PH1705101&lang=en&paused=1`;
+  await page.route("https://krtmtthw.dev/", (r) =>
+    r.fulfill({ contentType: "text/html", body: `<!doctype html><iframe src="${src}" width="1280" height="800"></iframe>` }),
+  );
+  await page.goto("https://krtmtthw.dev/");
+  const embed = page.frameLocator("iframe");
+  const html = embed.locator("html");
+  await expect(html).toHaveAttribute("data-embed-ready", /.*/, { timeout: 20_000 });
+  const send = (type: string, origin = app) =>
+    page.evaluate(([t, o]) => document.querySelector("iframe")!.contentWindow!.postMessage({ type: t }, o!), [type, origin]);
+  await page.waitForTimeout(4_000); // longer than one step
+  await expect(html).toHaveAttribute("data-tour-step", "0");
+  await send("akari:embed-resume");
+  await expect(html).toHaveAttribute("data-tour-step", "1", { timeout: 10_000 });
+  await send("akari:embed-pause");
+  await expect(html).toHaveAttribute("data-embed-paused", "");
+  const held = await html.getAttribute("data-tour-step");
+  await page.waitForTimeout(4_000);
+  await expect(html).toHaveAttribute("data-tour-step", held!);
+  // A message from the frame itself (not the parent) is ignored.
+  await embed.locator("html").evaluate(() => window.postMessage({ type: "akari:embed-resume" }, "*"));
+  await page.waitForTimeout(4_000);
+  await expect(html).toHaveAttribute("data-tour-step", held!);
+});
+
 // Phones and tablets: krtmtthw.dev gives the frame its picture slot's real size (16:10, measured on the site:
 // 358×224 on a 390 px phone, 736×460 at 768 px, the frame 1 px inside). The compact layout: the map over a
 // two-line caption at a readable size, never the desktop view scaled down; its own lighter pack, every tour
