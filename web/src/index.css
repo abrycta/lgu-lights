@@ -73,22 +73,25 @@
     border: 1.5px dashed var(--seal);
     background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--seal) 6%, transparent) 0 6px, transparent 6px 12px);
   }
-  .lgu-popup .maplibregl-popup-content {
-    background: var(--popover);
-    color: var(--popover-foreground);
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    padding: 6px 8px;
-    font-size: 12px;
-    line-height: 1.4;
-    box-shadow: none;
-  }
-  .lgu-popup .maplibregl-popup-tip {
-    display: none;
-  }
   .lgu-popup-model {
     font-style: italic;
   }
+}
+
+/* Hover popup in Akari colours. Unlayered and scoped like the controls below: MapLibre's own stylesheet is
+   unlayered, so a rule inside @layer components loses to it (white box, light text in dark mode). */
+.maplibregl-map .lgu-popup .maplibregl-popup-content {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: none;
+}
+.maplibregl-map .lgu-popup .maplibregl-popup-tip {
+  display: none;
 }
 
 /* MapLibre controls in Akari colours. Unlayered and scoped to .maplibregl-map so they win over
