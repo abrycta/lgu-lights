@@ -1,22 +1,21 @@
 // /embed: the portfolio's live picture of Lights. The real MapPage, fed from one pre-packed file
-// (scripts/build-embed.mjs), without the Header or footer; everything but the "Open the live app" link is
-// inert, and the map is non-interactive. It tours a few places (TOUR, chosen in build-embed.mjs): the same
-// view, only the place changes, every DWELL_MS. It starts on the screenshot's place (the parent's poster),
-// stays there under reduced motion, and pauses while the frame is out of sight.
+// (scripts/build-embed.mjs), without the Header or footer. It is wholly inert with nothing to focus (live
+// embeds carry no link: the portfolio around the frame links to the app), and the map is non-interactive.
+// It tours a few places (TOUR, chosen in build-embed.mjs): the same view, only the place changes, every
+// DWELL_MS. It starts on the screenshot's place (the parent's poster), stays there under reduced motion,
+// and pauses while the frame is out of sight.
 
-import { AkariProvider, Button, T, useLang } from "@abrycta/akari/react";
-import { type ComponentProps, lazy, type RefObject, Suspense, use, useEffect, useMemo, useRef } from "react";
+import { AkariProvider, useLang } from "@abrycta/akari/react";
+import { lazy, type RefObject, Suspense, use, useEffect, useMemo, useRef } from "react";
 
 import { ErrorBoundary } from "@/app/ErrorBoundary";
-import { parseUrl, useUrlState } from "@/app/url";
+import { parseUrl } from "@/app/url";
 import { type EmbedPack, seedFromPack } from "@/data/load";
 
 import { PACK_URL, TOUR, VIEW } from "./pack.gen";
 import { COOKIE_DOMAIN, listenToParent, postReady } from "./parent-bridge";
 
 const MapPage = lazy(() => import("@/pages/MapPage"));
-
-const liveUrl = (lgu: string) => `https://lights.krtmtthw.dev/?year=${VIEW.year}&lgu=${lgu}`;
 
 /** Time on each place, the fade around a change, and the map's settle ease. */
 const DWELL_MS = 5500;
@@ -149,16 +148,6 @@ function useTour(frame: RefObject<HTMLDivElement | null>) {
   }, [frame]);
 }
 
-/** The live app at the place shown. Button's asChild hands its classes to this, so they are passed on. */
-function LiveLink(props: ComponentProps<"a">) {
-  const { lgu } = useUrlState();
-  return (
-    <a {...props} href={liveUrl(lgu ?? VIEW.lgu)} target="_blank" rel="noopener" data-testid="open-live">
-      <T en="Open the live app ↗" ja="ライブ版を開く ↗" />
-    </a>
-  );
-}
-
 export function EmbedApp() {
   useEffect(() => listenToParent(), []);
   const frame = useRef<HTMLDivElement>(null);
@@ -179,13 +168,6 @@ export function EmbedApp() {
           </Suspense>
         </ErrorBoundary>
       </div>
-      <Button
-        asChild
-        variant="outline"
-        className="fixed right-[calc(12px/var(--embed-scale,1))] bottom-[calc(12px/var(--embed-scale,1))] z-50 h-auto min-h-[calc(28px/var(--embed-scale,1))] bg-background px-[calc(10px/var(--embed-scale,1))] py-[calc(4px/var(--embed-scale,1))] text-[calc(14px/var(--embed-scale,1))] shadow-sm"
-      >
-        <LiveLink />
-      </Button>
     </AkariProvider>
   );
 }

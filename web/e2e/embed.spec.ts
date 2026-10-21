@@ -2,8 +2,8 @@ import { expect, type Page, test } from "@playwright/test";
 
 import { TOUR } from "../src/embed/pack.gen";
 
-// The /embed tour krtmtthw.dev frames: no Header, one outbound link (to the place shown), a
-// non-interactive map, the ready message to the parent, a few places in turn, and nothing fetched from
+// The /embed tour krtmtthw.dev frames: no Header, nothing to focus (no link: the portfolio links out),
+// a non-interactive map, the ready message to the parent, a few places in turn, and nothing fetched from
 // anywhere but the app's own origin (never /api/).
 
 // The panel's heading for each TOUR place (scripts/build-embed.mjs says why each was chosen).
@@ -15,7 +15,6 @@ const NAMES: Record<string, string> = {
   PH0803747: "Tacloban City",
   PH1102319: "City of Tagum",
 };
-const live = (lgu: string) => `https://lights.krtmtthw.dev/?year=2023&lgu=${lgu}`;
 
 function watch(page: Page, origin: string) {
   const bad: string[] = [];
@@ -61,15 +60,20 @@ test("embed: first place, own origin only, ready message", async ({ page, baseUR
 
   await expect(page.locator("[data-akari-header]")).toHaveCount(0);
   await expect(page.getByTestId("lgu-panel")).toContainText("Abra de Ilog");
-  const link = page.getByTestId("open-live");
-  await expect(link).toHaveAttribute("href", live("PH1705101"));
-  await expect(link).toHaveAttribute("target", "_blank");
-  // The map and panels are inert and the map has no controls: the link is the only stop for Tab.
+  await expect(page.getByTestId("open-live")).toHaveCount(0);
+  // Everything is inert and the map has no controls: Tab finds nothing to focus in the frame.
   await expect(page.getByTestId("embed-frame")).toHaveAttribute("inert", "");
   await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveCount(0);
-  await expect(page.locator(".maplibregl-canvas")).not.toHaveAttribute("tabindex", "0");
   await page.keyboard.press("Tab");
-  await expect(link).toBeFocused();
+  await page.keyboard.press("Tab");
+  expect(await page.evaluate(() => document.activeElement === document.body || document.activeElement === null)).toBe(true);
+  const focusable = await page.evaluate(
+    () =>
+      [...document.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, [tabindex], [contenteditable]")].filter(
+        (e) => !e.closest("[inert]") && e.tabIndex >= 0,
+      ).length,
+  );
+  expect(focusable).toBe(0);
   await expectNoScrollbars(page);
 
   expect(warnings).toEqual([]);
@@ -84,7 +88,6 @@ test("embed: tours every place and loops, each fully packed", async ({ page, bas
   for (const [i, lgu] of [...TOUR.entries(), [0, TOUR[0]] as const]) {
     await expect(page.locator(`html[data-tour-step="${i}"]`)).toBeAttached({ timeout: 10_000 });
     await expect(page.getByTestId("lgu-panel")).toContainText(NAMES[lgu]!);
-    await expect(page.getByTestId("open-live")).toHaveAttribute("href", live(lgu));
     await expectNoScrollbars(page);
   }
   expect(warnings).toEqual([]);
