@@ -112,9 +112,9 @@ function Folds({ m }: { m: Metrics }) {
 
 export default function AboutPage() {
   return (
-    // Full-bleed like the Header (width="full"): the page column starts at the same 16px gutter as the brand.
+    // Full-bleed like the Header: the page column starts at the same 16px gutter as the brand.
     <Page
-      className="max-w-none px-ak-gutter"
+      width="full"
       eyebrow={<T en="About & method" ja="概要と手法" />}
       title={<T en="Honest about the data" ja="データに正直に" />}
       lede={
