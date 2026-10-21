@@ -9,8 +9,15 @@ pub const FIRST_YEAR: i32 = 2012;
 pub const LAST_YEAR: i32 = 2025;
 pub const N_YEARS: usize = (LAST_YEAR - FIRST_YEAR + 1) as usize;
 
-/// PSA Small Area Estimate rounds of the VIIRS era (DECISIONS Q4).
-pub const ROUNDS: [i32; 5] = [2012, 2015, 2018, 2021, 2023];
+/// PSA Small Area Estimate rounds used by the models: the VIIRS era (DECISIONS Q4) and, since model v3,
+/// the 2006 and 2009 ELL rounds (DECISIONS, v3 enhancement), which predate the feature years: their rows have no
+/// satellite inputs (NaN) and only start transitions and trends.
+pub const ROUNDS: [i32; 7] = [2006, 2009, 2012, 2015, 2018, 2021, 2023];
+
+/// The rounds inside the feature years (what the read models publish as official rounds).
+pub fn published_rounds() -> impl Iterator<Item = i32> {
+    ROUNDS.into_iter().filter(|&r| r >= FIRST_YEAR)
+}
 
 /// Raw yearly inputs per LGU, in this order in the snapshot.
 pub const RAW_FIELDS: [&str; 7] = [
@@ -82,6 +89,19 @@ pub struct Panel {
     pub statics: Vec<f64>,
     /// `[lgu][round]`, flattened.
     pub officials: Vec<Official>,
+    /// PSA provincial poverty incidence from FIES (percent), `[province][round]`, flattened; empty or NaN
+    /// when unknown (model v3). Used lagged only: the value of the previous round.
+    pub prov_fies: Vec<f64>,
+}
+
+/// Province-level context derived from the panel once (CLI, browser and Worker alike).
+#[derive(Clone, Debug, Default)]
+pub struct ProvinceStats {
+    /// Mean official estimate per (province, round) over LGUs with an estimate; NaN if none.
+    pub means: Vec<f64>,
+    /// FIES provincial poverty incidence minus `means`, centred on the mean over provinces of the same
+    /// round (so a nationwide difference between the two sources cancels); NaN when either is missing.
+    pub fies_gap: Vec<f64>,
 }
 
 impl Panel {
@@ -151,6 +171,43 @@ impl Panel {
         (0..ROUNDS.len())
             .rev()
             .find(|&r| ROUNDS[r] < year && self.official(lgu, r).is_some())
+    }
+
+    pub fn fies(&self, province: usize, round_idx: usize) -> f64 {
+        self.prov_fies
+            .get(province * ROUNDS.len() + round_idx)
+            .copied()
+            .unwrap_or(f64::NAN)
+    }
+
+    /// Sets the FIES provincial figure (quantised to f32 like every stored value).
+    pub fn set_fies(&mut self, province: usize, round_idx: usize, value: f64) {
+        if self.prov_fies.len() != self.provinces.len() * ROUNDS.len() {
+            self.prov_fies = vec![f64::NAN; self.provinces.len() * ROUNDS.len()];
+        }
+        self.prov_fies[province * ROUNDS.len() + round_idx] = q(value);
+    }
+
+    pub fn province_stats(&self) -> ProvinceStats {
+        let means = self.province_round_means();
+        let nr = ROUNDS.len();
+        let mut gap: Vec<f64> = (0..means.len())
+            .map(|k| self.fies(k / nr, k % nr) - means[k])
+            .collect();
+        for r in 0..nr {
+            let v: Vec<f64> = (0..self.provinces.len())
+                .map(|p| gap[p * nr + r])
+                .filter(|x| x.is_finite())
+                .collect();
+            let c = v.iter().sum::<f64>() / v.len().max(1) as f64;
+            for p in 0..self.provinces.len() {
+                gap[p * nr + r] = q(gap[p * nr + r] - c);
+            }
+        }
+        ProvinceStats {
+            means,
+            fies_gap: gap,
+        }
     }
 
     /// Mean official estimate per (province, round) over LGUs with an estimate; NaN if none.

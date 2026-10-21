@@ -7,7 +7,7 @@ name: Data
 
 on:
   # workflow_dispatch only works once this file is on the default branch; until then a run is requested
-  # on a branch by committing .github/data-run.json ({"version": ..., "features": ..., "vj113a1": ...}).
+  # on a branch by committing .github/data-run.json ({"version": ..., "features": ..., "features_from": ..., "vj113a1": ...}).
   push:
     paths: [.github/data-run.json]
   workflow_dispatch:
@@ -17,9 +17,12 @@ on:
         required: true
         default: v1
       features:
-        description: Rebuild the feature store (zonal statistics); off = reuse the features-<version> release
+        description: Rebuild the feature store (zonal statistics); off = reuse the features-<features_from> release
         type: boolean
         default: true
+      features_from:
+        description: With features off, the data version whose feature store is reused (empty = this version)
+        default: ""
       years:
         description: Feature years
         default: "2012-2025"
@@ -45,6 +48,7 @@ jobs:
     outputs:
       version: ${{ steps.c.outputs.version }}
       features: ${{ steps.c.outputs.features }}
+      features_from: ${{ steps.c.outputs.features_from }}
       years: ${{ steps.c.outputs.years }}
       vj113a1: ${{ steps.c.outputs.vj113a1 }}
     steps:
@@ -55,6 +59,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           I_VERSION: ${{ inputs.version }}
           I_FEATURES: ${{ inputs.features }}
+          I_FROM: ${{ inputs.features_from }}
           I_YEARS: ${{ inputs.years }}
           I_VJ: ${{ inputs.vj113a1 }}
         run: |
@@ -64,11 +69,13 @@ jobs:
           c = json.load(open(".github/data-run.json"))
           print(f"version={c.get('version', 'v1')}")
           print(f"features={str(c.get('features', True)).lower()}")
+          print(f"features_from={c.get('features_from') or c.get('version', 'v1')}")
           print(f"years={c.get('years', '2012-2025')}")
           print(f"vj113a1={str(c.get('vj113a1', False)).lower()}")
           PY
           else
-            { echo "version=$I_VERSION"; echo "features=$I_FEATURES"; echo "years=$I_YEARS"; echo "vj113a1=$I_VJ"; } >> "$GITHUB_OUTPUT"
+            { echo "version=$I_VERSION"; echo "features=$I_FEATURES"; echo "features_from=${I_FROM:-$I_VERSION}"
+              echo "years=$I_YEARS"; echo "vj113a1=$I_VJ"; } >> "$GITHUB_OUTPUT"
           fi
           cat "$GITHUB_OUTPUT"
 
@@ -92,6 +99,7 @@ jobs:
             uv sync --locked --group sources --group zonal
             uv run python -m lgu inputs
             uv run python -m lgu labels
+            uv run python -m lgu fies
           else
             echo "::notice title=archivekit not installed::ARCHIVE_READ_TOKEN is not set: HDX boundaries are fetched directly (sha256-pinned) and labels come from pipeline/inputs/ (built from archivekit-validated files)."
             uv sync --locked --group zonal
@@ -157,7 +165,7 @@ jobs:
           gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$tag" --prerelease --target "$GITHUB_SHA" --title "$tag" \
             --notes "Feature store for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA)." \
-            build/features.parquet build/lgus.parquet build/labels.parquet build/provinces.json \
+            build/features.parquet build/lgus.parquet build/labels.parquet build/provinces_fies.parquet build/provinces.json \
             build/crosswalk-report.json build/provenance.json build/zonal_*.parquet build/geom.pmtiles
           du -h build/*.parquet build/geom.pmtiles | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -166,6 +174,8 @@ jobs:
     if: ${{ !cancelled() && needs.config.result == 'success' && (needs.features.result == 'success' || needs.features.result == 'skipped') }}
     env:
       VERSION: ${{ needs.config.outputs.version }}
+      # the feature store is this version's own when it was rebuilt, otherwise the one named in features_from
+      FEATURES_FROM: ${{ needs.config.outputs.features == 'true' && needs.config.outputs.version || needs.config.outputs.features_from }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -173,7 +183,15 @@ jobs:
       - name: Feature store from the features release
         run: |
           mkdir -p data/build && cd data/build
-          gh release download "features-$VERSION" --clobber
+          gh release download "features-$FEATURES_FROM" --clobber
+          echo "feature store: features-$FEATURES_FROM" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$FEATURES_FROM" != "$VERSION" ]; then
+            # A reused satellite store keeps its zonal statistics; the PSA inputs (labels, provincial
+            # FIES) are this commit's committed copies, as a rebuilt store would have them (B4).
+            cp ../../pipeline/inputs/labels.parquet ../../pipeline/inputs/crosswalk-report.json \
+               ../../pipeline/inputs/provinces_fies.parquet .
+            echo "PSA inputs: pipeline/inputs/ at $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: ./.github/actions/setup-rust
         with: { key: cli }
       - run: cargo build --release -p lgu-cli
@@ -229,7 +247,7 @@ jobs:
           tag="data-$VERSION"
           gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$tag" --draft --target "$GITHUB_SHA" --title "$tag" \
-            --notes "Read models for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA). Model estimates are not official statistics." \
+            --notes "Read models for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA; feature store features-$FEATURES_FROM). Model estimates are not official statistics." \
             "read-models-$VERSION.tar.zst" metrics.json features.parquet labels.parquet estimates.parquet lgu.pmtiles
           gh release edit "$tag" --draft=false
           {

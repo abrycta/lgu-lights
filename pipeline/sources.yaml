@@ -98,6 +98,90 @@ sources:
       member_format: xml
     archived: { enabled: true, retention: all }
 
+  # ------------------------------------------------------------------ provincial poverty (FIES; model v3)
+  # PSA OpenSTAT (PXWeb) tables. PXWeb returns data only to a POST with a query, so an automated GET of
+  # the link gets the table's metadata, fails validation and falls back to the archive snapshot; the
+  # snapshot is refreshed with pipeline/tools/fetch_openstat.py and adopted with tools/adopt_manual.py.
+  # Used lagged only (the previous SAE round's provincial figure) and as a yardstick for province-level
+  # accuracy; never as a same-year input (lgu/fies.py).
+  - id: psa-fies-prov-2006-2015
+    description: >-
+      Official full-year poverty statistics (FIES): annual per capita poverty threshold, poverty incidence
+      among population, CV and magnitude of poor population by region and province, 1991, 2006, 2009,
+      2012 and 2015 (provinces include their highly urbanised cities). OpenSTAT table 3D/0023C3DP020.
+    kind: file
+    format: json
+    filename: psa-fies-prov-2006-2015.json
+    local_path: data/raw/psa/psa-fies-prov-2006-2015.json
+    licence: "PSA OpenSTAT terms of use (free use with attribution)"
+    attribution: "Philippine Statistics Authority, OpenSTAT: Annual Per Capita Poverty Threshold, Poverty Incidence and Magnitude of Poor Population by Region/Province"
+    cadence: once (superseded series)
+    pin:
+      intake: "POST query (every value of every variable, JSON-stat 2) with pipeline/tools/fetch_openstat.py on 2026-10-21; adopted with pipeline/tools/adopt_manual.py"
+    links:
+      - id: openstat
+        url: "https://openstat.psa.gov.ph/PXWeb/api/v1/en/DB/3D/0023C3DP020.px"
+        probe_contains: "Poverty Incidence"
+      - id: archive
+        archive: true
+    checks:
+      bytes: { min: 5000, max: 500000 }
+      json_type: object
+      contains: "Poverty Incidence among Population"
+    archived: { enabled: true, retention: all }
+
+  - id: psa-fies-prov-2018-2023
+    description: >-
+      Official full-year poverty statistics (FIES), Table 2: annual per capita poverty threshold and
+      poverty incidence among population with SE, CV and 95 % CI, by region and province, 2018, 2021 and
+      2023 (provinces include their highly urbanised cities). OpenSTAT table 1F/FY/0031F3DF020.
+    kind: file
+    format: json
+    filename: psa-fies-prov-2018-2023.json
+    local_path: data/raw/psa/psa-fies-prov-2018-2023.json
+    licence: "PSA OpenSTAT terms of use (free use with attribution)"
+    attribution: "Philippine Statistics Authority, OpenSTAT: Full Year Poverty Statistics, Table 2"
+    cadence: every FIES round (about every 3 years)
+    pin:
+      intake: "POST query with pipeline/tools/fetch_openstat.py on 2026-10-21; adopted with pipeline/tools/adopt_manual.py"
+    links:
+      - id: openstat
+        url: "https://openstat.psa.gov.ph/PXWeb/api/v1/en/DB/1F/FY/0031F3DF020.px"
+        probe_contains: "Poverty Incidence"
+      - id: archive
+        archive: true
+    checks:
+      bytes: { min: 5000, max: 500000 }
+      json_type: object
+      contains: "Poverty Incidence among Population"
+    archived: { enabled: true, retention: all }
+
+  - id: psa-fies-prov-nohuc
+    description: >-
+      Official full-year poverty statistics (FIES), Table 2a: poverty incidence among population by
+      region, province (without its highly urbanised cities) and HUC, 2018, 2021 and 2023. The yardstick
+      for province-level accuracy: it covers the same towns as the SAE. OpenSTAT table 1F/FY/0041F3DF02A.
+    kind: file
+    format: json
+    filename: psa-fies-prov-nohuc.json
+    local_path: data/raw/psa/psa-fies-prov-nohuc.json
+    licence: "PSA OpenSTAT terms of use (free use with attribution)"
+    attribution: "Philippine Statistics Authority, OpenSTAT: Full Year Poverty Statistics, Table 2a"
+    cadence: every FIES round (about every 3 years)
+    pin:
+      intake: "POST query with pipeline/tools/fetch_openstat.py on 2026-10-21; adopted with pipeline/tools/adopt_manual.py"
+    links:
+      - id: openstat
+        url: "https://openstat.psa.gov.ph/PXWeb/api/v1/en/DB/1F/FY/0041F3DF02A.px"
+        probe_contains: "Poverty Incidence"
+      - id: archive
+        archive: true
+    checks:
+      bytes: { min: 5000, max: 500000 }
+      json_type: object
+      contains: "Poverty Incidence among Population"
+    archived: { enabled: true, retention: all }
+
   # ------------------------------------------------------------------ codes and boundaries (S2)
   - id: cod-ab-phl-tables
     description: >-

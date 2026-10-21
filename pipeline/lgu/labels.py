@@ -3,6 +3,8 @@
 Rounds used for the models (DECISIONS Q4, VIIRS era): 2012 and 2015 (ELL) from the "2018 - 2021"
 workbook's per-round sheets, 2018 (ELL), 2021 and 2023 (Census EB) from the 2023 workbook's Annex 1,
 which also publishes standard errors. Values are poverty incidence among the population in percent.
+Since model v3 (DECISIONS, v3 enhancement) the 2006 and 2009 sheets (ELL) are read too: they are training labels and
+provincial-shift history; LGUs created after a round void that round's labels for their province.
 
 PSA keys rows by a 6-digit pre-2021 code (region 2 + province 2 + municipality 2, leading zero
 dropped). The crosswalk to the HDX pcode ("PH" + region 2 + province 3 + municipality 2) is, in order:
@@ -25,8 +27,8 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
-ROUNDS = (2012, 2015, 2018, 2021, 2023)
-ESTIMATOR = {2012: "ELL", 2015: "ELL", 2018: "ELL", 2021: "CensusEB", 2023: "CensusEB"}
+ROUNDS = (2006, 2009, 2012, 2015, 2018, 2021, 2023)
+ESTIMATOR = {2006: "ELL", 2009: "ELL", 2012: "ELL", 2015: "ELL", 2018: "ELL", 2021: "CensusEB", 2023: "CensusEB"}
 Z90 = 1.6448536269514722
 
 
@@ -77,6 +79,12 @@ def parse_round_sheet(wb: openpyxl.Workbook, year: int, source_id: str) -> list[
         se = cv * est / 100 if cv is not None else None
         rows.append(SaeRow(code, prov, name, year, est, cv, se, lo, hi, source_id))
     return rows
+
+
+def created_later(wb: openpyxl.Workbook, year: int) -> set[str]:
+    """PSA codes a round sheet lists without an estimate: LGUs created after that round (e.g. the
+    Basilan, Sulu and Maguindanao municipalities of 2006-2009 in the 2006 sheet)."""
+    return {code for code, _, _, r in _rows(wb[str(year)]) if _num(r[3]) is None}
 
 
 def parse_annex_2023(wb: openpyxl.Workbook, source_id: str) -> list[SaeRow]:
@@ -193,7 +201,8 @@ def build_labels(sae_2018_2021: Path, sae_2023: Path, adm3: pd.DataFrame, overri
         return openpyxl.load_workbook(io.BytesIO(p.read_bytes()), read_only=True, data_only=True)
 
     wb1, wb2 = open_wb(sae_2018_2021), open_wb(sae_2023)
-    rows = parse_round_sheet(wb1, 2012, "psa-sae-2018-2021") + parse_round_sheet(wb1, 2015, "psa-sae-2018-2021")
+    rows = [r for y in (2006, 2009, 2012, 2015) for r in parse_round_sheet(wb1, y, "psa-sae-2018-2021")]
+    new_after = {y: created_later(wb1, y) for y in (2006, 2009, 2012, 2015)}
     rows += parse_annex_2023(wb2, "psa-sae-2023")
     mapping, report = crosswalk(rows, adm3, overrides)
     adm3_names = dict(zip(adm3.adm3_pcode, adm3.adm3_name))
@@ -226,7 +235,20 @@ def build_labels(sae_2018_2021: Path, sae_2023: Path, adm3: pd.DataFrame, overri
     # unit maps from one PSA row in that round; otherwise drop it from training (honest, no averaging).
     n = df.groupby(["adm3_pcode", "round_year"]).estimate.transform("size")
     report["dropped_many_to_one_rows"] = int((n > 1).sum())
-    df = df[n == 1].sort_values(["adm3_pcode", "round_year"]).reset_index(drop=True)
+    df = df[n == 1]
+    # Territorial change: when an LGU was created after a round, that round's estimate of its parent
+    # covered a larger area, and the sheets do not say which LGU the parent was. Drop the round's labels
+    # for the whole (current) province rather than guess.
+    split: dict[int, list[str]] = {}
+    for y, codes in new_after.items():
+        provs = sorted({mapping[c][:7] for c in codes if c in mapping
+                        and not ((df.adm3_pcode == mapping[c]) & (df.round_year == y)).any()
+                        and ((df.adm3_pcode == mapping[c]) & (df.round_year > y)).any()})
+        if provs:
+            split[y] = provs
+            df = df[~((df.round_year == y) & df.adm3_pcode.str[:7].isin(provs))]
+    report["dropped_province_rounds_territorial_change"] = split
+    df = df.sort_values(["adm3_pcode", "round_year"]).reset_index(drop=True)
     report["rows_per_round"] = {int(k): int(v) for k, v in df.round_year.value_counts().sort_index().items()}
     return df, report
 

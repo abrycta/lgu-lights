@@ -1,7 +1,7 @@
 """Adopt a file downloaded by hand as an archivekit snapshot of a registry source.
 
 psa.gov.ph answers every automated client with a Cloudflare challenge (spike S7), so some PSA files
-can only be downloaded in a browser. This tool feeds such a file to archivekit's own `snapshot()`
+can only be downloaded in a browser; OpenSTAT tables need a POST query (tools/fetch_openstat.py). This tool feeds such a file to archivekit's own `snapshot()`
 as if the source's primary link had served it (an in-memory transport answers that one URL with the
 local bytes), so the release gets the kit's normal checks, hooks, manifest, SHA256SUMS and tag
 `<id>-<YYYY-MM-DD>`, and every reader of the archive (fetch, restore, doctor) can use it.
@@ -26,6 +26,9 @@ from archivekit.snapshot import snapshot
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lgu.paths import REGISTRY_PATH, REPO_ROOT
 
+CONTENT_TYPES = {".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                 ".json": "application/json"}
+
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -43,7 +46,7 @@ def main() -> int:
     def serve(req: httpx.Request) -> httpx.Response:
         if req.url == httpx.URL(url) and req.method in ("GET", "HEAD"):
             return httpx.Response(200, stream=httpx.ByteStream(b"" if req.method == "HEAD" else body), headers={
-                "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "content-type": CONTENT_TYPES.get(a.file.suffix, "application/octet-stream"),
                 "content-length": str(len(body))})
         return httpx.Response(404)
 

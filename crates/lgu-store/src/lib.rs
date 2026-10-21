@@ -5,6 +5,7 @@
 //! * `lgus.parquet`: one row per ADM3 unit (adm3_pcode, names, adm2_pcode, area_km2, ...)
 //! * `features.parquet`: one row per (adm3_pcode, year) with the raw zonal statistics
 //! * `labels.parquet`: PSA official estimates per (adm3_pcode, round_year)
+//! * `provinces_fies.parquet` (optional, model v3): PSA FIES provincial poverty per (adm2_pcode, round_year)
 
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -170,6 +171,20 @@ pub fn load(lgus_path: &Path, features_path: &Path, labels_path: &Path) -> Resul
             lon: num(r, "lon"),
             lat: num(r, "lat"),
         });
+    }
+    // PSA FIES provincial poverty (model v3): provinces_fies.parquet next to labels.parquet; optional,
+    // so a feature store from before v3 still loads (the feature is then NaN).
+    let fies_path = labels_path.with_file_name("provinces_fies.parquet");
+    if fies_path.exists() {
+        for r in read_rows(&fies_path)? {
+            let v = num(&r, "pi");
+            let prov = pcode_id(&format!("{}00", text(&r, "adm2_pcode")));
+            let k = panel::round_index(num(&r, "round_year") as i32);
+            let pi = prov.and_then(|id| p.provinces.iter().position(|&x| x == id));
+            if let (true, Some(pi), Some(k)) = (v.is_finite(), pi, k) {
+                p.set_fies(pi, k, v);
+            }
+        }
     }
     Ok(Store {
         panel: p,
