@@ -102,3 +102,40 @@ test("embed: reduced motion stays on the first place", async ({ page }) => {
   await expect(page.locator('html[data-tour-step="0"]')).toBeAttached();
   await expect(page.getByTestId("lgu-panel")).toContainText("Abra de Ilog");
 });
+
+// Phones and tablets: krtmtthw.dev gives the frame its picture slot's real size (16:10, measured on the site:
+// 358×224 on a 390 px phone, 736×460 at 768 px, the frame 1 px inside). The compact layout: the map over a
+// two-line caption at a readable size, never the desktop view scaled down; its own lighter pack, every tour
+// place's tiles in it, and nothing to scroll.
+for (const { name, viewport, pack } of [
+  { name: "phone", viewport: { width: 356, height: 222 }, pack: /lights-small-/ },
+  { name: "tablet", viewport: { width: 734, height: 458 }, pack: /lights-medium-/ },
+]) {
+  test(`embed, compact (${name}): map and caption, own pack, tours every place`, async ({ page, baseURL }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize(viewport);
+    const { bad, warnings } = watch(page, new URL(baseURL!).origin);
+    const packs: string[] = [];
+    page.on("request", (r) => r.url().includes("/embed-data/") && packs.push(new URL(r.url()).pathname));
+    await page.goto("/embed?year=2023&lgu=PH1705101&lang=en");
+    await expect(page.locator("html[data-embed-ready]")).toBeAttached();
+    await expect(page.locator('[data-layout="compact"]')).toBeVisible();
+    await expect(page.getByTestId("lgu-panel")).toHaveCount(0);
+    const caption = page.getByTestId("embed-caption");
+    await expect(caption).toContainText("Abra de Ilog");
+    await expect(caption).toContainText("below the poverty line");
+    // Readable at the slot's real size: 14 px place, 12 px figure line; the map keeps most of the frame.
+    const sizes = await caption.locator("p").evaluateAll((ps) => ps.map((p) => parseFloat(getComputedStyle(p).fontSize)));
+    expect(sizes).toEqual([14, 12]);
+    const map = await page.getByTestId("map").boundingBox();
+    expect(map!.height).toBeGreaterThan(viewport.height * 0.6);
+    expect(packs.every((p) => pack.test(p)), packs.join()).toBe(true);
+    for (const [i, lgu] of [...TOUR.entries(), [0, TOUR[0]] as const]) {
+      await expect(page.locator(`html[data-tour-step="${i}"]`)).toBeAttached({ timeout: 10_000 });
+      await expect(caption).toContainText(NAMES[lgu]!);
+      expect(await page.evaluate(() => [innerWidth - document.documentElement.clientWidth, innerHeight - document.documentElement.clientHeight, scrollY])).toEqual([0, 0, 0]);
+    }
+    expect(warnings).toEqual([]);
+    expect(bad).toEqual([]);
+  });
+}

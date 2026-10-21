@@ -15,6 +15,7 @@ import { Glossary } from "@/features/Term";
 import { YearControl } from "@/features/YearControl";
 import type { MapViewProps } from "@/map/MapView";
 import { themeKey } from "@/map/style";
+import { EmbedCaption } from "@/panel/EmbedCaption";
 import { LguPanel } from "@/panel/LguPanel";
 
 const MapView = lazy(() => import("@/map/MapView"));
@@ -119,6 +120,27 @@ export default function MapPage({ embed }: { embed?: MapViewProps["frozen"] } = 
     [url.prov, selectLgu, selectProvince],
   );
   const setYear = useCallback((y: number) => navigate({ year: y }, { replace: true }), []);
+
+  // The compact /embed (phones and tablets: the frame is the portfolio's picture slot at its real size): the map
+  // above a two-line caption, no controls or side panel. Never the desktop view scaled down.
+  if (embed?.compact)
+    return (
+      <div className="flex h-dvh flex-col" data-layout="compact">
+        <div className="relative min-h-0 flex-1">
+          <ErrorBoundary>
+            <Suspense fallback={null}>
+              <MapView base={base} year={year} breaks={manifest.breaks} theme={themeKey(resolvedTheme, hc)} lang={lang} province={province} lgu={url.lgu} names={names} onPick={onPick} frozen={embed} />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+        {/* Fixed height (scripts/build-embed.mjs packs the tiles for the map box above it). */}
+        <aside className="h-[52px] shrink-0 overflow-hidden border-t border-border px-3 py-1.5" aria-label={t("Details", "詳細")}>
+          <ErrorBoundary>
+            <Suspense fallback={null}>{url.lgu ? <EmbedCaption pcode={url.lgu} year={year} /> : null}</Suspense>
+          </ErrorBoundary>
+        </aside>
+      </div>
+    );
 
   return (
     <>

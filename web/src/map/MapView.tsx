@@ -45,8 +45,9 @@ export interface MapViewProps {
   names: Map<string, string>;
   onPick: (pcode: string) => void;
   /** The frozen /embed view: no interaction or controls, a set pixel ratio, and a callback once the first full frame is drawn.
-   * `settleMs`: later province changes ease in from slightly closer (the embed tour); 0 or absent: they jump. */
-  frozen?: { pixelRatio: number; onReady: () => void; settleMs?: number };
+   * `settleMs`: later province changes ease in from slightly closer (the embed tour); 0 or absent: they jump.
+   * `compact`: the phone and tablet layout (MapPage); `padding`: the province fit's padding (default 32). */
+  frozen?: { pixelRatio: number; onReady: () => void; settleMs?: number; compact?: boolean; padding?: number };
 }
 
 const yy = (year: number) => String(year % 100).padStart(2, "0");
@@ -73,6 +74,9 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
   useEffect(() => {
     if (!el.current) return;
     const [fill, outline] = choroplethLayers({ id: "lgu-fill", source: "lgu", sourceLayer: "lgu", property: `v${yy(year)}`, breaks, theme: theme.startsWith("dark") ? "dark" : "light" });
+    // The compact embed (phones, tablets): one worker is plenty for its few packed tiles, and each one costs memory
+    // (Safari otherwise starts up to three). Only before the first map; later maps share the pool.
+    if (frozen?.compact) maplibregl.setWorkerCount(1);
     const map = new maplibregl.Map({
       container: el.current,
       bounds: PH_BOUNDS,
@@ -82,7 +86,9 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
       maxZoom: 13,
       dragRotate: false,
       pitchWithRotate: false,
-      attributionControl: { compact: true },
+      // The compact embed can't open a collapsed (i) button (it is inert) and has no room for the long credit:
+      // the short credit, always shown, in small type (the wrapper's class below).
+      attributionControl: { compact: !frozen?.compact },
       ...(frozen ? { interactive: false, pixelRatio: frozen.pixelRatio } : {}),
       style: {
         version: 8,
@@ -93,7 +99,9 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
             tiles: [`lgutile://${tilesUrl(base)}`],
             minzoom: 0,
             maxzoom: 10,
-            attribution: "Boundaries: OCHA/NAMRIA/PSA COD-AB (CC BY-IGO), indicative · Estimates: PSA SAE; model: Lights",
+            attribution: frozen?.compact
+              ? "Boundaries: OCHA/NAMRIA/PSA (CC BY-IGO) · PSA SAE; Lights"
+              : "Boundaries: OCHA/NAMRIA/PSA COD-AB (CC BY-IGO), indicative · Estimates: PSA SAE; model: Lights",
           },
         },
         layers: [
@@ -154,7 +162,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
       if (frozen) map.once("idle", () => frozenRef.current?.onReady());
     });
     // Frozen: the view is the province's fit for the final box (late web fonts can still change its height).
-    if (frozen) map.on("resize", () => map.fitBounds(props.current.province?.bbox ?? PH_BOUNDS, { padding: 32, maxZoom: 10, duration: 0 }));
+    if (frozen) map.on("resize", () => map.fitBounds(props.current.province?.bbox ?? PH_BOUNDS, { padding: frozen.padding ?? 32, maxZoom: 10, duration: 0 }));
     // Akari's hatch images on demand: tiles can be parsed before "load", and setStyle() drops added images.
     map.setMissingStyleImageResolver(async (id) => {
       if (id.startsWith("hatch-")) addHatchImages(map, themeRef.current);
@@ -257,12 +265,13 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     if (!map) return;
     const b = province?.bbox ?? PH_BOUNDS;
     const settle = frozenRef.current?.settleMs ?? 0;
-    const cam = settle && map.loaded() ? map.cameraForBounds(b, { padding: 32, maxZoom: 10 }) : undefined;
+    const padding = frozenRef.current?.padding ?? 32;
+    const cam = settle && map.loaded() ? map.cameraForBounds(b, { padding, maxZoom: 10 }) : undefined;
     if (cam?.zoom != null) {
       // The embed tour: start a little closer, within the same tile zoom (only the view's tiles are packed).
       map.jumpTo({ ...cam, zoom: Math.min(cam.zoom + 0.35, Math.floor(cam.zoom) + 0.99) });
       map.easeTo({ ...cam, duration: settle });
-    } else map.fitBounds(b, { padding: 32, maxZoom: 10, duration: frozenRef.current ? 0 : 800 });
+    } else map.fitBounds(b, { padding, maxZoom: 10, duration: frozenRef.current ? 0 : 800 });
   }, [province]);
 
   // Localise MapLibre's control labels (its locale option is read only at construction).
@@ -281,7 +290,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
 
   // MapLibre sets position: relative on its container, so the absolute frame is a separate wrapper.
   return (
-    <div className="absolute inset-0">
+    <div className={`absolute inset-0 ${frozen?.compact ? "[&_.maplibregl-ctrl-attrib]:text-[10px] [&_.maplibregl-ctrl-attrib]:leading-tight" : ""}`}>
       <div
         ref={el}
         className="h-full w-full"

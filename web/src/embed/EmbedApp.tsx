@@ -3,7 +3,9 @@
 // embeds carry no link: the portfolio around the frame links to the app), and the map is non-interactive.
 // It tours a few places (TOUR, chosen in build-embed.mjs): the same view, only the place changes, every
 // DWELL_MS. It starts on the screenshot's place (the parent's poster), stays there under reduced motion,
-// and pauses while the frame is out of sight.
+// and pauses while the frame is out of sight or the tab is hidden.
+// Phones and tablets get the frame at the portfolio's picture slot's real size: the compact layout (layout.ts),
+// the map over a two-line caption with its own lighter pack, never the desktop view scaled down.
 
 import { AkariProvider, useLang } from "@abrycta/akari/react";
 import {
@@ -20,7 +22,8 @@ import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { parseUrl } from "@/app/url";
 import { type EmbedPack, seedFromPack } from "@/data/load";
 
-import { PACK_URL, TOUR, VIEW } from "./pack.gen";
+import { COMPACT_PADDING, useLayout } from "./layout";
+import { TOUR, VIEW } from "./pack.gen";
 import { COOKIE_DOMAIN, listenToParent, postReady } from "./parent-bridge";
 
 const MapPage = lazy(() => import("@/pages/MapPage"));
@@ -51,24 +54,34 @@ function showPlace(lgu: string, notify: boolean) {
 }
 showPlace(VIEW.lgu, false);
 
-let pack: Promise<void> | null = null;
-function loadPack(): Promise<void> {
-  pack ??= fetch(PACK_URL)
-    .then((r) => {
-      if (!r.ok) throw new Error(`${r.status}: ${PACK_URL}`);
-      return r.json() as Promise<EmbedPack>;
-    })
-    .then((p) => void seedFromPack(p));
-  return pack;
+// One pack per layout (src/embed/layout.ts), each fetched once (the HTML preloads the one its width needs).
+// The data caches hold one pack at a time: a rotation that switches layouts seeds them from the other pack.
+const fetched = new Map<string, Promise<EmbedPack>>();
+let seeded: { url: string; done: Promise<void> } | null = null;
+function loadPack(url: string): Promise<void> {
+  if (seeded?.url === url) return seeded.done;
+  if (!fetched.has(url))
+    fetched.set(
+      url,
+      fetch(url).then((r) => {
+        if (!r.ok) throw new Error(`${r.status}: ${url}`);
+        return r.json() as Promise<EmbedPack>;
+      }),
+    );
+  seeded = { url, done: fetched.get(url)!.then((p) => void seedFromPack(p)) };
+  return seeded.done;
 }
 
 function Frozen() {
-  use(loadPack());
+  const { compact, pack } = useLayout();
+  use(loadPack(pack));
   const sent = useRef(false);
   const embed = useMemo(
     () => ({
       pixelRatio: pixelRatio(),
       settleMs: SETTLE_MS,
+      compact,
+      padding: compact ? COMPACT_PADDING : undefined,
       onReady: () => {
         if (sent.current) return;
         sent.current = true;
@@ -76,7 +89,7 @@ function Frozen() {
         postReady();
       },
     }),
-    [],
+    [compact],
   );
   return <MapPage embed={embed} />;
 }

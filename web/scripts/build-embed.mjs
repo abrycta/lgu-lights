@@ -38,6 +38,22 @@ const VIEW = { year: YEAR, lgu: TOUR[0] };
 const MAP_W = 820;
 const MAP_H = 609;
 const PAD = 32; // MapView's province fitBounds padding
+// The compact layout (phones and tablets, src/embed/layout.ts): the frame is the portfolio's picture slot at
+// its real size (16:10, about 356×222 on a phone up to 958×598), the map above a CAPTION_H caption strip,
+// fitted with COMPACT_PAD. Phones and tablets each get their own pack (the tiles differ by zoom), so a phone
+// never downloads a larger view's tiles.
+const COMPACT_MAX_W = 1100; // = COMPACT_QUERY's max-width in src/embed/layout.ts
+const SMALL_MAX_W = 600; // = SMALL_QUERY's max-width there: phones get a smaller pack than tablets
+const CAPTION_H = 53; // the caption strip (52 px) and its top border
+const COMPACT_PAD = 12;
+function compactViews(from, to) {
+  const views = [];
+  for (let w = from; w <= to; w += 4) {
+    const h = Math.round((w + 2) * 0.625) - 2 - CAPTION_H; // the slot is 16:10; the frame sits 1 px inside its border
+    for (const dh of [-16, 0, 16]) views.push([w, Math.max(80, h + dh)]);
+  }
+  return views;
+}
 const MAX_ZOOM = 10;
 const SOURCE_MAXZOOM = 10;
 
@@ -89,10 +105,10 @@ const my = (lat) => ((1 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)
 // scaled to about half (its ?pr= follows), so one unit stays at about a device pixel (2048: +28 % bytes).
 const KEEP = new Set(["pcode", `v${yy}`, `t${yy}`, `s${yy}`]);
 const EXTENT = 1024;
-function slim(buf, rects) {
+function slim(buf, rects, extent = EXTENT) {
   const layers = {};
   for (const [name, l] of Object.entries(new VectorTile(new PbfReader(buf)).layers)) {
-    const q = EXTENT / l.extent;
+    const q = extent / l.extent;
     const feats = [];
     for (let i = 0; i < l.length; i++) {
       const f = l.feature(i);
@@ -116,54 +132,89 @@ function slim(buf, rects) {
       const properties = Object.fromEntries(Object.entries(f.properties).filter(([key]) => KEEP.has(key)));
       feats.push({ id: f.id, type: f.type, properties, geometry, loadGeometry: () => geometry });
     }
-    layers[name] = { version: 2, name, extent: EXTENT, length: feats.length, feature: (i) => feats[i] };
+    layers[name] = { version: 2, name, extent, length: feats.length, feature: (i) => feats[i] };
   }
   return fromVectorTileJs({ layers });
 }
 
 const M = 24; // px of margin, against rounding
-const need = new Map(); // "z/x/y" -> the views' rectangles in that tile, as fractions of the tile
-const zooms = [];
-for (const province of provinces) {
-  const [w, s, e, n] = province.bbox;
-  const zoom = Math.min(MAX_ZOOM, Math.log2(Math.min((MAP_W - 2 * PAD) / (mx(e) - mx(w)), (MAP_H - 2 * PAD) / (my(s) - my(n)))));
-  const z = Math.min(SOURCE_MAXZOOM, Math.floor(zoom));
-  zooms.push(`${province.name} z${z}`);
-  const k = 2 ** zoom;
-  const cx = ((mx(w) + mx(e)) / 2) * k;
-  const cy = ((my(n) + my(s)) / 2) * k;
-  const ts = (512 / 2 ** z) * k; // one tile in frame px
-  const [L, T, R, B] = [cx - MAP_W / 2 - M, cy - MAP_H / 2 - M, cx + MAP_W / 2 + M, cy + MAP_H / 2 + M].map((v) => v / ts);
-  for (let x = Math.floor(L); x <= Math.floor(R); x++)
-    for (let y = Math.floor(T); y <= Math.floor(B); y++) {
-      const key = `${z}/${x}/${y}`;
-      if (!need.has(key)) need.set(key, []);
-      need.get(key).push([L - x, T - y, R - x, B - y]);
+/** The packed tiles for these map boxes ([w, h] in CSS px) and padding, each slimmed to the views that use it. */
+function tilesFor(views, pad, zooms, extent = EXTENT) {
+  const need = new Map(); // "z/x/y" -> province -> its views' rectangle in that tile, as fractions of the tile
+  for (const province of provinces) {
+    const [w, s, e, n] = province.bbox;
+    const zs = new Set();
+    for (const [W, H] of views) {
+      const zoom = Math.min(MAX_ZOOM, Math.log2(Math.min((W - 2 * pad) / (mx(e) - mx(w)), (H - 2 * pad) / (my(s) - my(n)))));
+      const z = Math.min(SOURCE_MAXZOOM, Math.floor(zoom));
+      zs.add(z);
+      const k = 2 ** zoom;
+      const cx = ((mx(w) + mx(e)) / 2) * k;
+      const cy = ((my(n) + my(s)) / 2) * k;
+      const ts = (512 / 2 ** z) * k; // one tile in frame px
+      const [L, T, R, B] = [cx - W / 2 - M, cy - H / 2 - M, cx + W / 2 + M, cy + H / 2 + M].map((v) => v / ts);
+      for (let x = Math.floor(L); x <= Math.floor(R); x++)
+        for (let y = Math.floor(T); y <= Math.floor(B); y++) {
+          const key = `${z}/${x}/${y}`;
+          if (!need.has(key)) need.set(key, new Map());
+          // One rectangle per province and tile: the bounding box of its views there (thousands of near-identical views).
+          const r = [L - x, T - y, R - x, B - y];
+          const a = need.get(key).get(province.pcode);
+          need.get(key).set(province.pcode, a ? [Math.min(a[0], r[0]), Math.min(a[1], r[1]), Math.max(a[2], r[2]), Math.max(a[3], r[3])] : r);
+        }
     }
-}
-const tiles = {};
-for (const [key, rects] of need) {
-  const f = join(dir, "tiles", `${key}.pbf`);
-  if (existsSync(f)) tiles[key] = Buffer.from(slim(readFileSync(f), rects)).toString("base64");
+    zooms.push(`${province.name} z${[...zs].sort((a, b) => a - b).join("-")}`);
+  }
+  const tiles = {};
+  for (const [key, rects] of need) {
+    const f = join(dir, "tiles", `${key}.pbf`);
+    if (existsSync(f)) tiles[key] = Buffer.from(slim(readFileSync(f), [...rects.values()], extent)).toString("base64");
+  }
+  return tiles;
 }
 
 // The index without the label points (x, y): nothing in the frozen view reads them.
 const slimIndex = { ...index, lgus: index.lgus.map(({ x: _x, y: _y, ...l }) => l) };
-const pack = { version: manifest.version, view: VIEW, tour: TOUR, manifest, index: slimIndex, lgus, attrs: attrs.join("\n") + "\n", tiles };
-const body = JSON.stringify(pack);
-const name = `lights-${createHash("sha256").update(body).digest("hex").slice(0, 12)}.json`;
 const outDir = join(web, "public/embed-data");
 mkdirSync(outDir, { recursive: true });
-for (const f of readdirSync(outDir)) if (/^lights-[0-9a-f]+\.json$/.test(f) && f !== name) rmSync(join(outDir, f));
-writeFileSync(join(outDir, name), body);
+const written = [];
+// The compact layout has no search, province list or national line: its index keeps only the packed provinces' LGUs.
+const packed = new Set(provinces.map((p) => p.pcode));
+const compactIndex = { ...slimIndex, lgus: slimIndex.lgus.filter((l) => packed.has(l.pv)) };
+function writePack(prefix, tiles, zooms, idx = slimIndex) {
+  const pack = { version: manifest.version, view: VIEW, tour: TOUR, manifest, index: idx, lgus, attrs: attrs.join("\n") + "\n", tiles };
+  const body = JSON.stringify(pack);
+  const name = `${prefix}-${createHash("sha256").update(body).digest("hex").slice(0, 12)}.json`;
+  writeFileSync(join(outDir, name), body);
+  written.push(name);
+  console.log(`${name}: ${(body.length / 1024).toFixed(0)} kB, ${Object.keys(tiles).length} tiles (${zooms.join(", ")}), ${Object.keys(lgus).length} LGU files, data ${manifest.version}`);
+  return name;
+}
+const desktopZooms = [];
+const name = writePack("lights", tilesFor([[MAP_W, MAP_H]], PAD, desktopZooms), desktopZooms);
+// Phones draw the tiles at most about 600 CSS px wide: half the precision (512 units a tile) is still about a CSS px.
+const smallZooms = [];
+const smallName = writePack("lights-small", tilesFor(compactViews(300, SMALL_MAX_W), COMPACT_PAD, smallZooms, 512), smallZooms, compactIndex);
+const mediumZooms = [];
+const mediumName = writePack("lights-medium", tilesFor(compactViews(SMALL_MAX_W + 1, COMPACT_MAX_W), COMPACT_PAD, mediumZooms), mediumZooms, compactIndex);
+for (const f of readdirSync(outDir)) if (/^lights-((small|medium|compact)-)?[0-9a-f]+\.json$/.test(f) && !written.includes(f)) rmSync(join(outDir, f));
 
 writeFileSync(
   join(web, "src/embed/pack.gen.ts"),
-  `// Written by scripts/build-embed.mjs from data ${manifest.version}; do not edit.\nexport const PACK_URL = "/embed-data/${name}";\nexport const VIEW = ${JSON.stringify(VIEW)} as const;\nexport const TOUR = ${JSON.stringify(TOUR)} as const;\n`,
+  `// Written by scripts/build-embed.mjs from data ${manifest.version}; do not edit.\nexport const PACK_URL = "/embed-data/${name}";\nexport const PACK_URL_SMALL = "/embed-data/${smallName}";\nexport const PACK_URL_MEDIUM = "/embed-data/${mediumName}";\nexport const VIEW = ${JSON.stringify(VIEW)} as const;\nexport const TOUR = ${JSON.stringify(TOUR)} as const;\n`,
 );
 const html = join(web, "embed.html");
+// Each layout preloads only its own pack (the media queries are src/embed/layout.ts's).
+const preload = (href, media) => `<link rel="preload" href="/embed-data/${href}" as="fetch" crossorigin="anonymous" media="${media}" />`;
 writeFileSync(
   html,
-  readFileSync(html, "utf8").replace(/(<!-- embed-pack[^>]*-->\s*<link rel="preload" href=")[^"]*(")/, `$1/embed-data/${name}$2`),
+  readFileSync(html, "utf8").replace(
+    /(<!-- embed-pack[^>]*-->)[\s\S]*?(\s*<!-- \/embed-pack -->)/,
+    [
+      "$1",
+      preload(name, `(min-width: ${COMPACT_MAX_W + 1}px)`),
+      preload(mediumName, `(min-width: ${SMALL_MAX_W + 1}px) and (max-width: ${COMPACT_MAX_W}px)`),
+      preload(smallName, `(max-width: ${SMALL_MAX_W}px)`),
+    ].join("\n    ") + "$2",
+  ),
 );
-console.log(`${name}: ${(body.length / 1024).toFixed(0)} kB, ${Object.keys(tiles).length} tiles (${zooms.join(", ")}), ${Object.keys(lgus).length} LGU files, data ${manifest.version}`);
