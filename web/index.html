@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Akari pre-paint theme: the shared krtmtthw.dev cookie (or localStorage) before first paint. External, so CSP-safe. -->
+    <script src="/theme-init.js" data-shared-cookie-domain="krtmtthw.dev"></script>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f6f5f1" />
+    <!-- The data pointer is on the critical path of every page (same origin, so no preconnect is needed in M1). -->
+    <link rel="preload" href="/data/latest.json" as="fetch" crossorigin="anonymous" />
+    <meta name="description" content="Poverty incidence for every Philippine city and municipality, 2012–2025: PSA official estimates and clearly labelled model estimates from night lights." />
+    <title>LGU Lights</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

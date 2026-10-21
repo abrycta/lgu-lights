@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+  <style>
+    .s { color: #c4532f; }
+    @media (prefers-color-scheme: dark) { .s { color: #e47a57; } }
+  </style>
+  <g class="s">
+    <rect x="3" y="3" width="46" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="4"/>
+    <text x="26" y="36.5" text-anchor="middle" font-family="'Shippori Mincho B1', 'Hiragino Mincho ProN', 'Yu Mincho', serif" font-weight="700" font-size="28" fill="currentColor">灯</text>
+  </g>
+</svg>

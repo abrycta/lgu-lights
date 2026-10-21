@@ -1,0 +1,46 @@
+# Web app: install (private @abrycta/akari from GitHub Packages), typecheck, unit tests, build, size report.
+# The WASM module and the data are runtime assets (built by rust.yml / data.yml), not part of this build.
+name: Web
+
+on:
+  push:
+    paths: [web/**, .github/workflows/web.yml]
+  pull_request:
+    paths: [web/**, .github/workflows/web.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read   # @abrycta/akari; the package must grant this repository read access (Package settings)
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+          registry-url: https://npm.pkg.github.com
+          scope: "@abrycta"
+      - run: npm ci
+        env: { NODE_AUTH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+      - run: npm run typecheck
+      - run: npm test --if-present
+      - run: npm run build
+      - name: Size
+        run: |
+          {
+            echo "### Bundle (gzipped)"
+            for f in dist/assets/*.js dist/assets/*.css; do echo "$(gzip -9c "$f" | wc -c) $(basename "$f")"; done | sort -rn
+          } >> "$GITHUB_STEP_SUMMARY"
