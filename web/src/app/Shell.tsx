@@ -75,6 +75,7 @@ export function LightsHeader({ url }: { url: UrlState }) {
       ]}
       portfolioLink
       languages
+      width="full"
       renderLink={(p) => (
         <a
           {...p}
@@ -96,12 +97,10 @@ export function Shell({ children }: { children: ReactNode }) {
   useLangParam();
   return (
     <AppShell
-      header={
-        <LightsHeader url={url} />
-      }
+      header={<LightsHeader url={url} />}
       footer={
         <footer className="border-t border-border">
-          <div className="mx-auto grid max-w-[1120px] gap-2 px-4 py-6 text-xs text-muted-foreground">
+          <div className="grid gap-2 px-ak-gutter py-6 text-xs text-muted-foreground">
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               <Suspense fallback={null}>
                 <FooterData />

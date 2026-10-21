@@ -1,4 +1,4 @@
-import { Badge, Button, T, ToggleGroup, ToggleGroupItem, useLang, useT } from "@abrycta/akari/react";
+import { Button, SourceBadge, T, ToggleGroup, ToggleGroupItem, useLang, useT } from "@abrycta/akari/react";
 import { XIcon } from "lucide-react";
 import { use, useEffect, useRef } from "react";
 
@@ -8,7 +8,7 @@ import type { Index, Manifest } from "@/data/types";
 import { Glossary } from "@/features/Term";
 import { cvText, interval, pct } from "@/lib/format";
 import { backtestNote, narrative } from "@/lib/narrative";
-import { sourceLabel, TIER_LABEL } from "@/lib/honesty";
+import { TIER_LABEL } from "@/lib/honesty";
 import { reliabilitySentence, shownFigure } from "@/lib/plain";
 
 import { PeopleGrid } from "./PeopleGrid";
@@ -29,14 +29,36 @@ function ViewSwitch() {
   const t = useT();
   const [mode, setMode] = useViewMode();
   return (
-    <ToggleGroup type="single" variant="outline" size="sm" value={mode} onValueChange={(v) => v && setMode(v as typeof mode)} aria-label={t("Level of detail", "表示の詳しさ")} data-testid="view-switch">
+    <ToggleGroup
+      type="single"
+      variant="outline"
+      size="sm"
+      value={mode}
+      onValueChange={(v) => v && setMode(v as typeof mode)}
+      aria-label={t("Level of detail", "表示の詳しさ")}
+      data-testid="view-switch"
+    >
       <ToggleGroupItem value="simple">{t("Simple", "シンプル")}</ToggleGroupItem>
       <ToggleGroupItem value="detailed">{t("Detailed", "詳細")}</ToggleGroupItem>
     </ToggleGroup>
   );
 }
 
-export function LguPanel({ pcode, year, manifest, index, onClose, onSelectYear }: { pcode: string; year: number; manifest: Manifest; index: Index; onClose: () => void; onSelectYear: (y: number) => void }) {
+export function LguPanel({
+  pcode,
+  year,
+  manifest,
+  index,
+  onClose,
+  onSelectYear,
+}: {
+  pcode: string;
+  year: number;
+  manifest: Manifest;
+  index: Index;
+  onClose: () => void;
+  onSelectYear: (y: number) => void;
+}) {
   const t = useT();
   const { lang } = useLang();
   const lgu = use(loadLgu(pcode));
@@ -81,11 +103,9 @@ export function LguPanel({ pcode, year, manifest, index, onClose, onSelectYear }
           {shown ? (
             <>
               {shown.source === "official" ? (
-                <Badge data-testid="source-badge">{sourceLabel("official", year, lang)}</Badge>
+                <SourceBadge source="official" year={year} label={<T en="PSA official" ja="PSA公式統計" />} data-testid="source-badge" />
               ) : (
-                <Badge variant="outline" className="border-dashed italic" data-testid="source-badge">
-                  {sourceLabel("model", year, lang)}
-                </Badge>
+                <SourceBadge source="estimate" year={year} data-testid="source-badge" />
               )}
               <p className="flex flex-wrap items-baseline gap-x-3">
                 <span className={`font-mono text-3xl tabular ${shown.source === "model" ? "text-muted-foreground italic" : ""}`}>{pct(shown.value, lang)}</span>
@@ -136,12 +156,12 @@ export function LguPanel({ pcode, year, manifest, index, onClose, onSelectYear }
       <SeriesChart years={lgu.years} selected={year} onSelectYear={onSelectYear} />
 
       {detailed ? (
-      <p className="text-xs text-muted-foreground">
-        <T
-          en="Method change: PSA used the ELL method for 2012–2018 and Census EB from 2021. Official figures on either side of the change are not strictly comparable."
-          ja="手法の変更：PSAは2012〜2018年にELL法、2021年以降はCensus EB法を使用しています。変更の前後で公式値は厳密には比較できません。"
-        />
-      </p>
+        <p className="text-xs text-muted-foreground">
+          <T
+            en="Method change: PSA used the ELL method for 2012–2018 and Census EB from 2021. Official figures on either side of the change are not strictly comparable."
+            ja="手法の変更：PSAは2012〜2018年にELL法、2021年以降はCensus EB法を使用しています。変更の前後で公式値は厳密には比較できません。"
+          />
+        </p>
       ) : null}
 
       {canWhatIf && rec ? (

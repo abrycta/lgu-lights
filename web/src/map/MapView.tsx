@@ -19,7 +19,7 @@ maplibregl.addProtocol("lgutile", async (params, abort) => {
   return { data: await r.arrayBuffer() };
 });
 
-import { choroplethLayers } from "@abrycta/akari/maps";
+import { addHatchImages, choroplethLayers } from "@abrycta/akari/maps";
 import { useT } from "@abrycta/akari/react";
 import * as maplibregl from "maplibre-gl";
 import type { MapGeoJSONFeature, Map as MlMap } from "maplibre-gl";
@@ -30,7 +30,6 @@ import type { IndexProvince } from "@/data/types";
 import { sourceLabel, TIER_LABEL, type Lang } from "@/lib/honesty";
 import { pct } from "@/lib/format";
 
-import { HATCH_SIZES, hatchImage } from "./hatch";
 import { featurePcode, fillColor, fillOpacity, hatchFilter, hatchPattern, PH_BOUNDS, type ThemeKey, tokenColor } from "./style";
 
 export interface MapViewProps {
@@ -46,15 +45,6 @@ export interface MapViewProps {
 }
 
 const yy = (year: number) => String(year % 100).padStart(2, "0");
-
-function addHatches(map: MlMap, key: ThemeKey) {
-  for (const [name, size] of Object.entries(HATCH_SIZES)) {
-    const img = hatchImage(size, tokenColor("color.text", key), tokenColor("color.bg", key));
-    const id = `hatch-${name}`;
-    if (map.hasImage(id)) map.removeImage(id);
-    map.addImage(id, img, { pixelRatio: 2 });
-  }
-}
 
 function idOf(pcode: string | null): number {
   return pcode ? Number.parseInt(pcode.slice(2), 10) : -1;
@@ -150,11 +140,11 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
 
     map.on("load", () => {
       loaded.current = true;
-      addHatches(map, theme);
+      addHatchImages(map, theme);
     });
-    // Patterns are generated on demand (tiles can be parsed before "load").
+    // Akari's hatch images on demand: tiles can be parsed before "load", and setStyle() drops added images.
     map.setMissingStyleImageResolver(async (id) => {
-      if (id.startsWith("hatch-")) addHatches(map, themeRef.current);
+      if (id.startsWith("hatch-")) addHatchImages(map, themeRef.current);
     });
 
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: "lgu-popup", maxWidth: "260px" });
@@ -230,7 +220,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
       map.setPaintProperty("prov-selected", "line-color", tokenColor("color.text", theme));
       map.setPaintProperty("lgu-hover", "line-color", tokenColor("color.text", theme));
       map.setPaintProperty("lgu-selected", "line-color", tokenColor("color.accent", theme));
-      addHatches(map, theme);
+      addHatchImages(map, theme); // recolours in place (updateImage) for the new theme
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);

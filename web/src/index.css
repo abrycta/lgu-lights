@@ -68,15 +68,6 @@
     border: 2px solid var(--primary);
     background: var(--background);
   }
-  /* Model estimates: lighter swatch, matching the map's fill opacity. */
-  .swatch {
-    display: inline-block;
-    width: 18px;
-    height: 12px;
-    border-radius: 2px;
-    vertical-align: -1px;
-    box-shadow: inset 0 0 0 1px var(--border);
-  }
   /* Hypothetical what-if output: dashed frame and a faint diagonal wash, never the choropleth style. */
   .hypothetical {
     border: 1.5px dashed var(--seal);
@@ -98,7 +89,6 @@
   .lgu-popup-model {
     font-style: italic;
   }
-
 }
 
 /* MapLibre controls in Akari colours. Unlayered and scoped to .maplibregl-map so they win over

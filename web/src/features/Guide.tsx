@@ -2,13 +2,12 @@
 // hatching, official vs model). Dismissal is remembered per visitor (app/prefs.ts); the legend has a
 // button to open it again.
 
-import { Button, Card, CardContent, CardHeader, CardTitle, T, useT } from "@abrycta/akari/react";
+import { Button, Card, CardContent, CardHeader, CardTitle, LegendSwatch, T, useT } from "@abrycta/akari/react";
 import { XIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useGuide } from "@/app/prefs";
 import { MODEL_OPACITY, OFFICIAL_OPACITY, PLAIN_BINS } from "@/lib/honesty";
-import { HATCH_SIZES, hatchCss } from "@/map/hatch";
 
 import { Term } from "./Term";
 
@@ -40,12 +39,15 @@ export function Guide() {
     </div>,
     <div key="h" className="grid gap-2">
       <p>
-        <T en="Stripes mean the figure is uncertain. Light stripes: “Use with care”. Dense stripes: “Rough guess”. No stripes: “Solid”." ja="斜線は値が不確かなことを示します。まばらな斜線は「注意して使う値」、密な斜線は「おおよその目安」、斜線なしは「確かな値」です。" />
+        <T
+          en="Stripes mean the figure is uncertain. Light stripes: “Use with care”. Dense stripes: “Rough guess”. No stripes: “Solid”."
+          ja="斜線は値が不確かなことを示します。まばらな斜線は「注意して使う値」、密な斜線は「おおよその目安」、斜線なしは「確かな値」です。"
+        />
       </p>
       <div className="flex gap-2" aria-hidden="true">
-        <span className="swatch bg-chart-seq-3" />
-        <span className="swatch bg-chart-seq-3" style={{ backgroundImage: hatchCss(HATCH_SIZES.sparse * 1.4) }} />
-        <span className="swatch bg-chart-seq-3" style={{ backgroundImage: hatchCss(HATCH_SIZES.dense * 1.4) }} />
+        <LegendSwatch fill="seq-3" />
+        <LegendSwatch fill="seq-3" hatch="sparse" />
+        <LegendSwatch fill="seq-3" hatch="dense" />
       </div>
     </div>,
     <div key="o" className="grid gap-2">
@@ -61,8 +63,8 @@ export function Guide() {
         <T en="." ja="を添えています。" />
       </p>
       <div className="flex gap-2" aria-hidden="true">
-        <span className="swatch bg-chart-seq-4" style={{ opacity: OFFICIAL_OPACITY }} />
-        <span className="swatch bg-chart-seq-4" style={{ opacity: MODEL_OPACITY }} />
+        <LegendSwatch fill="seq-4" opacity={OFFICIAL_OPACITY} />
+        <LegendSwatch fill="seq-4" opacity={MODEL_OPACITY} />
       </div>
     </div>,
   ];

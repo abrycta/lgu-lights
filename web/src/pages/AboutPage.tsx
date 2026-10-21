@@ -25,9 +25,24 @@ function Validation() {
         />
       </p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="validation">
-        <StatCard label={lang === "ja" ? "モデル" : "Model"} value={fmt(h.model.mae, 2)} unit="pp" detail={lang === "ja" ? "PSAの履歴、州別調査、衛星" : "PSA history, provincial survey, satellites"} />
-        <StatCard label={lang === "ja" ? "前回値の据え置き" : "Carry forward"} value={fmt(h.carry_forward_mae, 2)} unit="pp" detail={lang === "ja" ? "前回の公式値をそのまま使う" : "last official value, unchanged"} />
-        <StatCard label={lang === "ja" ? "衛星データなし" : "No satellite data"} value={fmt(h.no_satellite_mae, 2)} unit="pp" detail={lang === "ja" ? "同じモデルから衛星特徴量を除外" : "same model, satellite features removed"} />
+        <StatCard
+          label={lang === "ja" ? "モデル" : "Model"}
+          value={fmt(h.model.mae, 2)}
+          unit="pp"
+          detail={lang === "ja" ? "PSAの履歴、州別調査、衛星" : "PSA history, provincial survey, satellites"}
+        />
+        <StatCard
+          label={lang === "ja" ? "前回値の据え置き" : "Carry forward"}
+          value={fmt(h.carry_forward_mae, 2)}
+          unit="pp"
+          detail={lang === "ja" ? "前回の公式値をそのまま使う" : "last official value, unchanged"}
+        />
+        <StatCard
+          label={lang === "ja" ? "衛星データなし" : "No satellite data"}
+          value={fmt(h.no_satellite_mae, 2)}
+          unit="pp"
+          detail={lang === "ja" ? "同じモデルから衛星特徴量を除外" : "same model, satellite features removed"}
+        />
         <StatCard label={lang === "ja" ? "90%区間の的中率" : "90 % interval coverage"} value={cov} unit="%" detail={lang === "ja" ? "目標は90%" : "target 90 %"} />
       </div>
       <Folds m={m} />
@@ -97,7 +112,9 @@ function Folds({ m }: { m: Metrics }) {
 
 export default function AboutPage() {
   return (
+    // Full-bleed like the Header (width="full"): the page column starts at the same 16px gutter as the brand.
     <Page
+      className="max-w-none px-ak-gutter"
       eyebrow={<T en="About & method" ja="概要と手法" />}
       title={<T en="Honest about the data" ja="データに正直に" />}
       lede={
@@ -158,7 +175,6 @@ export default function AboutPage() {
           </ul>
         </section>
 
-
         <section className="grid gap-3 text-sm" aria-labelledby="plain">
           <h2 id="plain" className="font-display text-xl">
             <T en="How the plain-language sentences are made" ja="わかりやすい文の作り方" />
@@ -214,19 +230,28 @@ export default function AboutPage() {
           </h2>
           <ul className="grid list-disc gap-2 pl-5">
             <li>
-              <T en="Poverty incidence: Philippine Statistics Authority (PSA), City and Municipal Level Small Area Poverty Estimates, 2012–2023; the 2006 and 2009 rounds are used only to train the model. Used with attribution under PSA/OpenSTAT terms (CC BY; to be confirmed with PSA)." ja="貧困率：フィリピン統計庁（PSA）市町村別小地域貧困推計 2012〜2023年。2006年・2009年の調査回はモデルの学習にのみ使用。PSA/OpenSTATの条件（CC BY、PSAに確認中）に従い出典を明記して使用。" />{" "}
+              <T
+                en="Poverty incidence: Philippine Statistics Authority (PSA), City and Municipal Level Small Area Poverty Estimates, 2012–2023; the 2006 and 2009 rounds are used only to train the model. Used with attribution under PSA/OpenSTAT terms (CC BY; to be confirmed with PSA)."
+                ja="貧困率：フィリピン統計庁（PSA）市町村別小地域貧困推計 2012〜2023年。2006年・2009年の調査回はモデルの学習にのみ使用。PSA/OpenSTATの条件（CC BY、PSAに確認中）に従い出典を明記して使用。"
+              />{" "}
               <a className={LINK} href="https://psa.gov.ph/">
                 psa.gov.ph
               </a>
             </li>
             <li>
-              <T en="Provincial poverty: PSA Family Income and Expenditure Survey (FIES) official poverty statistics by province, 2006–2023, from PSA OpenSTAT. The model uses only the previous round’s figure, never the figure for the year it estimates." ja="州別の貧困率：PSA家計所得支出調査（FIES）に基づく州別公式貧困統計 2006〜2023年、PSA OpenSTATより。モデルは前回の調査回の値だけを使い、推計する年の値は使いません。" />{" "}
+              <T
+                en="Provincial poverty: PSA Family Income and Expenditure Survey (FIES) official poverty statistics by province, 2006–2023, from PSA OpenSTAT. The model uses only the previous round’s figure, never the figure for the year it estimates."
+                ja="州別の貧困率：PSA家計所得支出調査（FIES）に基づく州別公式貧困統計 2006〜2023年、PSA OpenSTATより。モデルは前回の調査回の値だけを使い、推計する年の値は使いません。"
+              />{" "}
               <a className={LINK} href="https://openstat.psa.gov.ph/">
                 OpenSTAT
               </a>
             </li>
             <li>
-              <T en="Boundaries: OCHA/NAMRIA/PSA Common Operational Datasets (COD-AB), CC BY-IGO. Indicative, not official boundaries." ja="境界：OCHA/NAMRIA/PSA 共通運用データセット（COD-AB）、CC BY-IGO。参考であり公式の境界ではありません。" />{" "}
+              <T
+                en="Boundaries: OCHA/NAMRIA/PSA Common Operational Datasets (COD-AB), CC BY-IGO. Indicative, not official boundaries."
+                ja="境界：OCHA/NAMRIA/PSA 共通運用データセット（COD-AB）、CC BY-IGO。参考であり公式の境界ではありません。"
+              />{" "}
               <a className={LINK} href="https://data.humdata.org/dataset/cod-ab-phl">
                 HDX
               </a>

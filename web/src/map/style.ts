@@ -3,7 +3,7 @@
 // classes use Akari's sequential scale with the manifest's fixed breaks, and opacity/hatching follow
 // lib/honesty.ts so the map, legend and table make the same official-vs-model distinction.
 
-import { stepColor, type Expression as AkariExpression } from "@abrycta/akari/maps";
+import { hatchFilter as akariHatchFilter, hatchPattern as akariHatchPattern, stepColor, type Expression as AkariExpression } from "@abrycta/akari/maps";
 import { flat } from "@abrycta/akari/tokens";
 
 import type { ExpressionSpecification as Expression } from "maplibre-gl";
@@ -49,12 +49,13 @@ export function fillOpacity(year: number): Expression {
   return ["case", ["<", valueExpr(year), 0], 0.6, ["==", sourceExpr(year), 0], OFFICIAL_OPACITY, MODEL_OPACITY];
 }
 
-/** Hatch overlay: only tier 1 (sparse) and tier 2 (dense) features. */
+/** Hatch overlay (Akari's reliability hatching): tier 1 sparse, tier 2 dense, only where the year has a value. */
 export function hatchFilter(year: number): Expression {
-  return ["all", [">=", valueExpr(year), 0], [">=", tierExpr(year), 1]];
+  return ["all", [">=", valueExpr(year), 0], akariHatchFilter(tierExpr(year)) as unknown as Expression];
 }
+/** `fill-pattern`: Akari's "hatch-sparse" / "hatch-dense" images (registered by addHatchImages). */
 export function hatchPattern(year: number): Expression {
-  return ["case", [">=", tierExpr(year), 2], "hatch-dense", "hatch-sparse"];
+  return akariHatchPattern(tierExpr(year)) as unknown as Expression;
 }
 
 export const PH_BOUNDS: [number, number, number, number] = [116.9, 4.5, 126.6, 21.2];
