@@ -8,6 +8,7 @@ import { useEffect, useId, useState } from "react";
 import type { YearRecord } from "@/data/types";
 import { interval, pct } from "@/lib/format";
 import { TIER_LABEL } from "@/lib/honesty";
+import { whatIfExplanation } from "@/lib/plain";
 import { runWhatIf } from "@/whatif/client";
 import type { WasmEstimate } from "@/whatif/wasm";
 
@@ -110,13 +111,8 @@ export function WhatIf({ pcode, name, rec, widen }: { pcode: string; name: strin
             <strong className="font-mono">{pct(est.value, lang)}</strong>
             <T en=" (widened 90 % interval " ja="（拡張90%区間 " />
             <span className="font-mono">{interval(est.lo90, est.hi90, lang).text}</span>
-            <T en={`; ${TIER_LABEL[est.tier][lang]}). ` } ja={`、${TIER_LABEL[est.tier][lang]}）。`} />
-            {!zero ? (
-              <T
-                en={`That is ${signed(est.value - model.estimate, 1)} points from the model estimate (${pct(model.estimate, lang)}).`}
-                ja={`モデル推計（${pct(model.estimate, lang)}）との差は${signed(est.value - model.estimate, 1)}ポイント。`}
-              />
-            ) : null}
+            <T en={`; ${TIER_LABEL[est.tier][lang]}).`} ja={`、${TIER_LABEL[est.tier][lang]}）。`} />
+            {!zero ? <>{lang === "ja" ? "" : " "}{whatIfExplanation(model.estimate, est.value, growth, ndvi, lang)}</> : null}
           </p>
         ) : result ? (
           <p className="text-muted-foreground">

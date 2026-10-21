@@ -20,7 +20,7 @@ export function narrative(rec: YearRecord | undefined, year: number, place: stri
     const ci = interval(o.lo90, o.hi90, lang).text;
     return ja
       ? `${year}年、PSAは${place}の貧困率を${pct(o.estimate, lang)}と推計しています（90%信頼区間 ${ci}）。これはPSAの公式統計（小地域推計、${estimatorLabel(o.estimator)}法）です。信頼性：${tier}（CV ${o.cv.toFixed(0)}%）。`
-      : `In ${year} the PSA estimated poverty in ${place} at ${pct(o.estimate, lang)} (90 % confidence interval ${ci}). This is an official figure (PSA small area estimate, ${estimatorLabel(o.estimator)}); reliability: ${tier} (CV ${o.cv.toFixed(0)} %).`;
+      : `In ${year} the PSA estimated poverty in ${place} at ${pct(o.estimate, lang)} (90 % confidence interval ${ci}). This is an official figure (PSA small area estimate, ${estimatorLabel(o.estimator)}); reliability: “${tier}” (CV ${o.cv.toFixed(0)} %).`;
   }
 
   const m = rec.model;
@@ -31,7 +31,7 @@ export function narrative(rec: YearRecord | undefined, year: number, place: stri
     : `It builds on the ${m.from} PSA round and satellite data (night lights, vegetation) since then.`;
   return ja
     ? `${year}年のモデル推計では、${place}の貧困率は${pct(m.estimate, lang)}です（90%区間 ${iv}）。これは推計値であり、公式統計ではありません。信頼性：${tier}。${basis}`
-    : `In ${year} the model estimates poverty in ${place} at ${pct(m.estimate, lang)} (90 % interval ${iv}). This is an estimate, not an official figure; reliability: ${tier}. ${basis}`;
+    : `In ${year} the model estimates poverty in ${place} at ${pct(m.estimate, lang)} (90 % interval ${iv}). This is an estimate, not an official figure; reliability: “${tier}”. ${basis}`;
 }
 
 /** The backtest line beside an official value: what the model said without this round. */

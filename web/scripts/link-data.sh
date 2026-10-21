@@ -23,7 +23,7 @@ rm -rf "${dest:?}/$version"
 if [ "$copy" = 1 ]; then
   # Only what the app reads: no CSV or PMTiles side files.
   mkdir -p "$dest/$version"
-  for f in manifest.json index.json metrics.json lgu tiles whatif; do
+  for f in manifest.json index.json metrics.json tiles-attrs.csv lgu tiles whatif; do
     [ -e "$src/$f" ] && cp -R "$src/$f" "$dest/$version/"
   done
 else

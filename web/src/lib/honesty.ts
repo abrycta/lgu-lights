@@ -25,11 +25,27 @@ export function classLabels(breaks: readonly number[] = DEFAULT_BREAKS): string[
   return out;
 }
 
+/** Reliability tiers in plain words (CV ≤ 10 %, ≤ 20 %, above): Solid, Use with care, Rough guess. */
 export const TIER_LABEL: Record<Tier, Bi> = {
-  0: { en: "reliable", ja: "信頼できる" },
-  1: { en: "use with caution", ja: "注意して使用" },
-  2: { en: "unreliable", ja: "信頼性が低い" },
+  0: { en: "Solid", ja: "確かな値" },
+  1: { en: "Use with care", ja: "注意して使う値" },
+  2: { en: "Rough guess", ja: "おおよその目安" },
 };
+
+/**
+ * Plain names for the colour classes, matched to the fixed breaks [10, 20, 30, 40]: Low (< 10),
+ * Moderate (10–20), High (20–40, two colour steps), Very high (≥ 40). `span` is how many colour
+ * classes each name covers, so the legend can line the names up under the ramp.
+ */
+export const PLAIN_BINS: { name: { en: string; ja: string }; range: { en: string; ja: string }; span: number }[] = [
+  { name: { en: "Low", ja: "低い" }, range: { en: "under 10 in 100", ja: "100人に10人未満" }, span: 1 },
+  { name: { en: "Moderate", ja: "中程度" }, range: { en: "10–20", ja: "10〜20人" }, span: 1 },
+  { name: { en: "High", ja: "高い" }, range: { en: "20–40", ja: "20〜40人" }, span: 2 },
+  { name: { en: "Very high", ja: "非常に高い" }, range: { en: "40+", ja: "40人以上" }, span: 1 },
+];
+
+/** First year of PSA's Census EB small-area method (ELL before): figures across it are not compared. */
+export const CENSUS_EB_FROM = 2021;
 
 /** "PSA official (2021)" / "Model estimate (2024)". */
 export function sourceLabel(source: Source, year: number, lang: Lang): string {

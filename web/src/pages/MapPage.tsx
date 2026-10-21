@@ -3,11 +3,15 @@ import { lazy, Suspense, use, useCallback, useMemo, useState } from "react";
 
 import { navigate, useUrlState } from "@/app/url";
 import { ErrorBoundary } from "@/app/ErrorBoundary";
-import { dataBase, loadIndex, loadManifest } from "@/data/load";
+import { dataBase, loadIndex, loadManifest, loadNational } from "@/data/load";
+import type { Index } from "@/data/types";
+import { nationalSentence, valuesOf } from "@/lib/plain";
 import { Legend } from "@/features/Legend";
 import { LguSearch } from "@/features/LguSearch";
 import { ProvincePicker } from "@/features/ProvincePicker";
-import { ProvinceTable } from "@/features/ProvinceTable";
+import { Guide } from "@/features/Guide";
+import { ProvinceView } from "@/features/ProvinceTable";
+import { Glossary } from "@/features/Term";
 import { YearControl } from "@/features/YearControl";
 import { themeKey } from "@/map/style";
 import { LguPanel } from "@/panel/LguPanel";
@@ -30,6 +34,22 @@ function SyntheticBanner({ version }: { version: string }) {
   );
 }
 
+/** #8 One descriptive sentence per year: highest and lowest regions, by the average of their places. */
+function NationalLine({ index, year, isRound }: { index: Index; year: number; isRound: boolean }) {
+  const { lang } = useLang();
+  const national = use(loadNational());
+  const regionOf = useMemo(() => new Map(index.lgus.map((l) => [l.p, l.r])), [index]);
+  const regionName = useMemo(() => new Map(index.regions.map((r) => [r.p, r.n])), [index]);
+  if (!national) return null;
+  const source = isRound ? "official" : "model";
+  const s = nationalSentence({ year, source, values: valuesOf(national, year, source), regionOf, regionName }, lang);
+  return s ? (
+    <p className="border-b border-border px-3 py-2 text-xs leading-relaxed" data-testid="national-sentence">
+      {s}
+    </p>
+  ) : null;
+}
+
 function Intro() {
   return (
     <div className="grid gap-3 text-sm" data-testid="intro">
@@ -44,10 +64,11 @@ function Intro() {
       </p>
       <p>
         <T
-          en="Model estimates are not official statistics. They are drawn lighter, labelled “Model estimate”, and always come with an interval. Hatching marks figures that are uncertain (CV over 10 %) or unreliable (over 20 %)."
-          ja="モデル推計は公式統計ではありません。淡い色で描き、「モデル推計」と表示し、必ず区間を添えています。斜線は不確かな値（CV 10%超）と信頼性の低い値（20%超）です。"
+          en="Model estimates are not official statistics. They are drawn lighter, labelled “Model estimate”, and always come with an interval. Stripes mark figures to “Use with care” (CV over 10 %) and “Rough guesses” (over 20 %); figures without stripes are “Solid”."
+          ja="モデル推計は公式統計ではありません。淡い色で描き、「モデル推計」と表示し、必ず区間を添えています。斜線は「注意して使う値」（CV 10%超）と「おおよその目安」（20%超）を示し、斜線のない値は「確かな値」です。"
         />
       </p>
+      <Glossary />
       <p className="text-muted-foreground">
         <T
           en="Choose a province (map or list), then a city or municipality, or search by name."
@@ -110,6 +131,9 @@ export default function MapPage() {
             <ProvincePicker index={index} value={url.prov} onChange={selectProvince} />
             <LguSearch index={index} value={url.lgu} onSelect={selectLgu} />
           </div>
+          <Suspense fallback={null}>
+            <NationalLine index={index} year={year} isRound={manifest.rounds.includes(year)} />
+          </Suspense>
           <div className="relative min-h-[55vh] flex-1">
             <ErrorBoundary>
               <Suspense fallback={<Loading />}>
@@ -118,6 +142,9 @@ export default function MapPage() {
             </ErrorBoundary>
             <div className="pointer-events-none absolute bottom-8 left-2 hidden max-w-[70%] md:block [&>*]:pointer-events-auto">
               <Legend breaks={manifest.breaks} year={year} isRound={manifest.rounds.includes(year)} />
+            </div>
+            <div className="absolute top-2 right-2 z-10">
+              <Guide />
             </div>
             {province ? (
               <div className="absolute top-2 left-2">
@@ -136,9 +163,9 @@ export default function MapPage() {
           <ErrorBoundary>
             <Suspense fallback={<Loading />}>
               {url.lgu ? (
-                <LguPanel pcode={url.lgu} year={year} manifest={manifest} onClose={() => navigate({ lgu: null })} onSelectYear={setYear} />
+                <LguPanel pcode={url.lgu} year={year} manifest={manifest} index={index} onClose={() => navigate({ lgu: null })} onSelectYear={setYear} />
               ) : province ? (
-                <ProvinceTable index={index} province={province} year={year} onSelect={selectLgu} />
+                <ProvinceView index={index} province={province} year={year} rounds={manifest.rounds} onSelect={selectLgu} />
               ) : (
                 <Intro />
               )}

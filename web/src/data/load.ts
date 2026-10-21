@@ -1,6 +1,8 @@
 // Fetching the static read models. Promises are cached per URL so React 19's `use()` can suspend on
 // them and every component asking for the same file shares one request.
 
+import { type NationalValues, parseAttrsCsv } from "@/lib/plain";
+
 import type { Index, Latest, LguDetail, Manifest, Metrics } from "./types";
 
 const DATA_ROOT = `${import.meta.env.BASE_URL}data/`;
@@ -47,6 +49,37 @@ export const loadManifest = () => inBase<Manifest>("manifest.json");
 export const loadIndex = () => inBase<Index>("index.json");
 export const loadMetrics = () => inBase<Metrics>("metrics.json");
 export const loadLgu = (pcode: string) => inBase<LguDetail>(`lgu/${pcode}.json`);
+
+/** Every LGU file of a province (the province table, the province average and summary share it). */
+const provCache = new Map<string, Promise<LguDetail[]>>();
+export function loadProvinceLgus(index: Index, pcode: string): Promise<LguDetail[]> {
+  let p = provCache.get(pcode);
+  if (!p) {
+    p = Promise.all(index.lgus.filter((l) => l.pv === pcode).map((l) => loadLgu(l.p)));
+    p.catch(() => provCache.delete(pcode));
+    provCache.set(pcode, p);
+  }
+  return p;
+}
+
+/**
+ * Every place's shown value, tier and source per year: `tiles-attrs.csv`, written by `lgu
+ * materialise` for the tiles (~240 kB, ~70 kB compressed). Resolves to null when a data version does
+ * not publish it (the comparisons are then left out rather than guessed).
+ */
+let national: Promise<NationalValues | null> | null = null;
+export function loadNational(): Promise<NationalValues | null> {
+  if (!national) {
+    national = dataBase()
+      .then((b) => fetch(`${b}tiles-attrs.csv`))
+      .then(async (r) => {
+        const text = r.ok ? await r.text() : "";
+        return text.startsWith("pcode,") ? parseAttrsCsv(text) : null;
+      })
+      .catch(() => null);
+  }
+  return national;
+}
 
 /** z/x/y tile template for MapLibre (absolute, as MapLibre requires). */
 export const tilesUrl = (b: string) => `${b}tiles/{z}/{x}/{y}.pbf`;
