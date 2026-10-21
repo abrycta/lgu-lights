@@ -6,7 +6,15 @@
 // and pauses while the frame is out of sight.
 
 import { AkariProvider, useLang } from "@abrycta/akari/react";
-import { lazy, type RefObject, Suspense, use, useEffect, useMemo, useRef } from "react";
+import {
+  lazy,
+  type RefObject,
+  Suspense,
+  use,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 
 import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { parseUrl } from "@/app/url";
@@ -17,10 +25,11 @@ import { COOKIE_DOMAIN, listenToParent, postReady } from "./parent-bridge";
 
 const MapPage = lazy(() => import("@/pages/MapPage"));
 
-/** Time on each place, the fade around a change, and the map's settle ease. */
-const DWELL_MS = 5500;
-const FADE_MS = 200;
-const SETTLE_MS = 700;
+/** Time on each place, the fades around a change (gentle out, slower in), and the map's settle ease. */
+const DWELL_MS = 3500;
+const FADE_OUT_MS = 300;
+const FADE_IN_MS = 500;
+const SETTLE_MS = 1000;
 
 const urlLang = parseUrl(location.pathname, location.search).lang;
 
@@ -82,7 +91,8 @@ function LangFromUrl() {
   return null;
 }
 
-const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const reducedMotion = () =>
+  matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * Steps through TOUR while the frame is in sight (IntersectionObserver: the parent scrolls it away; the
@@ -99,7 +109,15 @@ function useTour(frame: RefObject<HTMLDivElement | null>) {
     const fade = (to: number) =>
       Promise.all(
         [...el.querySelectorAll<HTMLElement>('[data-testid="map"], aside')].map(
-          (n) => n.animate({ opacity: to }, { duration: FADE_MS, easing: "ease-out", fill: "forwards" }).finished,
+          (n) =>
+            n.animate(
+              { opacity: to },
+              {
+                duration: to === 0 ? FADE_OUT_MS : FADE_IN_MS,
+                easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+                fill: "forwards",
+              },
+            ).finished,
         ),
       ).catch(() => undefined);
     const show = (i: number) => {
@@ -108,7 +126,8 @@ function useTour(frame: RefObject<HTMLDivElement | null>) {
       showPlace(TOUR[i]!, true);
     };
     const ready = () => "embedReady" in document.documentElement.dataset;
-    const running = () => inView && document.visibilityState === "visible" && !reducedMotion();
+    const running = () =>
+      inView && document.visibilityState === "visible" && !reducedMotion();
     const schedule = () => {
       clearTimeout(timer);
       timer = undefined;
@@ -120,7 +139,9 @@ function useTour(frame: RefObject<HTMLDivElement | null>) {
       await fade(0);
       show((step + 1) % TOUR.length);
       // Two frames for React and MapLibre to draw the new place, then back in while the map settles.
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await new Promise((r) =>
+        requestAnimationFrame(() => requestAnimationFrame(r)),
+      );
       await fade(1);
       schedule();
     }
@@ -153,7 +174,12 @@ export function EmbedApp() {
   const frame = useRef<HTMLDivElement>(null);
   useTour(frame);
   return (
-    <AkariProvider defaultLang={urlLang ?? "en"} toaster={false} sharedCookieDomain={COOKIE_DOMAIN} inlineScript={false}>
+    <AkariProvider
+      defaultLang={urlLang ?? "en"}
+      toaster={false}
+      sharedCookieDomain={COOKIE_DOMAIN}
+      inlineScript={false}
+    >
       <LangFromUrl />
       {/* Frozen view: panels are clipped at the frame like the screenshot, never scrollable (no scrollbars). */}
       <div
