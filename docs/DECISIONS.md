@@ -89,7 +89,7 @@ For visitors without a statistics background, the panel and the map explain each
 
 ### Public repository (2026-10-21)
 
-The repository is now public. Some earlier notes no longer hold as written: the reason in **B8** ("the repo is private") is gone, though Cloudflare Pages stays the host because it is live and costs nothing; and in **B4** and **B17**, `ARCHIVE_READ_TOKEN` now exists in this repo and in `abrycta/lgu-lights-archive`. The archive repo and the archivekit kit stay private. The archive repo runs the kit's weekly snapshot and health workflow (`archive.yml`), which reads this repo's `pipeline/sources.yaml` from `main`. It snapshots the four `file` sources (the two PSA SAE workbooks and the two COD-AB files) and only health-checks the `remote-dataset` rasters, as the registry marks them. The registry's `health.token_expires` still holds the Earthdata date, because GitHub returned no expiry header for `ARCHIVE_READ_TOKEN`.
+The repository is now public. Some earlier notes no longer hold as written: the reason in **B8** ("the repo is private") is gone, though Cloudflare Pages stays the host because it is live and costs nothing; and in **B4** and **B17**, `ARCHIVE_READ_TOKEN` now exists in this repo and in `abrycta/lgu-lights-archive`. The archive repo and the archivekit kit stay private. The archive repo runs the kit's weekly snapshot and health workflow (`archive.yml`), which reads this repo's `pipeline/sources.yaml` from `main`. It snapshots the four `file` sources (the two PSA SAE workbooks and the two COD-AB files) and only health-checks the `remote-dataset` rasters, as the registry marks them. The registry has no `health.token_expires`: `ARCHIVE_READ_TOKEN` was created without an expiry (commit 781c73f).
 
 ## v2 enhancement (data version v2, run 39571434610, 2026-10-21)
 
@@ -164,6 +164,8 @@ Screening runs with default hyper-parameters (no tuning), no monotone constraint
 ## v3 enhancement (data version v3, run 39580446754, 2026-10-21)
 
 Kurt approved a v3 ("make all the tuning that you need"), stated as an enhancement, with the same honesty rules: no leakage, tuning and calibration on each fold's training rounds only, the same three outer folds and baselines, and anything that gets worse reported plainly.
+
+**Shipped 2026-10-21:** `model-v3` merged into main; data version v3 (release `data-v3`) live at lights.krtmtthw.dev with the WASM built from the v3 core. The deploy also carries `data/v1/`, so a rollback is a `latest.json` change. The web wording now names the national trend and the provincial adjustment, the About page shows every backtest with the province-level MAE and says where the model loses to carry-forward (2021).
 
 ### Decisions
 

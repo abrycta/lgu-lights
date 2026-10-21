@@ -84,7 +84,7 @@ function Folds({ m }: { m: Metrics }) {
         </TableBody>
       </Table>
       {losses.length ? (
-        <p data-testid="folds-losses">
+        <p className="text-sm" data-testid="folds-losses">
           <T
             en={`Where the model loses: in ${losses.map((f) => f.test_round).join(" and ")} it was worse than simply carrying the last official value forward (${losses.map((f) => `${f2(f.model.mae)} against ${f2(f.carry_forward.mae)} pp`).join("; ")}).`}
             ja={`モデルが負けた年：${losses.map((f) => f.test_round).join("年と")}年は、前回の公式値をそのまま使うより誤差が大きくなりました（${losses.map((f) => `${f2(f.model.mae)}ポイント対${f2(f.carry_forward.mae)}ポイント`).join("、")}）。`}
