@@ -5,7 +5,8 @@ dist/
 .env.*
 __pycache__/
 .venv/
-data/
+/data/
+spike/**/data/
 
 # spike outputs
 spike/**/out/
