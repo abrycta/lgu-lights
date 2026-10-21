@@ -1,4 +1,5 @@
 import { AppShell, ContrastToggle, Header, LangSwitch, Logo, T, ThemeToggle, useLang, useT } from "@abrycta/akari/react";
+import { ArrowLeftIcon } from "lucide-react";
 import { type MouseEvent, type ReactNode, Suspense, use, useEffect } from "react";
 
 import { loadManifest } from "@/data/load";
@@ -63,6 +64,20 @@ function FooterData() {
   );
 }
 
+const PORTFOLIO_LINK = "inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-xs whitespace-nowrap text-muted-foreground underline-offset-4 hover:text-foreground hover:underline";
+
+/** Back to the author's portfolio, in the same tab (as in Typhoon Replay). On phones only the arrow shows; screen readers hear whose site it is. */
+function PortfolioLink() {
+  const t = useT();
+  return (
+    <a href={PORTFOLIO_URL} className={PORTFOLIO_LINK} data-testid="portfolio-link">
+      <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
+      <span className="hidden sm:inline">krtmtthw.dev</span>
+      <span className="sr-only"> ({t("Kurt's portfolio", "Kurtのポートフォリオ")})</span>
+    </a>
+  );
+}
+
 const NAV_LINK = "rounded-sm px-1 py-0.5 whitespace-nowrap hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:underline underline-offset-4";
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -91,6 +106,7 @@ export function Shell({ children }: { children: ReactNode }) {
           }
           actions={
             <>
+              <PortfolioLink />
               <LangSwitch />
               <ThemeToggle variant="compact" />
               <ContrastToggle />
