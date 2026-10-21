@@ -78,3 +78,15 @@ Milestone-2 candidates from these numbers: model the estimator break explicitly 
 ### Rename (2026-10-21)
 
 The public name is **Lights**, at **lights.krtmtthw.dev** (Kurt's call: it reads better). `lgu.krtmtthw.dev` stays in DNS and the page sends visitors on to the new host (`web/public/host-redirect.js`), because DNS is at Porkbun and there is no edge redirect. Internal IDs keep `lgu`: repos, the Pages project `lgu-lights`, the Earth Engine project, the crates and the archive.
+
+### Plain-language reading (shipped 2026-10-21, commit 755b8a2, merged in 04bf910)
+
+For visitors without a statistics background, the panel and the map explain each figure in plain words. The rules live in `web/src/lib/plain.ts`, are unit-tested and are stated on the About page.
+
+- **Comparison rule:** comparisons never mix sources. An official figure is compared only with PSA official figures for the same year, and a model estimate only with model estimates, and the sentence says which. The national position ("higher than 7 in 10 towns and cities") is given only when at least 50 places are comparable. The province average is weighted by WorldPop population, and a value whose 90 % interval contains that average is called "within the margin of error".
+- **Change rule:** a change between two figures is called likely real only when |d| > 1.645 · √(SE₁² + SE₂²), a two-sided test at the 10 % level that treats the figures as independent (PSA publishes no covariance). Official figures use PSA's SE; model figures use the larger 90 % half-width ÷ 1.645. Figures on either side of PSA's 2018 → 2021 method change (ELL → Census EB) are never compared.
+- **Poverty threshold:** the plain definition of poverty incidence quotes PSA's 2023 full-year national threshold, **₱13,873 a month for a family of five** (PSA, 2023 Full-Year Official Poverty Statistics, https://psa.gov.ph/statistics/poverty/node/1684064929), and says that it differs by province. Kurt confirmed the figure.
+
+### Public repository (2026-10-21)
+
+The repository is now public. Some earlier notes no longer hold as written: the reason in **B8** ("the repo is private") is gone, though Cloudflare Pages stays the host because it is live and costs nothing; and in **B4** and **B17**, `ARCHIVE_READ_TOKEN` now exists in this repo and in `abrycta/lgu-lights-archive`. The archive repo and the archivekit kit stay private. The archive repo runs the kit's weekly snapshot and health workflow (`archive.yml`), which reads this repo's `pipeline/sources.yaml` from `main`. It snapshots the four `file` sources (the two PSA SAE workbooks and the two COD-AB files) and only health-checks the `remote-dataset` rasters, as the registry marks them. The registry's `health.token_expires` still holds the Earthdata date, because GitHub returned no expiry header for `ARCHIVE_READ_TOKEN`.
