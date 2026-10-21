@@ -26,10 +26,10 @@ import { COOKIE_DOMAIN, listenToParent, postReady } from "./parent-bridge";
 const MapPage = lazy(() => import("@/pages/MapPage"));
 
 /** Time on each place, the fades around a change (gentle out, slower in), and the map's settle ease. */
-const DWELL_MS = 3500;
+const DWELL_MS = 2200;
 const FADE_OUT_MS = 300;
-const FADE_IN_MS = 500;
-const SETTLE_MS = 1000;
+const FADE_IN_MS = 400;
+const SETTLE_MS = 800;
 
 const urlLang = parseUrl(location.pathname, location.search).lang;
 
