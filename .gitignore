@@ -12,3 +12,10 @@ spike/**/out/
 spike/**/*.pmtiles
 spike/**/requests*.jsonl
 spike/rust/Cargo.lock.bak
+
+# build outputs
+target/
+pipeline/snapshots/
+web/public/data/
+web/public/wasm/
+*.tsbuildinfo

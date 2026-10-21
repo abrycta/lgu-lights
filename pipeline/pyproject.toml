@@ -1,0 +1,37 @@
+[project]
+name = "lgu-pipeline"
+version = "0.1.0"
+description = "LGU Lights data pipeline: sources (archivekit), PSA SAE labels, ADM3 harmonisation, zonal statistics, training"
+authors = [{ name = "Kurt" }]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "archivekit",
+    "numpy>=2.3",
+    "pandas>=2.3",
+    "pyarrow>=21",
+    "openpyxl>=3.1.5",
+    "pyogrio>=0.11",
+    "shapely>=2.1",
+    "httpx>=0.28",
+    "pytest>=8.4",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.13"]
+# Satellite zonal statistics (GitHub Actions only)
+zonal = ["exactextract>=0.2", "rasterio>=1.4", "h5py>=3.14", "earthengine-api>=1.6", "geopandas>=1.1"]
+# Offline training (GitHub Actions or locally; tiny)
+train = ["lightgbm>=4.6", "scipy>=1.16"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.sources]
+archivekit = { git = "https://github.com/abrycta/data-archive-kit", rev = "v1.1.0" }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120

@@ -1,0 +1,256 @@
+# yaml-language-server: $schema=../../data-archive-kit/schema/sources.schema.json
+# LGU Lights source registry (format: archivekit, abrycta/data-archive-kit v1.1.0).
+#
+# Every upstream input the pipeline reads is listed here. `lgu.sources.fetch(<id>)` walks the `links`
+# in order (primary first), validates each download against `checks` and the project hooks, and falls
+# back to the latest validated snapshot in the private archive repo (the `archive` link).
+# Satellite rasters are `remote-dataset` entries: they are processed where they live (Earth Engine) or
+# read tile by tile by the pipeline's own authenticated LAADS client (lgu/laads.py), never archived.
+#
+# Spike decisions applied here (docs/DECISIONS.md, S2, S3, S7):
+#   S2  boundaries come from HDX COD-AB v03 (pcodes "PH" + 7 digits; PSGC-10 = pcode[2:] + "000");
+#       geoBoundaries is a mirror only (different schema, automatic: false).
+#   S3  NOAA-20 vegetation (VJ113A1) comes from LAADS with an Earthdata login; GEE covers MODIS.
+#   S7  psa.gov.ph answers a Cloudflare challenge to every automated client, so Wayback raw captures
+#       (`id_` URLs, pinned timestamps) are a mirror tier, and the 2023 file was downloaded by hand and
+#       adopted as the first archive snapshot (see docs/DATA.md).
+version: 1
+project: lgu-lights
+
+archive:
+  repo: abrycta/lgu-lights-archive
+  token_env: ARCHIVE_READ_TOKEN          # fine-grained PAT: Contents read on kit + archive, Issues read/write on archive
+  tag_format: "{id}-{date}"
+  compression: zstd
+  compression_level: auto
+
+health:
+  issue_label: source-health
+  issue_title_prefix: "lgu-lights source"
+  issue_token_env: ARCHIVE_READ_TOKEN
+  token_expiry_warn_days: 30
+  # The earliest-expiring credential the pipeline depends on. Today that is the NASA Earthdata token
+  # (EARTHDATA_TOKEN, the fallback when minting a per-run token from EARTHDATA_USERNAME/PASSWORD fails),
+  # which expires about 2026-12-20. ARCHIVE_READ_TOKEN does not exist yet; when it is created (1-year
+  # expiry), keep whichever date comes first here and rotate the Earthdata token before it lapses.
+  token_expires: "2026-12-20"
+  user_agent: "lgu-lights-pipeline/0.1 (+https://github.com/abrycta/lgu-lights)"
+  heartbeat_days: 14
+
+sources:
+  # ------------------------------------------------------------------ labels (PSA Small Area Estimates)
+  - id: psa-sae-2018-2021
+    description: >-
+      PSA city- and municipal-level Small Area Estimates of poverty incidence, the "2018 - 2021 SAE with
+      PSGC, no HUC" workbook. Besides the 2018-2021 sheet it carries one sheet per round 2000-2018 (ELL);
+      the pipeline reads the 2012 and 2015 sheets from it (2018 and 2021 come from the 2023 workbook,
+      which also publishes standard errors).
+    kind: file
+    format: zip                            # an xlsx is a zip; archivekit has no xlsx handler (OPEN-QUESTIONS Q12)
+    filename: psa-sae-2018-2021.xlsx
+    local_path: data/raw/psa/psa-sae-2018-2021.xlsx
+    licence: "CC BY (PSA OpenSTAT terms of use); coverage of this workbook by those terms not yet confirmed by PSA"
+    attribution: "Philippine Statistics Authority, City and Municipal Level Small Area Poverty Estimates 2000-2021"
+    cadence: once per SAE round (about every 2-3 years)
+    pin: { wayback_timestamp: "20250521080034" }
+    hooks: ["lgu.sources:check_sae"]
+    links:
+      - id: psa
+        url: "https://psa.gov.ph/system/files/phdsd/2018%20-%202021%20SAE_with%20PSGC_noHUC.xlsx"
+        probe_html: true                   # Cloudflare challenge page to automated clients (spike S7)
+      - id: wayback
+        url: "https://web.archive.org/web/20250521080034id_/https://psa.gov.ph/system/files/phdsd/2018%20-%202021%20SAE_with%20PSGC_noHUC.xlsx"
+      - id: archive
+        archive: true
+    checks:
+      bytes: { min: 500000, max: 3000000 }
+      sha256: 5f3c95bb01ed45c2ec1ae7a126fa96f0ea53c12c55fd634a9b3d460a78ff1fa0
+      zip_member: "xl/workbook.xml"
+      member_format: xml
+    archived: { enabled: true, retention: all }
+
+  - id: psa-sae-2023
+    description: >-
+      PSA 2023 city- and municipal-level Small Area Estimates of poverty (Census EB; presented
+      2026-02-16), Annex 1 with 2018, 2021 and 2023 estimates, CV, SE and 90 % CI. Downloaded by hand on
+      2026-10-21 (psa.gov.ph blocks automated clients; no Wayback capture of the file exists) and
+      adopted as the first archive snapshot.
+    kind: file
+    format: zip
+    filename: psa-sae-2023.xlsx
+    local_path: data/raw/psa/psa-sae-2023.xlsx
+    licence: "CC BY (PSA OpenSTAT terms of use); coverage of this workbook by those terms not yet confirmed by PSA"
+    attribution: "Philippine Statistics Authority, 2023 City and Municipal Level Small Area Estimates of Poverty"
+    cadence: once
+    pin:
+      original_name: "2_2023 SAE_with PSGC_noHUC_06Feb2026.xlsx"
+      intake: "downloaded by hand in a browser on 2026-10-21 (release manual-psa-sae-2023-20261021); adopted with pipeline/tools/adopt_manual.py"
+    hooks: ["lgu.sources:check_sae"]
+    links:
+      - id: psa
+        url: "https://psa.gov.ph/sites/default/files/phdsd/2_2023%20SAE_with%20PSGC_noHUC_06Feb2026.xlsx"
+        probe_html: true
+      - id: archive
+        archive: true
+    checks:
+      bytes: { min: 200000, max: 3000000 }
+      sha256: 303fb0e87bff046acaa21e3ac586f6def6b737b9082eb1f51451a887fd93a026
+      zip_member: "xl/workbook.xml"
+      member_format: xml
+    archived: { enabled: true, retention: all }
+
+  # ------------------------------------------------------------------ codes and boundaries (S2)
+  - id: cod-ab-phl-tables
+    description: >-
+      OCHA COD-AB Philippines v03 attribute tables (admin 0-4 names and pcodes, no geometry). The
+      crosswalk from PSA SAE codes to the analysis vintage is built from the admin3 sheet.
+    kind: file
+    format: zip
+    filename: phl_admin_boundaries.xlsx
+    local_path: data/raw/boundaries/phl_admin_boundaries.xlsx
+    licence: "Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)"
+    attribution: &codab_attr >-
+      OCHA Philippines; National Mapping and Resource Information Authority (NAMRIA); Philippine
+      Statistics Authority. COD-AB PHL v03 (valid on 2025-02-13), via HDX. Boundaries are indicative and
+      not official.
+    cadence: yearly review
+    links:
+      - id: hdx
+        url: https://data.humdata.org/dataset/caf116df-f984-4deb-85ca-41b349d3f313/resource/159ffd3d-679f-431c-812f-b6d6f957045e/download/phl_admin_boundaries.xlsx
+      - id: archive
+        archive: true
+    checks:
+      bytes: { min: 5000000, max: 30000000 }
+      zip_member: "xl/workbook.xml"
+      member_format: xml
+    archived: { enabled: true, retention: all, max_age_days: 400 }
+
+  - id: cod-ab-phl-gdb
+    description: >-
+      OCHA COD-AB Philippines v03 boundaries (File Geodatabase, admin 0-4). The pipeline reads the
+      admin3 layer: 1,642 cities and municipalities, including seven Special Geographic Area placeholder
+      units (the eight 2024 SGA municipalities are not split out).
+    kind: file
+    format: zip
+    filename: phl_admin_boundaries.gdb.zip
+    local_path: data/raw/boundaries/phl_admin_boundaries.gdb.zip
+    licence: "Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)"
+    attribution: *codab_attr
+    cadence: yearly review
+    hooks: ["lgu.sources:check_adm3"]
+    links:
+      - id: hdx
+        url: https://data.humdata.org/dataset/caf116df-f984-4deb-85ca-41b349d3f313/resource/3fa0dbcf-e07d-4506-9821-ba15baa6da07/download/phl_admin_boundaries.gdb.zip
+      - id: hdx-shp
+        url: https://data.humdata.org/dataset/caf116df-f984-4deb-85ca-41b349d3f313/resource/4e4067d6-3fc8-4d2c-91ea-330c3d4f8e8e/download/phl_admin_boundaries.shp.zip
+        automatic: false                   # same boundaries as shapefiles: a different container
+      - id: geoboundaries
+        url: https://www.geoboundaries.org/api/current/gbOpen/PHL/ADM3/
+        automatic: false                   # different schema (shapeID, no PSGC) and a pre-2024 vintage (S2)
+        probe_contains: "gbOpen"
+      - id: archive
+        archive: true
+    checks:
+      bytes: { min: 200000000, max: 800000000 }
+      zip_member: "*.gdb/gdb"
+    archived: { enabled: true, retention: all, max_age_days: 400 }
+
+  # ------------------------------------------------------------------ satellite rasters (never archived)
+  - id: black-marble-vnp46a4
+    description: >-
+      NASA Black Marble yearly nighttime lights, Collection 2 (S-NPP VNP46A4), 15 arc-second linear-lat/lon
+      tiles h29v07 h29v08 h30v06 h30v07 h30v08 (Philippines), layer AllAngle_Composite_Snow_Free. Read by
+      lgu/laads.py with a per-run Earthdata token; zonal statistics with exactextract in GitHub Actions.
+    kind: remote-dataset
+    licence: "NASA open data; no restrictions"
+    attribution: >-
+      Roman, M.O., et al. NASA Black Marble VIIRS/NPP Lunar BRDF-Adjusted Nighttime Lights Yearly L3
+      Global 15 arc-second Linear Lat Lon Grid, VNP46A4 v002, doi:10.5067/VIIRS/VNP46A4.002 (LAADS DAAC).
+    cadence: yearly; S-NPP deliveries end 2026-11-02 (continuity via NOAA-20 VJ146A4)
+    links:
+      - id: laads-archive
+        url: https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/5200/VNP46A4/
+        probe: https://ladsweb.modaps.eosdis.nasa.gov/api/v2/content/details/allData/5200/VNP46A4/2023/001
+        probe_contains: "VNP46A4.A2023001.h29v07"
+      - id: cmr
+        url: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A4&version=2
+        probe: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A4&version=2&page_size=1
+        probe_contains: "VNP46A4"
+    archived: { enabled: false }
+
+  - id: viirs-vj113a1
+    description: >-
+      NOAA-20 VIIRS vegetation indices, 16-day 500 m sinusoidal tiles (VJ113A1 v002), the continuity
+      series for MODIS NDVI after Terra ends (February 2027). Not on Earth Engine (spike S3): read from
+      LAADS by lgu/laads.py; 2018 onwards.
+    kind: remote-dataset
+    licence: "NASA open data; no restrictions"
+    attribution: >-
+      Didan, K., Barreto, A. VIIRS/NOAA20 Vegetation Indices 16-Day L3 Global 500m SIN Grid, VJ113A1 v002,
+      NASA EOSDIS Land Processes DAAC / LAADS DAAC.
+    cadence: 16-day
+    links:
+      - id: laads-archive
+        url: https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/5200/VJ113A1/
+        probe: https://ladsweb.modaps.eosdis.nasa.gov/api/v2/content/details/allData/5200/VJ113A1/2023/001
+        probe_contains: "VJ113A1.A2023001.h29v07"
+      - id: cmr
+        url: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VJ113A1&version=002
+        probe: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VJ113A1&version=002&page_size=1
+        probe_contains: "VJ113A1"
+    archived: { enabled: false }
+
+  - id: modis-mod13q1
+    description: >-
+      MODIS Terra MOD13Q1 v061 vegetation indices (NDVI), 250 m, 16-day. Reduced to yearly per-LGU means
+      inside Google Earth Engine (lgu/ee_zonal.py; project lgu-lights); nothing is downloaded.
+    kind: remote-dataset
+    licence: "No restrictions on subsequent use, sale, or redistribution (NASA LP DAAC)"
+    attribution: >-
+      Didan, K. (2021). MODIS/Terra Vegetation Indices 16-Day L3 Global 250m SIN Grid V061, NASA EOSDIS
+      LP DAAC, doi:10.5067/MODIS/MOD13Q1.061. Processed in Google Earth Engine.
+    cadence: 16-day; Terra end of science about February 2027
+    links:
+      - id: earth-engine
+        url: ee://MODIS/061/MOD13Q1
+        probe: https://earthengine-stac.storage.googleapis.com/catalog/MODIS/MODIS_061_MOD13Q1.json
+        probe_contains: "MOD13Q1"
+      - id: lpdaac-cmr
+        url: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=MOD13Q1&version=061
+        probe: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=MOD13Q1&version=061&page_size=1
+        probe_contains: "MOD13Q1"
+    archived: { enabled: false }
+
+  - id: worldpop-phl-100m
+    description: >-
+      WorldPop Global Project population, Philippines, 100 m, unconstrained (WorldPop/GP/100m/pop, 2000-2020).
+      Summed per LGU in Earth Engine; used for density and radiance per person. 2021-2023 carry 2020 forward.
+    kind: remote-dataset
+    licence: "CC BY 4.0"
+    attribution: "WorldPop (www.worldpop.org), School of Geography and Environmental Science, University of Southampton; doi:10.5258/SOTON/WP00645"
+    cadence: static (2000-2020)
+    links:
+      - id: earth-engine
+        url: ee://WorldPop/GP/100m/pop
+        probe: https://earthengine-stac.storage.googleapis.com/catalog/WorldPop/WorldPop_GP_100m_pop.json
+        probe_contains: "WorldPop"
+      - id: worldpop-hub
+        url: https://hub.worldpop.org/geodata/summary?id=6316
+        probe_html: true
+    archived: { enabled: false }
+
+  - id: srtm-dem
+    description: NASA SRTM 1 arc-second DEM; mean elevation and slope per LGU (static context), in Earth Engine.
+    kind: remote-dataset
+    licence: "Public domain (NASA/USGS)"
+    attribution: "NASA JPL (2013). NASA Shuttle Radar Topography Mission Global 1 arc second, doi:10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    cadence: static
+    links:
+      - id: earth-engine
+        url: ee://USGS/SRTMGL1_003
+        probe: https://earthengine-stac.storage.googleapis.com/catalog/USGS/USGS_SRTMGL1_003.json
+        probe_contains: "SRTM"
+      - id: lpdaac-cmr
+        url: https://cmr.earthdata.nasa.gov/search/collections.json?short_name=SRTMGL1&version=003
+        probe_contains: "SRTMGL1"
+    archived: { enabled: false }
