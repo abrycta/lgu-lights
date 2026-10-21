@@ -175,7 +175,7 @@ sources:
       - id: laads-archive
         url: https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/5200/VNP46A4/
         probe: https://ladsweb.modaps.eosdis.nasa.gov/api/v2/content/details/allData/5200/VNP46A4/2023/001
-        probe_contains: "VNP46A4.A2023001.h29v07"
+        probe_contains: "VNP46A4.A2023001."         # the listing is alphabetical; a probe reads only its first 64 KiB
       - id: cmr
         url: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A4&version=2
         probe: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A4&version=2&page_size=1
@@ -197,7 +197,7 @@ sources:
       - id: laads-archive
         url: https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/5200/VJ113A1/
         probe: https://ladsweb.modaps.eosdis.nasa.gov/api/v2/content/details/allData/5200/VJ113A1/2023/001
-        probe_contains: "VJ113A1.A2023001.h29v07"
+        probe_contains: "VJ113A1.A2023001."
       - id: cmr
         url: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VJ113A1&version=002
         probe: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VJ113A1&version=002&page_size=1
