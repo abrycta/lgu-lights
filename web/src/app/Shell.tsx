@@ -1,12 +1,9 @@
-import { AppShell, ContrastToggle, Header, LangSwitch, Logo, T, ThemeToggle, useLang, useT } from "@abrycta/akari/react";
-import { ArrowLeftIcon } from "lucide-react";
+import { AppShell, Header, HEADER_PORTFOLIO, T, useLang, useT } from "@abrycta/akari/react";
 import { type MouseEvent, type ReactNode, Suspense, use, useEffect } from "react";
 
 import { loadManifest } from "@/data/load";
 
-import { formatUrl, navigate, type Page, useUrlState } from "./url";
-
-const PORTFOLIO_URL = "https://krtmtthw.dev";
+import { formatUrl, navigate, type Page, type UrlState, useUrlState } from "./url";
 
 /** In-app link: a real href (open in new tab works), client-side navigation on plain clicks. */
 export function PageLink({ page, className, children, current }: { page: Page; className?: string; children: ReactNode; current?: boolean }) {
@@ -64,55 +61,43 @@ function FooterData() {
   );
 }
 
-const PORTFOLIO_LINK = "inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-xs whitespace-nowrap text-muted-foreground underline-offset-4 hover:text-foreground hover:underline";
-
-/** Back to the author's portfolio, in the same tab (as in Typhoon Replay). On phones only the arrow shows; screen readers hear whose site it is. */
-function PortfolioLink() {
+/** Akari's Header, the same menu bar as krtmtthw.dev and every other app: data only; client-side navigation on plain clicks. */
+export function LightsHeader({ url }: { url: UrlState }) {
   const t = useT();
+  const href = (p: Page) => formatUrl({ ...url, page: p });
   return (
-    <a href={PORTFOLIO_URL} className={PORTFOLIO_LINK} data-testid="portfolio-link">
-      <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
-      <span className="hidden sm:inline">krtmtthw.dev</span>
-      <span className="sr-only"> ({t("Kurt's portfolio", "Kurtのポートフォリオ")})</span>
-    </a>
+    <Header
+      brand={{ name: "Lights", glyph: "光", href: href("map"), srSuffix: t("home", "ホーム") }}
+      navLabel={t("Main", "メイン")}
+      nav={[
+        { href: href("map"), label: t("Map", "地図"), current: url.page === "map" },
+        { href: href("about"), label: t("About & method", "概要と手法"), current: url.page === "about" },
+      ]}
+      portfolioLink
+      languages
+      renderLink={(p) => (
+        <a
+          {...p}
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            navigate({ page: p.href === href("about") ? "about" : "map" });
+            window.scrollTo(0, 0);
+          }}
+        />
+      )}
+    />
   );
 }
 
-const NAV_LINK = "rounded-sm px-1 py-0.5 whitespace-nowrap hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:underline underline-offset-4";
-
 export function Shell({ children }: { children: ReactNode }) {
   const t = useT();
-  const { page } = useUrlState();
+  const url = useUrlState();
   useLangParam();
   return (
     <AppShell
       header={
-        <Header
-          brand={
-            <>
-              <PageLink page="map" className="rounded-sm">
-                <Logo name="Lights" glyph="光" size="sm" />
-                <span className="sr-only"> {t("home", "ホーム")}</span>
-              </PageLink>
-              <nav aria-label={t("Main", "メイン")} className="flex items-center gap-3 text-sm text-muted-foreground">
-                <PageLink page="map" className={NAV_LINK} current={page === "map"}>
-                  <T en="Map" ja="地図" />
-                </PageLink>
-                <PageLink page="about" className={NAV_LINK} current={page === "about"}>
-                  <T en="About & method" ja="概要と手法" />
-                </PageLink>
-              </nav>
-            </>
-          }
-          actions={
-            <>
-              <PortfolioLink />
-              <LangSwitch />
-              <ThemeToggle variant="compact" />
-              <ContrastToggle />
-            </>
-          }
-        />
+        <LightsHeader url={url} />
       }
       footer={
         <footer className="border-t border-border">
@@ -136,7 +121,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </p>
             <p>
               <T en="A project by" ja="制作：" />{" "}
-              <a href={PORTFOLIO_URL} className="underline underline-offset-4 hover:text-foreground">
+              <a href={HEADER_PORTFOLIO.href} className="underline underline-offset-4 hover:text-foreground">
                 Kurt · krtmtthw.dev
               </a>
             </p>

@@ -124,7 +124,7 @@ export default function MapPage() {
   return (
     <>
       <SyntheticBanner version={manifest.version} />
-      <div className="flex flex-col lg:h-[calc(100dvh-4rem)] lg:flex-row">
+      <div className="flex flex-col lg:h-[calc(100dvh-81px)] lg:flex-row">
         <section className="flex min-w-0 flex-1 flex-col" aria-label={t("Map and controls", "地図と操作")}>
           <div className="grid gap-3 border-b border-border p-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
             <YearControl years={manifest.years} rounds={manifest.rounds} year={year} onChange={setYear} />
