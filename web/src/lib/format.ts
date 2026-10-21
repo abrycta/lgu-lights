@@ -7,7 +7,7 @@ export function num(v: number): string {
 
 /** "18.0 %" (EN, non-breaking space) or "18.0%" (JA). */
 export function pct(v: number, lang: Lang): string {
-  return lang === "ja" ? `${num(v)}%` : `${num(v)} %`;
+  return lang === "ja" ? `${num(v)}%` : `${num(v)}\u00a0%`;
 }
 
 /**
@@ -19,7 +19,7 @@ export function interval(lo: number, hi: number, lang: Lang): { text: string; cl
   const clamped = lo < 0;
   const a = num(Math.max(0, lo));
   const b = num(hi);
-  return { text: lang === "ja" ? `${a}〜${b}%` : `${a}–${b} %`, clamped };
+  return { text: lang === "ja" ? `${a}〜${b}%` : `${a}–${b}\u00a0%`, clamped };
 }
 
 export function cvText(cv: number): string {

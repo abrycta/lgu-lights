@@ -23,7 +23,7 @@ import { choroplethLayers } from "@abrycta/akari/maps";
 import { useT } from "@abrycta/akari/react";
 import * as maplibregl from "maplibre-gl";
 import type { MapGeoJSONFeature, Map as MlMap } from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { tilesUrl } from "@/data/load";
 import type { IndexProvince } from "@/data/types";
@@ -67,9 +67,11 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
   const loaded = useRef(false);
   // Latest props for event handlers registered once.
   const props = useRef({ year, lang, names, onPick, province });
-  props.current = { year, lang, names, onPick, province };
   const themeRef = useRef(theme);
-  themeRef.current = theme;
+  useLayoutEffect(() => {
+    props.current = { year, lang, names, onPick, province };
+    themeRef.current = theme;
+  });
 
   // Create the map once.
   useEffect(() => {

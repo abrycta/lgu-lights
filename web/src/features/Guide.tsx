@@ -4,7 +4,7 @@
 
 import { Button, Card, CardContent, CardHeader, CardTitle, T, useT } from "@abrycta/akari/react";
 import { XIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useGuide } from "@/app/prefs";
 import { MODEL_OPACITY, OFFICIAL_OPACITY, PLAIN_BINS } from "@/lib/honesty";
@@ -16,9 +16,12 @@ export function Guide() {
   const t = useT();
   const [open, setOpen] = useGuide();
   const [step, setStep] = useState(0);
-  useEffect(() => {
+  // Start at the first step each time the guide opens (state adjusted during render, not in an effect).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) setStep(0);
-  }, [open]);
+  }
   if (!open) return null;
 
   const steps = [

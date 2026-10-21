@@ -36,6 +36,7 @@ jobs:
       - run: npm ci
         env: { NODE_AUTH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test --if-present
       - run: npm run build
       - name: Size

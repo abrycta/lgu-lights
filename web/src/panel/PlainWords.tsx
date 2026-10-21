@@ -43,7 +43,7 @@ function CopySummary({ text }: { text: string }) {
       ta.style.opacity = "0";
       document.body.append(ta);
       ta.select();
-      let ok = false;
+      let ok: boolean;
       try {
         ok = document.execCommand("copy");
       } catch {
