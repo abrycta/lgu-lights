@@ -79,8 +79,8 @@ export default function AboutPage() {
             </li>
             <li>
               <T
-                en="Reliability tiers follow the coefficient of variation: reliable up to 10 %, use with caution up to 20 %, unreliable above (hatched on the map)."
-                ja="信頼性は変動係数で区分：10%以下は信頼できる、20%以下は注意して使用、それを超えると信頼性が低い（地図では斜線）。"
+                en="Reliability tiers follow the coefficient of variation: “Solid” up to 10 %, “Use with care” up to 20 %, “Rough guess” above (the last two are hatched on the map)."
+                ja="信頼性は変動係数で区分：10%以下は「確かな値」、20%以下は「注意して使う値」、それを超えると「おおよその目安」（後の二つは地図で斜線）。"
               />
             </li>
             <li>
@@ -99,6 +99,54 @@ export default function AboutPage() {
               <T
                 en="What-if scenarios are hypothetical, run in your browser, have a widened interval, and are never drawn on the main map."
                 ja="仮定のシナリオはブラウザ内で計算する仮の値で、区間を広げて表示し、メインの地図には描きません。"
+              />
+            </li>
+          </ul>
+        </section>
+
+
+        <section className="grid gap-3 text-sm" aria-labelledby="plain">
+          <h2 id="plain" className="font-display text-xl">
+            <T en="How the plain-language sentences are made" ja="わかりやすい文の作り方" />
+          </h2>
+          <ul className="grid list-disc gap-2 pl-5">
+            <li>
+              <T
+                en="Poverty incidence is the share of people whose family income is below PSA's official poverty threshold. Nationally, in 2023, that threshold was ₱13,873 a month for a family of five (PSA, 2023 Full-Year Official Poverty Statistics); it differs by province."
+                ja="貧困率は、家族の所得がPSAの公式貧困線を下回る人の割合です。2023年の全国の貧困線は5人家族で月13,873ペソでした（PSA「2023年通年公式貧困統計」）。州によって異なります。"
+              />{" "}
+              <a className={LINK} href="https://psa.gov.ph/statistics/poverty/node/1684064929">
+                psa.gov.ph
+              </a>
+            </li>
+            <li>
+              <T
+                en="“About 1 in 4” is the figure rounded to a simple fraction when one is within 5 % of it (at least 0.6 points), otherwise to whole people per 100. “Likely between” is the 90 % interval, rounded the same way."
+                ja="「約4人に1人」は、単純な分数が値の5%以内（最低0.6ポイント）にあるときはその分数、そうでなければ100人あたりの人数に丸めた表現です。「おそらく〜」は同じように丸めた90%区間です。"
+              />
+            </li>
+            <li>
+              <T
+                en="Comparisons never mix sources: an official figure is ranked only among the places with official PSA figures for that year, a model estimate only among model estimates, and the sentence says which. The national rank is the share of those places with a lower value (from the published table of every place's value). The province average is weighted by population (WorldPop, published with every place) when every place has it, otherwise it is a simple average of places; when it lies inside the place's 90 % interval the sentence says “within the margin of error” instead of above or below."
+                ja="比較では出典を混ぜません。公式値はその年にPSA公式値がある市町村の中でだけ、モデル推計はモデル推計の中でだけ順位を求め、どちらかを文中に示します。全国順位は、それらの市町村のうち値が低いものの割合です（全市町村の値を公開した表から計算）。州の平均は、全市町村に人口（WorldPop、各市町村のデータに公開）があれば人口で重み付けし、なければ市町村の単純平均です。平均がその市町村の90%区間に入るときは、上回る・下回るではなく「誤差の範囲内」と書きます。"
+              />
+            </li>
+            <li>
+              <T
+                en="“Did it really change?”: a change between two figures is called likely real when it is larger than 1.645 × √(SE₁² + SE₂²), a two-sided test at the 10 % level that treats the two figures as independent. PSA figures use their published standard errors; a model estimate uses the larger side of its 90 % interval divided by 1.645. A model year is compared with the PSA round it starts from. Figures on either side of PSA's 2018 → 2021 method change are never compared. Clear changes between PSA rounds are marked ▲▼ on the chart."
+                ja="「本当に変わったか」：二つの値の差が1.645 × √(SE₁² + SE₂²)より大きいとき「おそらく実際の変化」とします（二つの値を独立とみなした10%水準の両側検定）。PSAの値は公表された標準誤差を、モデル推計は90%区間の広い側を1.645で割った値を使います。モデル推計の年は、出発点となったPSA調査回と比べます。PSAの2018→2021年の手法変更をまたぐ値は比較しません。PSA調査回の間の明らかな変化はグラフに▲▼で示します。"
+              />
+            </li>
+            <li>
+              <T
+                en="Province summaries count places above the national median of the same source and year, and apply the same change test between the first and last PSA rounds of the current method (2012–2018 or 2021 onwards). The national sentence ranks regions by the simple average of their places with figures of that year's source; regions with fewer than 5 such places are left out and named."
+                ja="州の要約では、同じ年・同じ出典の全国中央値を上回る市町村を数え、現在の手法の最初と最後のPSA調査回（2012〜2018年、または2021年以降）の間に同じ変化の検定を当てはめます。全国の文は、その年の出典の値がある市町村の単純平均で地域を順位付けし、そうした市町村が5未満の地域は除外して名前を示します。"
+              />
+            </li>
+            <li>
+              <T
+                en="The what-if explanation calls a change under 0.5 points tiny, under 2 points small, and anything larger noticeable."
+                ja="仮定のシナリオの説明では、0.5ポイント未満の変化を「ごくわずか」、2ポイント未満を「小さい」、それ以上を「目立つ」と書きます。"
               />
             </li>
           </ul>

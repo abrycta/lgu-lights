@@ -23,7 +23,7 @@ const official: YearRecord = {
 describe("narrative", () => {
   it("speaks the interval and the tier and says a model value is not official (EN)", () => {
     expect(narrative(model, 2024, "Adams", "en")).toBe(
-      "In 2024 the model estimates poverty in Adams at 18.0 % (90 % interval 12.0–24.0 %). This is an estimate, not an official figure; reliability: use with caution. It builds on the 2023 PSA round and satellite data (night lights, vegetation) since then.",
+      "In 2024 the model estimates poverty in Adams at 18.0 % (90 % interval 12.0–24.0 %). This is an estimate, not an official figure; reliability: “Use with care”. It builds on the 2023 PSA round and satellite data (night lights, vegetation) since then.",
     );
   });
 
@@ -31,7 +31,7 @@ describe("narrative", () => {
     const s = narrative(model, 2024, "Adams", "ja");
     expect(s).toContain("90%区間 12.0〜24.0%");
     expect(s).toContain("公式統計ではありません");
-    expect(s).toContain("注意して使用");
+    expect(s).toContain("注意して使う値");
   });
 
   it("labels official figures, clamps a negative lower limit and names the estimator", () => {
@@ -39,7 +39,7 @@ describe("narrative", () => {
     expect(s).toContain("official figure");
     expect(s).toContain("0.0–34.6");
     expect(s).toContain("Census EB");
-    expect(s).toContain("unreliable");
+    expect(s).toContain("Rough guess");
   });
 
   it("says when there is no estimate", () => {

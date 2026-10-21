@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { YearRecord } from "@/data/types";
 import { interval, pct } from "@/lib/format";
 import { sourceLabel } from "@/lib/honesty";
+import { clearChanges } from "@/lib/plain";
 
 const W = 360;
 const H = 190;
@@ -45,11 +46,15 @@ export function SeriesChart({ years, selected, onSelectYear }: { years: YearReco
 
   const ticks = Array.from({ length: yMax / 10 + 1 }, (_, i) => i * 10).filter((v, _, a) => a.length <= 6 || v % 20 === 0);
   const eraX = (x(2018) + x(2021)) / 2;
+  // #3 Official rounds whose change from the previous round (same method) beats the margin of error.
+  const clear = clearChanges(years);
   const hv = hover != null ? years.find((r) => r.year === hover) : undefined;
 
   const tip = (r: YearRecord) => {
     const parts: string[] = [];
     if (r.official) parts.push(`${sourceLabel("official", r.year, lang)}: ${pct(r.official.estimate, lang)} (${interval(r.official.lo90, r.official.hi90, lang).text})`);
+    const c = clear.get(r.year);
+    if (c) parts.push(c === "up" ? t("clear rise since the previous round", "前回調査から明らかに増加") : t("clear fall since the previous round", "前回調査から明らかに減少"));
     if (r.model) parts.push(`${r.model.kind === "backtest" ? t("Model without this round", "この調査回なしのモデル") : sourceLabel("model", r.year, lang)}: ${pct(r.model.estimate, lang)} (${interval(r.model.lo90, r.model.hi90, lang).text})`);
     return parts.length ? parts : [t("No estimate", "推計なし")];
   };
@@ -97,6 +102,15 @@ export function SeriesChart({ years, selected, onSelectYear }: { years: YearReco
             </g>
           ) : null,
         )}
+        {years.map((r) => {
+          const c = r.official ? clear.get(r.year) : undefined;
+          if (!c || !r.official) return null;
+          // A small triangle to the left of the point: ▲ clear rise, ▼ clear fall.
+          const cx = x(r.year) - 8;
+          const cy = y(r.official.estimate);
+          const d = c === "up" ? `M${cx - 3},${cy + 2}L${cx + 3},${cy + 2}L${cx},${cy - 3}Z` : `M${cx - 3},${cy - 2}L${cx + 3},${cy - 2}L${cx},${cy + 3}Z`;
+          return <path key={`c${r.year}`} d={d} className="fill-muted-foreground" data-testid={`clear-${c}-${r.year}`} />;
+        })}
         {years.map((r) =>
           r.year % 2 === 0 || r.year === last ? (
             <text key={`x${r.year}`} x={x(r.year)} y={H - M.b + 12} textAnchor="middle" className="fill-muted-foreground font-mono text-[9px]">
@@ -137,7 +151,7 @@ export function SeriesChart({ years, selected, onSelectYear }: { years: YearReco
             <span className="font-mono">{hv.year}</span> · {tip(hv).join(" · ")}
           </>
         ) : (
-          <span className="text-muted-foreground">{t("Hover a year for values; ○ = model without that round (backtest).", "年にカーソルを合わせると値を表示。○＝その調査回なしのモデル（検証）。")}</span>
+          <span className="text-muted-foreground">{t("Hover a year for values; ○ = model without that round (backtest); ▲▼ = change since the previous PSA round bigger than the margin of error.", "年にカーソルを合わせると値を表示。○＝その調査回なしのモデル（検証）。▲▼＝前回のPSA調査からの変化が誤差の範囲を超えるもの。")}</span>
         )}
       </div>
     </figure>

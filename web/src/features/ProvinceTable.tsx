@@ -1,29 +1,44 @@
 import { T, Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow, useLang, useT } from "@abrycta/akari/react";
 import { use, useMemo, useState } from "react";
 
-import { loadLgu } from "@/data/load";
-import type { Index, IndexProvince, LguDetail } from "@/data/types";
+import { loadNational, loadProvinceLgus } from "@/data/load";
+import type { Index, IndexProvince } from "@/data/types";
 import { cvText, interval, num } from "@/lib/format";
 import { sourceLabel, TIER_LABEL } from "@/lib/honesty";
-
-const provCache = new Map<string, Promise<LguDetail[]>>();
-function loadProvince(index: Index, pcode: string): Promise<LguDetail[]> {
-  let p = provCache.get(pcode);
-  if (!p) {
-    p = Promise.all(index.lgus.filter((l) => l.pv === pcode).map((l) => loadLgu(l.p)));
-    p.catch(() => provCache.delete(pcode));
-    provCache.set(pcode, p);
-  }
-  return p;
-}
+import { median, provinceSummary, valuesOf } from "@/lib/plain";
 
 type SortKey = "name" | "value" | "width";
 
 /** Sortable table of a province's LGUs for the selected year: the non-visual (and keyboard) view of the map. */
+/** #7 Province summary: places above the national median, and clear changes between PSA rounds of the same method. */
+function ProvinceSummary({ index, province, year, rounds }: { index: Index; province: IndexProvince; year: number; rounds: number[] }) {
+  const { lang } = useLang();
+  const lgus = use(loadProvinceLgus(index, province.pcode));
+  const national = use(loadNational());
+  // Round years compare official figures, other years model estimates; never a mix.
+  const source = rounds.includes(year) ? "official" : "model";
+  const nat = national ? [...valuesOf(national, year, source).values()] : [];
+  const s = provinceSummary({ province: province.name, lgus, year, rounds, nationalMedian: nat.length ? median(nat) : null, source }, lang);
+  return s ? (
+    <p className="text-sm leading-relaxed" data-testid="province-summary">
+      {s}
+    </p>
+  ) : null;
+}
+
+export function ProvinceView(props: { index: Index; province: IndexProvince; year: number; rounds: number[]; onSelect: (pcode: string) => void }) {
+  return (
+    <div className="grid gap-4">
+      <ProvinceSummary {...props} />
+      <ProvinceTable {...props} />
+    </div>
+  );
+}
+
 export function ProvinceTable({ index, province, year, onSelect }: { index: Index; province: IndexProvince; year: number; onSelect: (pcode: string) => void }) {
   const t = useT();
   const { lang } = useLang();
-  const lgus = use(loadProvince(index, province.pcode));
+  const lgus = use(loadProvinceLgus(index, province.pcode));
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "value", dir: -1 });
 
   const rows = useMemo(() => {
