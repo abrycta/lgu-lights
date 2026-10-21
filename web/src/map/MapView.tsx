@@ -44,8 +44,9 @@ export interface MapViewProps {
   lgu: string | null;
   names: Map<string, string>;
   onPick: (pcode: string) => void;
-  /** The frozen /embed view: no interaction or controls, no animation, a set pixel ratio, and a callback once the first full frame is drawn. */
-  frozen?: { pixelRatio: number; onReady: () => void };
+  /** The frozen /embed view: no interaction or controls, a set pixel ratio, and a callback once the first full frame is drawn.
+   * `settleMs`: later province changes ease in from slightly closer (the embed tour); 0 or absent: they jump. */
+  frozen?: { pixelRatio: number; onReady: () => void; settleMs?: number };
 }
 
 const yy = (year: number) => String(year % 100).padStart(2, "0");
@@ -255,7 +256,13 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     const map = mapRef.current;
     if (!map) return;
     const b = province?.bbox ?? PH_BOUNDS;
-    map.fitBounds(b, { padding: 32, maxZoom: 10, duration: frozenRef.current ? 0 : 800 });
+    const settle = frozenRef.current?.settleMs ?? 0;
+    const cam = settle && map.loaded() ? map.cameraForBounds(b, { padding: 32, maxZoom: 10 }) : undefined;
+    if (cam?.zoom != null) {
+      // The embed tour: start a little closer, within the same tile zoom (only the view's tiles are packed).
+      map.jumpTo({ ...cam, zoom: Math.min(cam.zoom + 0.35, Math.floor(cam.zoom) + 0.99) });
+      map.easeTo({ ...cam, duration: settle });
+    } else map.fitBounds(b, { padding: 32, maxZoom: 10, duration: frozenRef.current ? 0 : 800 });
   }, [province]);
 
   // Localise MapLibre's control labels (its locale option is read only at construction).

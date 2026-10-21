@@ -95,6 +95,13 @@ export interface EmbedPack {
   attrs: string;
   /** "z/x/y" -> base64 MVT. */
   tiles: Record<string, string>;
+  /** The places /embed tours through, in order (the first is `view.lgu`). */
+  tour?: string[];
+}
+
+/** An already-settled promise React's use() reads without suspending (so a tour step never flashes a fallback). */
+function settled<T>(value: T): Promise<T> {
+  return Object.assign(Promise.resolve(value), { status: "fulfilled", value });
 }
 
 let packedTiles: Map<string, ArrayBuffer> | null = null;
@@ -102,12 +109,16 @@ let packedTiles: Map<string, ArrayBuffer> | null = null;
 /** Seed every loader from a pack; returns the (synthetic, never fetched) data base. */
 export function seedFromPack(pack: EmbedPack): string {
   const b = new URL(`${DATA_ROOT}${pack.version}/`, location.href).href;
-  base = Promise.resolve(b);
-  const put = (path: string, v: unknown) => inBaseCache.set(path, Promise.resolve(v));
+  base = settled(b);
+  const put = (path: string, v: unknown) => inBaseCache.set(path, settled(v));
   put("manifest.json", pack.manifest);
   put("index.json", pack.index);
   for (const [p, d] of Object.entries(pack.lgus)) put(`lgu/${p}.json`, d);
-  national = Promise.resolve(parseAttrsCsv(pack.attrs));
+  // The pack holds every LGU of each province it covers, so the province lists are complete.
+  const byProv = new Map<string, LguDetail[]>();
+  for (const d of Object.values(pack.lgus)) byProv.set(d.province.pcode, [...(byProv.get(d.province.pcode) ?? []), d]);
+  for (const [pc, ls] of byProv) provCache.set(pc, settled(ls));
+  national = settled(parseAttrsCsv(pack.attrs));
   packedTiles = new Map(Object.entries(pack.tiles).map(([k, v]) => [`${b}tiles/${k}.pbf`, Uint8Array.from(atob(v), (c) => c.charCodeAt(0)).buffer]));
   return b;
 }
@@ -116,7 +127,8 @@ export function seedFromPack(pack: EmbedPack): string {
 export function packedTile(url: string): ArrayBuffer | null {
   if (!packedTiles) return null;
   const t = packedTiles.get(url);
-  if (t) return t;
+  // A copy: MapLibre transfers the buffer to its worker (detaching it), and the tour asks for tiles again.
+  if (t) return t.slice(0);
   // The view needs a tile the pack lacks: the layout and scripts/build-embed.mjs disagree (e2e fails on this).
   console.warn(`embed: tile not in pack: ${url}`);
   return new ArrayBuffer(0);
