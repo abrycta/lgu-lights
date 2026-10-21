@@ -10,6 +10,7 @@ export const THEME_COOKIE_DOMAIN = "krtmtthw.dev";
 
 const MapPage = lazy(() => import("@/pages/MapPage"));
 const AboutPage = lazy(() => import("@/pages/AboutPage"));
+const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
 
 function initialLang(): "en" | "ja" {
   const fromUrl = parseUrl(location.pathname, location.search).lang;
@@ -21,7 +22,7 @@ function Pages() {
   const { page } = useUrlState();
   return (
     <ErrorBoundary>
-      <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">…</div>}>{page === "about" ? <AboutPage /> : <MapPage />}</Suspense>
+      <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">…</div>}>{page === "about" ? <AboutPage /> : page === "notfound" ? <NotFoundPage /> : <MapPage />}</Suspense>
     </ErrorBoundary>
   );
 }

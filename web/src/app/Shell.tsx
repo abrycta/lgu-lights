@@ -6,7 +6,7 @@ import { loadManifest } from "@/data/load";
 import { formatUrl, navigate, type Page, type UrlState, useUrlState } from "./url";
 
 /** In-app link: a real href (open in new tab works), client-side navigation on plain clicks. */
-export function PageLink({ page, className, children, current }: { page: Page; className?: string; children: ReactNode; current?: boolean }) {
+export function PageLink({ page, className, children, current }: { page: Exclude<Page, "notfound">; className?: string; children: ReactNode; current?: boolean }) {
   const url = useUrlState();
   const href = formatUrl({ ...url, page });
   const onClick = (e: MouseEvent) => {
@@ -70,9 +70,11 @@ export function LightsHeader({ url }: { url: UrlState }) {
       brand={{ name: "Lights", glyph: "光", href: href("map"), srSuffix: t("home", "ホーム") }}
       navLabel={t("Main", "メイン")}
       nav={[
-        { href: href("map"), label: t("Map", "地図"), current: url.page === "map" },
-        { href: href("about"), label: t("About & method", "概要と手法"), current: url.page === "about" },
+        { href: href("map"), label: t("Map", "地図"), match: "exact" },
+        { href: href("about"), label: t("About & method", "概要と手法"), match: "section" },
       ]}
+      location={url.page === "notfound" ? undefined : { pathname: href(url.page) }}
+      base={import.meta.env.BASE_URL}
       portfolioLink
       languages
       width="full"

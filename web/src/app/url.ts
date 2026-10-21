@@ -1,10 +1,10 @@
-// URL state without a router library: two pages (/ and /about) and the map selection in the query
+// URL state without a router library: two pages (/ and /about; any other path is "notfound") and the map selection in the query
 // string (?year=2024&prov=PH01028&lgu=PH0102801&lang=ja), so every view is a shareable link.
 // Selections push a history entry (Back undoes them); the year slider replaces the current one.
 
 import { useSyncExternalStore } from "react";
 
-export type Page = "map" | "about";
+export type Page = "map" | "about" | "notfound";
 
 export interface UrlState {
   page: Page;
@@ -19,6 +19,11 @@ const PROV = /^PH\d{5}$/;
 
 const BASE = import.meta.env.BASE_URL;
 
+function pageOf(rel: string): Page {
+  const p = rel.replace(/^\/+|\/+$/g, "").replace(/(^|\/)index\.html$/, "");
+  return p === "" ? "map" : p === "about" ? "about" : "notfound";
+}
+
 export function parseUrl(pathname: string, search: string): UrlState {
   const q = new URLSearchParams(search);
   const rel = pathname.startsWith(BASE) ? pathname.slice(BASE.length) : pathname.replace(/^\//, "");
@@ -27,7 +32,7 @@ export function parseUrl(pathname: string, search: string): UrlState {
   const prov = q.get("prov");
   const lang = q.get("lang");
   return {
-    page: rel.replace(/\/$/, "") === "about" ? "about" : "map",
+    page: pageOf(rel),
     year: Number.isInteger(y) && y >= 1900 && y <= 2100 ? y : null,
     lgu: lgu && PCODE.test(lgu) ? lgu : null,
     // An LGU implies its province (pcode prefix).
@@ -45,7 +50,9 @@ export function formatUrl(s: UrlState): string {
   }
   if (s.lang) q.set("lang", s.lang);
   const qs = q.toString();
-  return `${BASE}${s.page === "about" ? "about" : ""}${qs ? `?${qs}` : ""}`;
+  // "notfound" keeps the unknown path as it is (only ?lang= changes).
+  const path = s.page === "notfound" && typeof location !== "undefined" ? location.pathname : `${BASE}${s.page === "about" ? "about" : ""}`;
+  return `${path}${qs ? `?${qs}` : ""}`;
 }
 
 const listeners = new Set<() => void>();
