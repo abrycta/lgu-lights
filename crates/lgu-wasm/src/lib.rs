@@ -20,14 +20,14 @@
 use std::cell::RefCell;
 
 use lgu_core::model::{Estimate, Model};
-use lgu_core::panel::Panel;
+use lgu_core::panel::{Panel, ProvinceStats};
 use lgu_core::snapshot;
 use lgu_core::whatif::{Scenario, whatif as run_whatif};
 
 #[derive(Default)]
 struct State {
     panel: Option<Panel>,
-    prov_means: Vec<f64>,
+    prov_means: ProvinceStats,
     model: Option<Model>,
     out: [f64; 8],
     all: Vec<f32>,
@@ -64,7 +64,7 @@ unsafe fn bytes<'a>(ptr: *const u8, len: usize) -> &'a [u8] {
 pub unsafe extern "C" fn load_snapshot(ptr: *const u8, len: usize) -> i32 {
     match snapshot::decode(unsafe { bytes(ptr, len) }) {
         Ok(p) => STATE.with_borrow_mut(|s| {
-            s.prov_means = p.province_round_means();
+            s.prov_means = p.province_stats();
             s.all = vec![f32::NAN; p.len()];
             s.tiers = vec![255; p.len()];
             s.panel = Some(p);

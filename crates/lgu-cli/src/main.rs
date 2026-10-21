@@ -67,11 +67,12 @@ pub(crate) fn load_model(p: &Path) -> Result<Model, String> {
 }
 
 /// The design matrix: one row per (LGU, year) with a previous official round. Training rows are the
-/// round years with an official estimate (`label = 1`, `target` = change in pp since the previous round).
+/// round years with an official estimate (`label = 1`, `target` = change in pp since the previous round);
+/// rounds up to FIRST_YEAR (2009, 2012) appear only when labelled.
 fn design(a: &Args) -> Result<(), String> {
     let s = load_store(a)?;
     let p = &s.panel;
-    let pm = p.province_round_means();
+    let pm = p.province_stats();
     let mut out = String::from("adm3_pcode,year,prev_year,label,target,y,se,province");
     for f in FEATURES {
         out.push(',');
@@ -79,8 +80,14 @@ fn design(a: &Args) -> Result<(), String> {
     }
     out.push('\n');
     let mut n = (0, 0);
+    // Round years up to FIRST_YEAR (2009, 2012) are training rows only; later years are every year.
+    let years: Vec<i32> = ROUNDS
+        .into_iter()
+        .filter(|&y| y <= FIRST_YEAR)
+        .chain(FIRST_YEAR + 1..=LAST_YEAR)
+        .collect();
     for i in 0..p.len() {
-        for t in FIRST_YEAR + 1..=LAST_YEAR {
+        for &t in &years {
             let Some(r) = p.prev_round(i, t) else {
                 continue;
             };
@@ -88,6 +95,9 @@ fn design(a: &Args) -> Result<(), String> {
             let lab = lgu_core::panel::round_index(t)
                 .map(|k| p.official(i, k))
                 .filter(|o| o.is_some());
+            if t <= FIRST_YEAR && lab.is_none() {
+                continue;
+            }
             let (label, target, y, se) = match lab {
                 Some(o) => (1, o.estimate - p.official(i, r).estimate, o.estimate, o.se),
                 None => (0, f64::NAN, f64::NAN, f64::NAN),
@@ -140,7 +150,7 @@ fn parity(a: &Args) -> Result<(), String> {
             .ok_or(format!("expected file lacks column {k}"))
     };
     let (ip, iy, ic) = (ix("adm3_pcode")?, ix("year")?, ix(col)?);
-    let pm = s.panel.province_round_means();
+    let pm = s.panel.province_stats();
     let index: HashMap<&str, usize> = s
         .lgus
         .iter()

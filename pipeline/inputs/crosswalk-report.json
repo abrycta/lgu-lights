@@ -109,6 +109,18 @@
   "dropped_name_mismatch": [
     {
       "code6": "166718",
+      "year": 2006,
+      "psa_name": "Loreto",
+      "unit": "San Benito"
+    },
+    {
+      "code6": "166718",
+      "year": 2009,
+      "psa_name": "Loreto",
+      "unit": "San Benito"
+    },
+    {
+      "code6": "166718",
       "year": 2012,
       "psa_name": "Loreto",
       "unit": "San Benito"
@@ -120,9 +132,18 @@
       "unit": "San Benito"
     }
   ],
-  "rematched_by_name": 114,
-  "dropped_many_to_one_rows": 8,
+  "rematched_by_name": 228,
+  "dropped_many_to_one_rows": 18,
+  "dropped_province_rounds_territorial_change": {
+    "2006": [
+      "PH19007",
+      "PH19066",
+      "PH19088"
+    ]
+  },
   "rows_per_round": {
+    "2006": 1568,
+    "2009": 1624,
     "2012": 1624,
     "2015": 1624,
     "2018": 1597,

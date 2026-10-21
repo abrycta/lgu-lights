@@ -15,11 +15,16 @@ relative to its province (mean reversion towards the province, persistence of th
 is stable across rounds, and otherwise carries the province's level forward. The estimate is still
 `clamp(official_r + prediction, 0, 100)`, so the Rust core is unchanged.
 
+Model v3 (DECISIONS "v3 enhancement"): the 2006 and 2009 SAE rounds add the transitions 2006->2009 and
+2009->2012 (no satellite inputs before 2012: NaN, LightGBM's missing-value handling) and give every
+fold inner folds; two optional linear terms model the shared shift (national drift; the province's
+lagged FIES-vs-SAE gap), each kept only when inner forward-chaining prefers it (`select_linear`).
+
 Validation, forward-chaining by target round (no information from the test round or later is used for
-fitting, tuning or interval calibration):
-  F1  train t=2015            -> test 2018
-  F2  train t<=2018           -> test 2021  (across the ELL -> Census EB estimator change)
-  F3  train t<=2021           -> test 2023  (the nowcast case; headline)
+fitting, tuning, term selection or interval calibration):
+  F1  train t<=2015 (2009, 2012, 2015)  -> test 2018
+  F2  train t<=2018                     -> test 2021  (across the ELL -> Census EB estimator change)
+  F3  train t<=2021                     -> test 2023  (the nowcast case; headline)
 Hyper-parameters for fold k are chosen by inner forward-chaining inside its training rounds (F1 uses
 the defaults), scored on the within-province error (`within_rmse`): the provincial shift of an inner
 test round is the same for every configuration and would only add noise to the ranking. Conformal
@@ -56,8 +61,11 @@ MONOTONE = {"d_l_bm": -1, "l_rpc": -1}
 SEEDS = (11, 23, 37, 41, 53)
 Z90 = 1.6448536269514722
 WHATIF_WIDEN = 1.25
-TARGET_NOTE = "change since the previous round minus the province's mean change in the same transition (v2)"
+TARGET_NOTE = ("forest: change since the previous round minus the province's mean change in the same "
+               "transition (v2); linear: national drift and lagged provincial FIES gap when selected (v3)")
 N_BINS = 4
+OUTER_TESTS = (2018, 2021, 2023)  # F1, F2, F3 (the folds reported since v1)
+VIIRS_FIRST_TARGET = 2015         # first transition whose both ends are in the feature years
 DEFAULT = {"num_leaves": 15, "learning_rate": 0.03, "n_estimators": 400, "min_child_samples": 40,
            "lambda_l2": 5.0, "objective": "huber"}
 GRID = {"num_leaves": [7, 15, 31], "n_estimators": [250, 600], "min_child_samples": [20, 60],
@@ -138,15 +146,68 @@ def tune(lab: pd.DataFrame, rounds: list[int]) -> tuple[dict, list[dict]]:
     return best["cfg"], sorted(results, key=lambda r: r["within_rmse"])[:5]
 
 
-def calibration_residuals(lab: pd.DataFrame, rounds: list[int], cfg: dict) -> np.ndarray:
+# ------------------------------------------------------------------ linear terms (model v3)
+# The forest predicts how an LGU moves within its province. Two optional linear terms model the shared
+# part, each fitted on the training rounds only and kept only when inner forward-chaining says so:
+#   gap            national drift: the mean change per year of the training transitions, times the gap
+#   prov_fies_gap  provincial term: the province's lagged FIES-vs-SAE gap (lgu-core::features) times a
+#                  coefficient fitted across training provinces and transitions (centred per transition)
+LINEAR_OPTIONS: list[tuple[str, ...]] = [(), ("gap",), ("prov_fies_gap",), ("gap", "prov_fies_gap")]
+
+
+def fit_linear(train: pd.DataFrame, terms: tuple[str, ...]) -> dict[str, float]:
+    coef: dict[str, float] = {}
+    if "gap" in terms:
+        coef["gap"] = float((train.target / train.gap).mean())
+    if "prov_fies_gap" in terms:
+        g = train.groupby(GROUP).agg(c=("target", "mean"), x=("prov_fies_gap", "first")).reset_index()
+        g = g[np.isfinite(g.x)]
+        g["c"] -= g.groupby(["year", "prev_year"]).c.transform("mean")
+        coef["prov_fies_gap"] = float(np.sum(g.c * g.x) / np.sum(g.x ** 2)) if len(g) else 0.0
+    return coef
+
+
+def linear(X: pd.DataFrame, coef: dict[str, float]) -> np.ndarray:
+    """As lgu-core::model::Linear: a missing input contributes 0."""
+    out = np.zeros(len(X))
+    for f, c in coef.items():
+        out += c * np.nan_to_num(X[f].to_numpy(dtype=np.float64), nan=0.0)
+    return out
+
+
+def inner_runs(lab: pd.DataFrame, rounds: list[int], cfg: dict) -> list[tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
+    """(train, test, forest prediction) for every inner forward-chaining split inside `rounds`."""
+    out = []
+    for tr, te in inner_folds(rounds):
+        train, test = lab[lab.year.isin(tr)], lab[lab.year == te]
+        out.append((train, test, fit(train, cfg).predict(test)))
+    return out
+
+
+def select_linear(runs: list) -> tuple[tuple[str, ...], list[dict]]:
+    """The linear terms with the lowest mean inner-fold MAE (ties: fewer terms). No inner folds: none."""
+    if not runs:
+        return (), []
+    scores = []
+    for terms in LINEAR_OPTIONS:
+        maes = []
+        for train, test, fp in runs:
+            est = (test.y_prev.to_numpy() + fp + linear(test, fit_linear(train, terms))).clip(0, 100)
+            maes.append(float(np.mean(np.abs(est - test.y.to_numpy()))))
+        scores.append({"terms": list(terms), "inner_mae": float(np.mean(maes)), "per_fold": maes})
+    best = min(scores, key=lambda r: (round(r["inner_mae"], 6), len(r["terms"])))
+    return tuple(best["terms"]), scores
+
+
+def calibration_residuals(lab: pd.DataFrame, rounds: list[int], cfg: dict, runs: list | None = None,
+                          terms: tuple[str, ...] = ()) -> np.ndarray:
     """Residuals on rounds the model had not seen, inside `rounds` only (see module docs)."""
     res = []
-    folds = inner_folds(rounds)
-    if folds:
-        for tr, te in folds:
-            f = fit(lab[lab.year.isin(tr)], cfg)
-            test = lab[lab.year == te]
-            res.append(pd.DataFrame({"y_prev": test.y_prev, "r": (test.y_prev + f.predict(test)).clip(0, 100) - test.y}))
+    runs = inner_runs(lab, rounds, cfg) if runs is None else runs
+    if runs:
+        for train, test, fp in runs:
+            est = (test.y_prev + fp + linear(test, fit_linear(train, terms))).clip(0, 100)
+            res.append(pd.DataFrame({"y_prev": test.y_prev, "r": est - test.y}))
     else:
         d = lab[lab.year.isin(rounds)]
         provs = np.array(sorted(d.province.unique()))
@@ -217,11 +278,12 @@ def _flatten(root: dict) -> dict:
             "leaf_value": [lv[k] for k in range(len(lv))]}
 
 
-def export(f: Fit, cal: dict, name: str, cfg: dict, trained_on: list[int]) -> dict:
+def export(f: Fit, cal: dict, name: str, cfg: dict, trained_on: list[int], coef: dict[str, float]) -> dict:
     """LightGBM dump_model -> flat arrays read by lgu-core::forest (LightGBM's own node encoding)."""
     trees = [_flatten(t["tree_structure"]) for b in f.boosters for t in b.dump_model()["tree_info"]]
     return {"name": name, "version": time.strftime("%Y-%m-%d"), "features": f.features,
             "forest": {"n_features": len(f.features), "trees": trees, "scale": 1.0 / len(f.boosters)},
+            "linear": {"features": list(coef), "coef": list(coef.values())},
             "calibration": {k: cal[k] for k in ("edges", "q50", "q90")}, "whatif_widen": WHATIF_WIDEN,
             "meta": {"trained_on_rounds": trained_on, "config": cfg, "seeds": list(SEEDS), "target": TARGET_NOTE,
                      "calibration_residuals": cal["n"], "lightgbm": lgb.__version__}}
@@ -269,6 +331,28 @@ def metrics(test: pd.DataFrame, est: np.ndarray, iv: dict | None) -> dict:
     return out
 
 
+def province_metrics(test: pd.DataFrame, est: np.ndarray, fies: pd.DataFrame) -> dict:
+    """Province-level accuracy: population-weighted means of the town estimates per province against
+    (a) the same weighting of PSA's SAE town figures (same towns, so only the estimate differs) and
+    (b) PSA's FIES provincial figure without highly urbanised cities (table 2a; 2018 onwards), for
+    provinces outside Metro Manila with at least 3 towns. (b) carries FIES's own sampling error, so
+    PSA's SAE aggregate is scored against it too as a reference."""
+    w = test["pop"].to_numpy(dtype=np.float64)
+    df = pd.DataFrame({"prov": test.province.to_numpy(), "w": np.where(np.isfinite(w) & (w > 0), w, np.nan),
+                       "est": est, "y": test.y.to_numpy()}).dropna(subset=["w"])
+    g = df.groupby("prov").apply(lambda x: pd.Series({"est": np.average(x.est, weights=x.w),
+                                                      "y": np.average(x.y, weights=x.w), "n": len(x)}),
+                                 include_groups=False)
+    out = {"province_n": len(g), "province_mae_vs_sae": float(np.mean(np.abs(g.est - g.y)))}
+    f = fies[fies.round_year == int(test.year.iloc[0])].set_index("adm2_pcode").pi_nohuc
+    h = g[(g.n >= 3) & ~g.index.str.startswith("PH13")].join(f, how="inner").dropna()
+    if len(h):
+        out["province_n_fies"] = len(h)
+        out["province_mae_vs_fies"] = float(np.mean(np.abs(h.est - h.pi_nohuc)))
+        out["psa_sae_province_mae_vs_fies"] = float(np.mean(np.abs(h.y - h.pi_nohuc)))
+    return out
+
+
 def run(design_path: Path, out: Path) -> dict:
     t_start = time.time()
     out.mkdir(parents=True, exist_ok=True)
@@ -278,45 +362,68 @@ def run(design_path: Path, out: Path) -> dict:
     labels = pd.read_parquet(design_path.parent / "labels.parquet")[["adm3_pcode", "round_year", "cv", "ci_lo", "ci_hi"]]
     lab = lab.merge(labels.rename(columns={"round_year": "year"}), on=["adm3_pcode", "year"], how="left")
     lab["target_within"] = within_target(lab)
+    # WorldPop population of the target year (province-level aggregation weights)
+    pop = pd.read_parquet(design_path.parent / "features.parquet", columns=["adm3_pcode", "year", "pop"])
+    lab = lab.merge(pop, on=["adm3_pcode", "year"], how="left")
+    fies_path = design_path.parent / "provinces_fies.parquet"
+    fies = pd.read_parquet(fies_path) if fies_path.exists() else pd.DataFrame(
+        columns=["adm2_pcode", "round_year", "pi", "pi_nohuc"])
     rounds = sorted(lab.year.unique().tolist())  # [2015, 2018, 2021, 2023]
     log.info("labelled transitions per target round: %s", lab.year.value_counts().sort_index().to_dict())
 
     report: dict = {"rounds": rounds, "folds": [], "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     expected = {}
-    for k in range(1, len(rounds)):
-        tr_rounds, te = rounds[:k], rounds[k]
+    for k, te in enumerate(OUTER_TESTS, start=1):
+        tr_rounds = [r for r in rounds if r < te]
         cfg, top = tune(lab, tr_rounds)
         train = lab[lab.year.isin(tr_rounds)]
         test = lab[lab.year == te]
         f = fit(train, cfg)
-        cal = conformal(calibration_residuals(lab, tr_rounds, cfg))
-        est = (test.y_prev + f.predict(test)).clip(0, 100).to_numpy()
+        runs = inner_runs(lab, tr_rounds, cfg)
+        terms, lin_scores = select_linear(runs)
+        coef = fit_linear(train, terms)
+        cal = conformal(calibration_residuals(lab, tr_rounds, cfg, runs, terms))
+        est = (test.y_prev + f.predict(test) + linear(test, coef)).clip(0, 100).to_numpy()
         iv = apply_calibration(cal, test.y_prev.to_numpy(), est)
         row = {"fold": f"F{k}", "train_rounds": tr_rounds, "test_round": te, "config": cfg, "tuning_top5": top,
-               "calibration": cal, "model": metrics(test, est, iv)}
+               "linear": coef, "linear_selection": lin_scores, "calibration": cal,
+               "model": metrics(test, est, iv) | province_metrics(test, est, fies)}
+        # the forest alone (the v2 method on this data), to show what the linear terms add
+        row["ablation_forest_only"] = metrics(test, (test.y_prev + f.predict(test)).clip(0, 100).to_numpy(), None)
         # baselines on the same rows
         carry = test.y_prev.to_numpy()
-        row["carry_forward"] = metrics(test, carry, None)
-        drift = float((train.target / train.gap).mean())  # mean change per year in the training rounds
+        row["carry_forward"] = metrics(test, carry, None) | province_metrics(test, carry, fies)
+        # mean change per year in the training rounds of the VIIRS era (the v1/v2 definition, so the
+        # baseline stays comparable across versions); the all-rounds variant is reported beside it
+        viirs = train[train.year >= VIIRS_FIRST_TARGET]
+        drift = float((viirs.target / viirs.gap).mean())
+        drift_all = float((train.target / train.gap).mean())
+        row["carry_forward_drift_all_rounds"] = metrics(
+            test, (test.y_prev.to_numpy() + drift_all * test.gap.to_numpy()).clip(0, 100), None)
         row["carry_forward_drift"] = metrics(test, (carry + drift * test.gap.to_numpy()).clip(0, 100), None)
         no_sat = [c for c in FEATURES if c not in SATELLITE]
         f_ns = fit(train, cfg, no_sat)
-        row["ablation_no_satellite"] = metrics(test, (test.y_prev + f_ns.predict(test)).clip(0, 100).to_numpy(), None)
+        row["ablation_no_satellite"] = metrics(
+            test, (test.y_prev + f_ns.predict(test) + linear(test, coef)).clip(0, 100).to_numpy(), None)
         report["folds"].append(row)
         name = f"lightgbm-backtest-{te}"
-        (out / f"backtest-{te}.json").write_text(json.dumps(export(f, cal, name, cfg, tr_rounds)))
-        expected[name] = f.predict(d)
-        log.info("F%d -> %d: MAE %.2f (carry-forward %.2f, no-satellite %.2f), coverage90 %.2f", k, te,
+        (out / f"backtest-{te}.json").write_text(json.dumps(export(f, cal, name, cfg, tr_rounds, coef)))
+        expected[name] = f.predict(d) + linear(d, coef)
+        log.info("F%d -> %d: MAE %.2f (carry-forward %.2f, no-satellite %.2f), coverage90 %.2f, linear %s", k, te,
                  row["model"]["mae"], row["carry_forward"]["mae"], row["ablation_no_satellite"]["mae"],
-                 row["model"]["coverage90"])
+                 row["model"]["coverage90"], coef)
 
     cfg, top = tune(lab, rounds)
     f = fit(lab, cfg)
-    cal = conformal(calibration_residuals(lab, rounds, cfg))
-    (out / "model.json").write_text(json.dumps(export(f, cal, "lightgbm-final", cfg, rounds)))
-    expected["lightgbm-final"] = f.predict(d)
+    runs = inner_runs(lab, rounds, cfg)
+    terms, lin_scores = select_linear(runs)
+    coef = fit_linear(lab, terms)
+    cal = conformal(calibration_residuals(lab, rounds, cfg, runs, terms))
+    (out / "model.json").write_text(json.dumps(export(f, cal, "lightgbm-final", cfg, rounds, coef)))
+    expected["lightgbm-final"] = f.predict(d) + linear(d, coef)
     imp = np.mean([b.feature_importance("gain") for b in f.boosters], axis=0)
-    report["final"] = {"config": cfg, "tuning_top5": top, "calibration": cal, "trained_on": rounds,
+    report["final"] = {"config": cfg, "tuning_top5": top, "linear": coef, "linear_selection": lin_scores,
+                       "calibration": cal, "trained_on": rounds,
                        "importance_gain": dict(sorted(zip(FEATURES, imp.round(1).tolist()), key=lambda kv: -kv[1]))}
     exp = d[["adm3_pcode", "year"]].copy()
     for name, pred in expected.items():

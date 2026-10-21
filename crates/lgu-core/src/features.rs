@@ -5,9 +5,9 @@
 //! change in poverty incidence (percentage points) since round r; the estimate is
 //! `clamp(official_r + prediction, 0, 100)`.
 
-use crate::panel::{self, Panel, ROUNDS};
+use crate::panel::{self, Panel, ProvinceStats, ROUNDS};
 
-pub const FEATURES: [&str; 19] = [
+pub const FEATURES: [&str; 20] = [
     "y_prev",         // official estimate in round r (pp)
     "gap",            // t - r (years)
     "trend_prev",     // (y_r - y_r2) / (r - r2), previous official trend; NaN without r2
@@ -27,6 +27,7 @@ pub const FEATURES: [&str; 19] = [
     "elev",           // mean elevation (m)
     "slope",          // mean slope (degrees)
     "bm_valid",       // fraction of the LGU with valid Black Marble pixels, year t
+    "prov_fies_gap", // PSA FIES provincial poverty in round r minus prov_prev_mean, centred over provinces (v3)
 ];
 pub const N_FEATURES: usize = FEATURES.len();
 
@@ -42,23 +43,23 @@ fn ln1p(x: f64) -> f64 {
 /// `raw_at(year_idx)` returns the raw inputs (the panel's, or a what-if scenario's).
 pub fn row_with(
     panel: &Panel,
-    prov_means: &[f64],
+    prov: &ProvinceStats,
     lgu: usize,
     t: i32,
     r: usize,
     raw_at: &dyn Fn(usize) -> [f64; panel::N_RAW],
 ) -> [f64; N_FEATURES] {
     let ry = ROUNDS[r];
-    let ti = panel::year_index(t).expect("year in range");
-    let ri = panel::year_index(ry).expect("round in range");
     let o = panel.official(lgu, r);
     let r2 = (0..r).rev().find(|&k| panel.official(lgu, k).is_some());
     let trend = match r2 {
         Some(k) => (o.estimate - panel.official(lgu, k).estimate) / f64::from(ry - ROUNDS[k]),
         None => f64::NAN,
     };
-    let now = raw_at(ti);
-    let then = raw_at(ri);
+    // Years outside the feature years (rounds before 2012) have no satellite or population inputs.
+    let at = |y: i32| panel::year_index(y).map_or([f64::NAN; panel::N_RAW], raw_at);
+    let now = at(t);
+    let then = at(ry);
     let area = panel.stat(lgu, 0);
     let l_bm_t = ln1p(now[panel::BM_MEAN]);
     let l_bm_r = ln1p(then[panel::BM_MEAN]);
@@ -83,7 +84,7 @@ pub fn row_with(
         f64::from(t - ry),
         trend,
         if ry <= 2018 && t >= 2021 { 1.0 } else { 0.0 },
-        prov_means[p * ROUNDS.len() + r],
+        prov.means[p * ROUNDS.len() + r],
         o.se,
         l_bm_t,
         l_bm_t - l_bm_r,
@@ -98,12 +99,13 @@ pub fn row_with(
         panel.stat(lgu, 1),
         panel.stat(lgu, 2),
         now[panel::BM_VALID],
+        prov.fies_gap[p * ROUNDS.len() + r],
     ]
 }
 
 /// Feature row from the panel's own raw values.
-pub fn row(panel: &Panel, prov_means: &[f64], lgu: usize, t: i32, r: usize) -> [f64; N_FEATURES] {
-    row_with(panel, prov_means, lgu, t, r, &|yi| {
+pub fn row(panel: &Panel, prov: &ProvinceStats, lgu: usize, t: i32, r: usize) -> [f64; N_FEATURES] {
+    row_with(panel, prov, lgu, t, r, &|yi| {
         let mut a = [0.0; panel::N_RAW];
         a.copy_from_slice(panel.raw_year(lgu, yi));
         a
@@ -132,6 +134,8 @@ pub(crate) mod tests {
                 ]);
             }
             let off = [
+                Official::NONE,
+                Official::NONE,
                 Official {
                     estimate: 30.0 / base,
                     se: 2.0,
@@ -158,16 +162,32 @@ pub(crate) mod tests {
     #[test]
     fn prev_round_skips_missing_rounds() {
         let p = tiny_panel();
-        assert_eq!(p.prev_round(0, 2021), Some(1)); // 2018 missing -> 2015
-        assert_eq!(p.prev_round(0, 2024), Some(4));
+        assert_eq!(p.prev_round(0, 2021), Some(3)); // 2018 missing -> 2015
+        assert_eq!(p.prev_round(0, 2024), Some(6));
         assert_eq!(p.prev_round(0, 2012), None);
+    }
+
+    #[test]
+    fn fies_gap_is_lagged_and_centred_over_provinces() {
+        let mut p = tiny_panel();
+        // provinces: 0 (LGUs 100, 200), 1 (LGU 300); round 3 = 2015
+        p.set_fies(0, 3, 30.0);
+        p.set_fies(1, 3, 160.0);
+        let st = p.province_stats();
+        let raw = [30.0 - st.means[3], 160.0 - st.means[7 + 3]];
+        let c = (raw[0] + raw[1]) / 2.0;
+        assert!((st.fies_gap[3] - (raw[0] - c)).abs() < 1e-4);
+        assert!((st.fies_gap[3] + st.fies_gap[7 + 3]).abs() < 1e-4);
+        assert!(st.fies_gap[4].is_nan()); // no FIES figure for 2018
+        let x = row(&p, &st, 0, 2021, 3); // from the 2015 round: the 2015 gap, never the target year's
+        assert_eq!(x[19], st.fies_gap[3]);
     }
 
     #[test]
     fn row_has_documented_meaning() {
         let p = tiny_panel();
-        let pm = p.province_round_means();
-        let x = row(&p, &pm, 0, 2021, 1);
+        let pm = p.province_stats();
+        let x = row(&p, &pm, 0, 2021, 3);
         assert_eq!(x[0], 28.0); // y_prev
         assert_eq!(x[1], 6.0); // gap
         assert!((x[2] - (28.0 - 30.0) / 3.0).abs() < 1e-12); // trend_prev

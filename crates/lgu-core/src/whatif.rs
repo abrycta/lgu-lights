@@ -5,7 +5,7 @@
 
 use crate::features::row_with;
 use crate::model::{Estimate, Model};
-use crate::panel::{self, Panel, ROUNDS};
+use crate::panel::{self, Panel, ProvinceStats, ROUNDS};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Scenario {
@@ -19,7 +19,7 @@ pub struct Scenario {
 pub fn whatif(
     model: &Model,
     panel: &Panel,
-    prov_means: &[f64],
+    prov: &ProvinceStats,
     lgu: usize,
     year: i32,
     s: Scenario,
@@ -40,7 +40,7 @@ pub fn whatif(
         }
         a
     };
-    let x = row_with(panel, prov_means, lgu, year, r, &raw_at);
+    let x = row_with(panel, prov, lgu, year, r, &raw_at);
     Some(model.estimate_from_row(&x, ry, model.whatif_widen))
 }
 
@@ -78,13 +78,15 @@ mod tests {
                 q90: vec![2.0],
             },
             whatif_widen: 1.5,
+            linear: Default::default(),
+            index: (0..crate::features::N_FEATURES).collect(),
         }
     }
 
     #[test]
     fn zero_scenario_reproduces_the_estimate_and_growth_moves_it() {
         let (p, m) = (tiny_panel(), model());
-        let pm = p.province_round_means();
+        let pm = p.province_stats();
         let base = m.estimate(&p, &pm, 0, 2025).unwrap();
         let zero = whatif(
             &m,

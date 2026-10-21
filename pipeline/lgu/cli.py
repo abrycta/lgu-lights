@@ -4,6 +4,7 @@
     inputs-direct  CI without ARCHIVE_READ_TOKEN: sha256-pinned public sources only (lgu/direct.py)
     boundaries   HDX COD-AB geodatabase -> data/interim/adm3.parquet, lgus.parquet, tile GeoJSONL
     labels       PSA SAE workbooks -> data/build/labels.parquet (+ crosswalk report)
+    fies         PSA OpenSTAT provincial poverty (FIES) -> data/build/provinces_fies.parquet (lgu/fies.py)
     zonal-ee     Earth Engine: MODIS NDVI/EVI, WorldPop, SRTM -> data/interim/zonal_ee.parquet
     zonal-bm     LAADS Black Marble VNP46A4 + exactextract -> data/interim/zonal_bm.parquet
     zonal-vj     LAADS VJ113A1 NDVI + exactextract -> data/interim/zonal_vj.parquet (continuity; optional)
@@ -23,7 +24,8 @@ from .paths import CROSSWALK_OVERRIDES, DATA, INTERIM, RAW, REPO_ROOT
 
 BUILD = DATA / "build"
 COMMITTED = Path(__file__).resolve().parents[1] / "inputs"
-FILE_SOURCES = ["psa-sae-2018-2021", "psa-sae-2023", "cod-ab-phl-tables", "cod-ab-phl-gdb"]
+FILE_SOURCES = ["psa-sae-2018-2021", "psa-sae-2023", "cod-ab-phl-tables", "cod-ab-phl-gdb",
+                "psa-fies-prov-2006-2015", "psa-fies-prov-2018-2023", "psa-fies-prov-nohuc"]
 DEFAULT_YEARS = "2012-2025"
 
 
@@ -68,7 +70,7 @@ def run(cmd: str, argv: list[str]) -> int:
         from . import direct
         for sid in ("cod-ab-phl-tables", "cod-ab-phl-gdb"):
             print(direct.fetch(sid))
-        for f in ("labels.parquet", "crosswalk-report.json"):
+        for f in ("labels.parquet", "crosswalk-report.json", "provinces_fies.parquet"):
             shutil.copy2(COMMITTED / f, BUILD / f)
         INTERIM.mkdir(parents=True, exist_ok=True)
         shutil.copy2(COMMITTED / "provenance.json", INTERIM / "provenance.json")
@@ -103,6 +105,19 @@ def run(cmd: str, argv: list[str]) -> int:
             shutil.copy2(INTERIM / "provenance.json", COMMITTED / "provenance.json")
         print(json.dumps({"rows_per_round": rep["rows_per_round"], "matched": rep["matched"],
                           "unmatched": len(rep["unmatched"]), "dropped_many_to_one": rep["dropped_many_to_one_rows"]}))
+        return 0
+
+    if cmd == "fies":
+        import pandas as pd
+
+        from . import fies
+        adm2 = pd.read_excel(RAW / "boundaries" / "phl_admin_boundaries.xlsx", sheet_name="phl_admin2")
+        df, rep = fies.build(RAW / "psa", adm2[["adm2_pcode", "adm2_name"]])
+        df.to_parquet(BUILD / "provinces_fies.parquet", index=False)
+        COMMITTED.mkdir(exist_ok=True)
+        df.to_parquet(COMMITTED / "provinces_fies.parquet", index=False)  # B4: CI without the archive token
+        (COMMITTED / "provinces-fies-report.json").write_text(json.dumps(rep, indent=2, ensure_ascii=False) + "\n")
+        print(json.dumps({k: v for k, v in rep.items() if k != "unmapped_names"}))
         return 0
 
     if cmd == "zonal-ee":

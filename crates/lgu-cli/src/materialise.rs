@@ -52,7 +52,7 @@ fn est_json(e: &Estimate, kind: Kind) -> Value {
 pub fn run(a: &Args) -> Result<(), String> {
     let s = load_store(a)?;
     let p = &s.panel;
-    let pm = p.province_round_means();
+    let pm = p.province_stats();
     let model_path = PathBuf::from(a.get("model")?);
     let model = load_model(&model_path)?;
     let mut backtests: BTreeMap<i32, Model> = BTreeMap::new();
@@ -227,7 +227,7 @@ pub fn run(a: &Args) -> Result<(), String> {
             "generated_at": a.opt("generated"),
             "git_sha": a.opt("sha"),
             "years": (FIRST_YEAR..=LAST_YEAR).collect::<Vec<_>>(),
-            "rounds": ROUNDS,
+            "rounds": panel::published_rounds().collect::<Vec<_>>(),
             "breaks": BREAKS,
             "tiers": {"reliable_max_cv": 10, "caution_max_cv": 20},
             "z90": Z90,
