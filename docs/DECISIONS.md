@@ -74,3 +74,7 @@ What this says, plainly: on the 2023 nowcast (F3, the headline) the model beats 
 Measured: parity of the Rust core with LightGBM over 21,154 design rows × 4 models, max |Δ| 3.7e-14 (tolerance 1e-5). Feature importance (gain) is led by `trend_prev`, `y_prev`, `era_cross`, `prov_prev_mean`.
 
 Milestone-2 candidates from these numbers: model the estimator break explicitly (or train only within an era), a log-ratio target, Fay-Herriot with PSA SE (MODELING-PLAN §4.3), EOG lights as a second source, and intervals that depend on the gap length.
+
+### Rename (2026-10-21)
+
+The public name is **Lights**, at **lights.krtmtthw.dev** (Kurt's call: it reads better). `lgu.krtmtthw.dev` stays in DNS and the page sends visitors on to the new host (`web/public/host-redirect.js`), because DNS is at Porkbun and there is no edge redirect. Internal IDs keep `lgu`: repos, the Pages project `lgu-lights`, the Earth Engine project, the crates and the archive.

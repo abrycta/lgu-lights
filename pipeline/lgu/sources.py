@@ -1,4 +1,4 @@
-"""LGU Lights' adapter over archivekit (abrycta/data-archive-kit).
+"""Lights' adapter over archivekit (abrycta/data-archive-kit).
 
 Fallback (primary -> mirrors -> private archive), validation, provenance and issues live in the kit.
 This module binds the project's registry and holds the project hooks referenced from it.

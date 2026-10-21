@@ -2,7 +2,7 @@
   "name": "lgu-lights-web",
   "private": true,
   "version": "0.1.0",
-  "description": "LGU Lights web app: a static map of poverty incidence for every Philippine city and municipality, PSA official figures and labelled model estimates.",
+  "description": "Lights web app: a static map of poverty incidence for every Philippine city and municipality, PSA official figures and labelled model estimates.",
   "author": "Kurt",
   "type": "module",
   "engines": {

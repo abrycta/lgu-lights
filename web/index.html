@@ -2,6 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Old host (lgu.krtmtthw.dev) -> lights.krtmtthw.dev. -->
+    <script src="/host-redirect.js"></script>
     <!-- Akari pre-paint theme: the shared krtmtthw.dev cookie (or localStorage) before first paint. External, so CSP-safe. -->
     <script src="/theme-init.js" data-shared-cookie-domain="krtmtthw.dev"></script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -10,7 +12,7 @@
     <!-- The data pointer is on the critical path of every page (same origin, so no preconnect is needed in M1). -->
     <link rel="preload" href="/data/latest.json" as="fetch" crossorigin="anonymous" />
     <meta name="description" content="Poverty incidence for every Philippine city and municipality, 2012–2025: PSA official estimates and clearly labelled model estimates from night lights." />
-    <title>LGU Lights</title>
+    <title>Lights</title>
   </head>
   <body>
     <div id="root"></div>

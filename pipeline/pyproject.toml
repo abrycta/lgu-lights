@@ -1,7 +1,7 @@
 [project]
 name = "lgu-pipeline"
 version = "0.1.0"
-description = "LGU Lights data pipeline: sources (archivekit), PSA SAE labels, ADM3 harmonisation, zonal statistics, training"
+description = "Lights data pipeline: sources (archivekit), PSA SAE labels, ADM3 harmonisation, zonal statistics, training"
 authors = [{ name = "Kurt" }]
 requires-python = ">=3.12,<3.13"
 dependencies = [

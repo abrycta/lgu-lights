@@ -93,7 +93,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
             tiles: [`lgutile://${tilesUrl(base)}`],
             minzoom: 0,
             maxzoom: 10,
-            attribution: "Boundaries: OCHA/NAMRIA/PSA COD-AB (CC BY-IGO), indicative · Estimates: PSA SAE; model: LGU Lights",
+            attribution: "Boundaries: OCHA/NAMRIA/PSA COD-AB (CC BY-IGO), indicative · Estimates: PSA SAE; model: Lights",
           },
         },
         layers: [

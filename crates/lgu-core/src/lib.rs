@@ -1,4 +1,4 @@
-//! # lgu-core: the application hexagon of LGU Lights
+//! # lgu-core: the application hexagon of Lights
 //!
 //! Pure functions over in-memory data: no I/O, no async, no allocation in the hot path. Driven by
 //! three adapters (CLI in GitHub Actions, WASM in the browser, later a Cloudflare Worker), so the

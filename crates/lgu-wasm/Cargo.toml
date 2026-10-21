@@ -1,6 +1,6 @@
 [package]
 name = "lgu-wasm"
-description = "LGU Lights browser adapter: what-if over the snapshot, raw C ABI for a Web Worker (no wasm-bindgen)"
+description = "Lights browser adapter: what-if over the snapshot, raw C ABI for a Web Worker (no wasm-bindgen)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

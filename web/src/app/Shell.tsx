@@ -76,7 +76,7 @@ export function Shell({ children }: { children: ReactNode }) {
           brand={
             <>
               <PageLink page="map" className="rounded-sm">
-                <Logo name="LGU Lights" glyph="光" size="sm" />
+                <Logo name="Lights" glyph="光" size="sm" />
                 <span className="sr-only"> {t("home", "ホーム")}</span>
               </PageLink>
               <nav aria-label={t("Main", "メイン")} className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -111,8 +111,8 @@ export function Shell({ children }: { children: ReactNode }) {
             </div>
             <p>
               <T
-                en="Poverty estimates: PSA Small Area Estimates (official) and LGU Lights model estimates (not official). Boundaries: OCHA/NAMRIA/PSA COD-AB, CC BY-IGO, indicative."
-                ja="貧困推計：PSA小地域推計（公式）とLGU Lightsのモデル推計（非公式）。境界：OCHA/NAMRIA/PSA COD-AB（CC BY-IGO、参考）。"
+                en="Poverty estimates: PSA Small Area Estimates (official) and Lights model estimates (not official). Boundaries: OCHA/NAMRIA/PSA COD-AB, CC BY-IGO, indicative."
+                ja="貧困推計：PSA小地域推計（公式）とLightsのモデル推計（非公式）。境界：OCHA/NAMRIA/PSA COD-AB（CC BY-IGO、参考）。"
               />{" "}
               <PageLink page="about" className="underline underline-offset-4">
                 <T en="Sources and licences" ja="出典とライセンス" />

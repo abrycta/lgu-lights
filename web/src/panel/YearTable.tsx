@@ -12,8 +12,8 @@ export function YearTable({ years, selected, onSelectYear }: { years: YearRecord
     <Table className="text-xs" data-testid="year-table">
       <TableCaption className="text-left">
         <T
-          en="Official rows are PSA Small Area Estimates (90 % confidence interval). Model rows are LGU Lights estimates (90 % prediction interval), not official. Lower limits below 0 are shown as 0."
-          ja="公式の行はPSA小地域推計（90%信頼区間）。モデルの行はLGU Lightsの推計（90%予測区間）で、公式統計ではありません。0未満の下限は0と表示。"
+          en="Official rows are PSA Small Area Estimates (90 % confidence interval). Model rows are Lights estimates (90 % prediction interval), not official. Lower limits below 0 are shown as 0."
+          ja="公式の行はPSA小地域推計（90%信頼区間）。モデルの行はLightsの推計（90%予測区間）で、公式統計ではありません。0未満の下限は0と表示。"
         />
       </TableCaption>
       <TableHeader>

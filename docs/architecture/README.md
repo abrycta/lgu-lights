@@ -1,4 +1,4 @@
-# LGU Lights: code layout and data flow (milestone 1)
+# Lights: code layout and data flow (milestone 1)
 
 Architecture B as decided (DECISIONS Q1): a **hexagonal Rust core** (`lgu-core`) with **CQRS-style
 materialised read models**, delivered **Jamstack**-style. Milestone 1 builds "A first": the batch adapter

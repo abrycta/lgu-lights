@@ -1,6 +1,6 @@
 [package]
 name = "lgu-cli"
-description = "LGU Lights batch adapter: design matrix, parity gate, read-model materialisation"
+description = "Lights batch adapter: design matrix, parity gate, read-model materialisation"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

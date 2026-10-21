@@ -38,7 +38,7 @@ function Intro() {
       </h2>
       <p>
         <T
-          en="PSA publishes official small-area poverty estimates only every few years (2012, 2015, 2018, 2021, 2023). Between and after those rounds, LGU Lights fills the gaps with model estimates from night-time lights and vegetation."
+          en="PSA publishes official small-area poverty estimates only every few years (2012, 2015, 2018, 2021, 2023). Between and after those rounds, Lights fills the gaps with model estimates from night-time lights and vegetation."
           ja="PSAの公式な小地域貧困推計は数年ごと（2012・2015・2018・2021・2023年）にしか公表されません。その間と以後の年は、夜間光と植生からのモデル推計で補っています。"
         />
       </p>

@@ -48,8 +48,8 @@ export default function AboutPage() {
       title={<T en="Honest about the data" ja="データに正直に" />}
       lede={
         <T
-          en="LGU Lights maps poverty incidence for every Philippine city and municipality from 2012 to 2025, and always tells you which numbers are official and which are model estimates."
-          ja="LGU Lightsは2012〜2025年のフィリピン全市町村の貧困率を地図にし、どの値が公式統計でどの値がモデル推計かを常に示します。"
+          en="Lights maps poverty incidence for every Philippine city and municipality from 2012 to 2025, and always tells you which numbers are official and which are model estimates."
+          ja="Lightsは2012〜2025年のフィリピン全市町村の貧困率を地図にし、どの値が公式統計でどの値がモデル推計かを常に示します。"
         />
       }
     >
@@ -141,8 +141,8 @@ export default function AboutPage() {
           </ul>
           <p className="text-muted-foreground">
             <T
-              en="LGU Lights is an independent project, not affiliated with or endorsed by the PSA or any government agency."
-              ja="LGU Lightsは独立したプロジェクトで、PSAや政府機関とは関係がなく、承認も受けていません。"
+              en="Lights is an independent project, not affiliated with or endorsed by the PSA or any government agency."
+              ja="Lightsは独立したプロジェクトで、PSAや政府機関とは関係がなく、承認も受けていません。"
             />
           </p>
         </section>

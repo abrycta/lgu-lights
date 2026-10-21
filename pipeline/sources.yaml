@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=../../data-archive-kit/schema/sources.schema.json
-# LGU Lights source registry (format: archivekit, abrycta/data-archive-kit v1.1.0).
+# Lights source registry (format: archivekit, abrycta/data-archive-kit v1.1.0).
 #
 # Every upstream input the pipeline reads is listed here. `lgu.sources.fetch(<id>)` walks the `links`
 # in order (primary first), validates each download against `checks` and the project hooks, and falls

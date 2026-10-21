@@ -1,4 +1,4 @@
-# LGU Lights web app
+# Lights web app
 
 Static single-page app (Vite + React 19 + TypeScript + Tailwind v4 + `@abrycta/akari` + MapLibre GL 6).
 No backend: it reads the static read models written by `lgu materialise` and runs the what-if model

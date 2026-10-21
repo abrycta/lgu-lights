@@ -1,6 +1,6 @@
 [package]
 name = "lgu-store"
-description = "LGU Lights driven adapters: Parquet feature store reader and read-model file sink"
+description = "Lights driven adapters: Parquet feature store reader and read-model file sink"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

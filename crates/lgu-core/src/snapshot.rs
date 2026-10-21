@@ -68,7 +68,7 @@ impl Reader<'_> {
 pub fn decode(b: &[u8]) -> Result<Panel, String> {
     let mut r = Reader { b, at: 0 };
     if r.take(4)? != MAGIC {
-        return Err("not an LGU Lights snapshot".into());
+        return Err("not a Lights snapshot".into());
     }
     if r.u32()? != VERSION {
         return Err("unsupported snapshot version".into());
