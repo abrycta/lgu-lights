@@ -1,0 +1,126 @@
+/* Akari on Tailwind v4, wired as Akari's shadcn.css header prescribes. Akari's fonts.css is loaded
+   separately and non-blocking from main.tsx; MapLibre's CSS loads with the map chunk. */
+@layer theme, base, akari, components, utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@abrycta/akari/css/shadcn.css";
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    line-height: var(--ak-leading-body);
+    overflow-x: clip;
+  }
+  :lang(ja) {
+    line-height: var(--ak-leading-ja);
+    line-break: strict;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Native range inputs (APG slider semantics for free), styled with tokens. */
+  .range {
+    appearance: none;
+    width: 100%;
+    height: 28px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .range::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--muted);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  .range::-moz-range-track {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--muted);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  .range::-webkit-slider-thumb {
+    appearance: none;
+    margin-top: -6px;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 2px solid var(--primary);
+    background: var(--background);
+  }
+  .range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    border: 2px solid var(--primary);
+    background: var(--background);
+  }
+  /* Model estimates: lighter swatch, matching the map's fill opacity. */
+  .swatch {
+    display: inline-block;
+    width: 18px;
+    height: 12px;
+    border-radius: 2px;
+    vertical-align: -1px;
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  /* Hypothetical what-if output: dashed frame and a faint diagonal wash, never the choropleth style. */
+  .hypothetical {
+    border: 1.5px dashed var(--seal);
+    background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--seal) 6%, transparent) 0 6px, transparent 6px 12px);
+  }
+  .lgu-popup .maplibregl-popup-content {
+    background: var(--popover);
+    color: var(--popover-foreground);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 6px 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    box-shadow: none;
+  }
+  .lgu-popup .maplibregl-popup-tip {
+    display: none;
+  }
+  .lgu-popup-model {
+    font-style: italic;
+  }
+
+}
+
+/* MapLibre controls in Akari colours. Unlayered and scoped to .maplibregl-map so they win over
+   MapLibre's own (unlayered, later-loaded) stylesheet. */
+.maplibregl-map .maplibregl-ctrl-attrib {
+  font-size: 11px;
+}
+.maplibregl-map .maplibregl-ctrl.maplibregl-ctrl-attrib,
+.maplibregl-map .maplibregl-ctrl-attrib.maplibregl-compact-show,
+.maplibregl-map .maplibregl-ctrl-scale,
+.maplibregl-map .maplibregl-ctrl-group {
+  background: var(--background);
+  color: var(--foreground);
+}
+.maplibregl-map .maplibregl-ctrl-attrib a {
+  color: inherit;
+}
+.maplibregl-map .maplibregl-ctrl-scale {
+  border-color: var(--foreground);
+}
+/* MapLibre's control icons are dark SVGs; invert them on the dark ground. */
+.dark .maplibregl-map .maplibregl-ctrl-group button .maplibregl-ctrl-icon,
+.dark .maplibregl-map .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}

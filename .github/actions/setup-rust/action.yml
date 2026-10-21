@@ -1,0 +1,21 @@
+# Rust toolchain from rust-toolchain.toml (rustup is preinstalled on GitHub runners) + cargo cache.
+name: Set up Rust
+description: Install the pinned toolchain and restore the cargo registry and target caches.
+inputs:
+  key:
+    description: cache key suffix (what is built)
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: rustup show active-toolchain || rustup toolchain install
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          target
+        key: cargo-${{ runner.os }}-${{ inputs.key }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+        restore-keys: cargo-${{ runner.os }}-${{ inputs.key }}-

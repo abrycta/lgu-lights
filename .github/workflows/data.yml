@@ -1,0 +1,240 @@
+# Full data run (manual): inputs -> boundaries -> labels -> zonal statistics (Earth Engine + LAADS/exactextract)
+# -> feature store -> training (LightGBM) -> Rust parity gate -> read models (Rust CLI) -> vector tiles.
+# Outputs are GitHub release assets of this repo: `features-<version>` and `data-<version>`; the data
+# release is created as a draft and published only after every gate passed (atomic data versions).
+# Heavy satellite work runs here, never on the laptop. Minutes: see docs/architecture/README.md.
+name: Data
+
+on:
+  # workflow_dispatch only works once this file is on the default branch; until then a run is requested
+  # on a branch by committing .github/data-run.json ({"version": ..., "features": ..., "vj113a1": ...}).
+  push:
+    paths: [.github/data-run.json]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Data version (immutable folder name, e.g. v1)
+        required: true
+        default: v1
+      features:
+        description: Rebuild the feature store (zonal statistics); off = reuse the features-<version> release
+        type: boolean
+        default: true
+      years:
+        description: Feature years
+        default: "2012-2025"
+      vj113a1:
+        description: Also compute NOAA-20 VJ113A1 NDVI (continuity series, 2018 onwards; adds about 15 min)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # release assets of this repo
+
+concurrency:
+  group: data
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      version: ${{ steps.c.outputs.version }}
+      features: ${{ steps.c.outputs.features }}
+      years: ${{ steps.c.outputs.years }}
+      vj113a1: ${{ steps.c.outputs.vj113a1 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { sparse-checkout: .github }
+      - id: c
+        env:
+          EVENT: ${{ github.event_name }}
+          I_VERSION: ${{ inputs.version }}
+          I_FEATURES: ${{ inputs.features }}
+          I_YEARS: ${{ inputs.years }}
+          I_VJ: ${{ inputs.vj113a1 }}
+        run: |
+          if [ "$EVENT" = push ]; then
+            python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          c = json.load(open(".github/data-run.json"))
+          print(f"version={c.get('version', 'v1')}")
+          print(f"features={str(c.get('features', True)).lower()}")
+          print(f"years={c.get('years', '2012-2025')}")
+          print(f"vj113a1={str(c.get('vj113a1', False)).lower()}")
+          PY
+          else
+            { echo "version=$I_VERSION"; echo "features=$I_FEATURES"; echo "years=$I_YEARS"; echo "vj113a1=$I_VJ"; } >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
+
+  features:
+    needs: config
+    if: needs.config.outputs.features == 'true'
+    env:
+      VERSION: ${{ needs.config.outputs.version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with: { enable-cache: true, cache-dependency-glob: pipeline/uv.lock }
+      - name: Sync and fetch inputs (archivekit when ARCHIVE_READ_TOKEN exists, else pinned public sources)
+        working-directory: pipeline
+        env: { ARCHIVE_READ_TOKEN: "${{ secrets.ARCHIVE_READ_TOKEN }}" }
+        run: |
+          if [ -n "$ARCHIVE_READ_TOKEN" ]; then
+            git config --global url."https://x-access-token:${ARCHIVE_READ_TOKEN}@github.com/abrycta/data-archive-kit".insteadOf "https://github.com/abrycta/data-archive-kit"
+            uv sync --locked --group sources --group zonal
+            uv run python -m lgu inputs
+            uv run python -m lgu labels
+          else
+            echo "::notice title=archivekit not installed::ARCHIVE_READ_TOKEN is not set: HDX boundaries are fetched directly (sha256-pinned) and labels come from pipeline/inputs/ (built from archivekit-validated files)."
+            uv sync --locked --group zonal
+            uv run python -m lgu inputs-direct
+          fi
+      - name: Boundaries (HDX COD-AB v03 ADM3)
+        working-directory: pipeline
+        run: uv run python -m lgu boundaries
+      - name: Zonal statistics (Earth Engine and Black Marble in parallel)
+        working-directory: pipeline
+        env:
+          EE_SERVICE_ACCOUNT_KEY: ${{ secrets.EE_SERVICE_ACCOUNT_KEY }}
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+          YEARS: ${{ needs.config.outputs.years }}
+        run: |
+          start=$(date +%s)
+          uv run python -m lgu zonal-ee --years "$YEARS" > ../ee.log 2>&1 & ee=$!
+          uv run python -m lgu zonal-bm --years "$YEARS"
+          wait $ee || { cat ../ee.log; exit 1; }
+          tail -n 3 ../ee.log
+          echo "zonal statistics: $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: VJ113A1 NDVI (optional)
+        if: needs.config.outputs.vj113a1 == 'true'
+        working-directory: pipeline
+        env:
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+        run: uv run python -m lgu zonal-vj --years 2018-2025
+      - name: Feature store (gated)
+        working-directory: pipeline
+        run: uv run python -m lgu features | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Tippecanoe (cached build)
+        id: tippecanoe
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/tippecanoe
+          key: tippecanoe-2.79.0-${{ runner.os }}
+      - if: steps.tippecanoe.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install -y -qq libsqlite3-dev zlib1g-dev >/dev/null
+          git clone -q --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe /tmp/tc
+          make -C /tmp/tc -j4 >/dev/null && make -C /tmp/tc install PREFIX="$HOME/.local/tippecanoe" >/dev/null
+      - name: Geometry tiles (once per boundary vintage, cached)
+        id: geom
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: data/build/geom.pmtiles
+          key: geom-${{ hashFiles('pipeline/sources.yaml', 'pipeline/lgu/boundaries.py', 'pipeline/tools/build_tiles.sh') }}
+      - if: steps.geom.outputs.cache-hit != 'true'
+        run: |
+          export PATH="$HOME/.local/tippecanoe/bin:$PATH"
+          start=$(date +%s)
+          pipeline/tools/build_tiles.sh geometry data/interim/tiles/adm3.geojsonl data/interim/tiles/adm2.geojsonl data/build/geom.pmtiles
+          echo "geometry tiles: $(( $(date +%s) - start )) s, $(stat -c %s data/build/geom.pmtiles) bytes" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Publish the feature store release
+        run: |
+          cd data
+          cp interim/zonal_*.parquet interim/provenance.json build/
+          tag="features-$VERSION"
+          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" --prerelease --target "$GITHUB_SHA" --title "$tag" \
+            --notes "Feature store for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA)." \
+            build/features.parquet build/lgus.parquet build/labels.parquet build/provinces.json \
+            build/crosswalk-report.json build/provenance.json build/zonal_*.parquet build/geom.pmtiles
+          du -h build/*.parquet build/geom.pmtiles | tee -a "$GITHUB_STEP_SUMMARY"
+
+  model:
+    needs: [config, features]
+    if: ${{ !cancelled() && needs.config.result == 'success' && (needs.features.result == 'success' || needs.features.result == 'skipped') }}
+    env:
+      VERSION: ${{ needs.config.outputs.version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Feature store from the features release
+        run: |
+          mkdir -p data/build && cd data/build
+          gh release download "features-$VERSION" --clobber
+      - uses: ./.github/actions/setup-rust
+        with: { key: cli }
+      - run: cargo build --release -p lgu-cli
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with: { enable-cache: true, cache-dependency-glob: pipeline/uv.lock }
+      - run: uv sync --locked --group train
+        working-directory: pipeline
+      - name: Design matrix (features derived by lgu-core)
+        run: target/release/lgu design --build data/build --out data/build/design.csv
+      - name: Train and validate (forward-chaining, conformal intervals)
+        working-directory: pipeline
+        run: |
+          start=$(date +%s)
+          uv run python -m lgu train
+          echo "training: $(( $(date +%s) - start )) s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Parity gate (Rust core vs LightGBM predict, tolerance 1e-5)
+        run: |
+          m=data/build/model
+          for spec in lightgbm-final=model.json lightgbm-backtest-2018=backtest-2018.json \
+                      lightgbm-backtest-2021=backtest-2021.json lightgbm-backtest-2023=backtest-2023.json; do
+            target/release/lgu parity --build data/build --model "$m/${spec#*=}" --expected "$m/expected.csv" \
+              --column "${spec%%=*}" --tol 1e-5 | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Read models
+        run: |
+          m=data/build/model
+          target/release/lgu materialise --build data/build --model $m/model.json \
+            --backtest 2018=$m/backtest-2018.json --backtest 2021=$m/backtest-2021.json --backtest 2023=$m/backtest-2023.json \
+            --metrics $m/metrics.json --provinces data/build/provinces.json --provenance data/build/provenance.json \
+            --version "$VERSION" --sha "$GITHUB_SHA" --generated "$(date -u +%FT%TZ)" --out "data/dist/$VERSION"
+          cd pipeline && uv run python -m lgu to-parquet --out "../data/dist/$VERSION"
+      - name: Tippecanoe (cached build)
+        id: tippecanoe
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/tippecanoe
+          key: tippecanoe-2.79.0-${{ runner.os }}
+      - if: steps.tippecanoe.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install -y -qq libsqlite3-dev zlib1g-dev >/dev/null
+          git clone -q --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe /tmp/tc
+          make -C /tmp/tc -j4 >/dev/null && make -C /tmp/tc install PREFIX="$HOME/.local/tippecanoe" >/dev/null
+      - name: Join attributes onto the geometry tiles
+        run: |
+          export PATH="$HOME/.local/tippecanoe/bin:$PATH"
+          pipeline/tools/build_tiles.sh join data/build/geom.pmtiles "data/dist/$VERSION/tiles-attrs.csv" "data/dist/$VERSION"
+      - name: Publish the data release (draft first, published after the archive is complete)
+        run: |
+          cd data/dist
+          tar -cf - "$VERSION" | zstd -q -19 -T0 -o "read-models-$VERSION.tar.zst"
+          cp ../build/model/metrics.json ../build/features.parquet ../build/labels.parquet .
+          cp "$VERSION/estimates.parquet" "$VERSION/lgu.pmtiles" .
+          tag="data-$VERSION"
+          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" --draft --target "$GITHUB_SHA" --title "$tag" \
+            --notes "Read models for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA). Model estimates are not official statistics." \
+            "read-models-$VERSION.tar.zst" metrics.json features.parquet labels.parquet estimates.parquet lgu.pmtiles
+          gh release edit "$tag" --draft=false
+          {
+            echo "### Data version $VERSION"
+            du -sh "$VERSION" "$VERSION/tiles" "$VERSION/lgu" "read-models-$VERSION.tar.zst" lgu.pmtiles
+            echo "tiles: $(find "$VERSION/tiles" -name '*.pbf' | wc -l) files"
+            python3 -c "import json;h=json.load(open('metrics.json'))['headline'];print(json.dumps(h,indent=1))"
+          } >> "$GITHUB_STEP_SUMMARY"

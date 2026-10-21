@@ -1,0 +1,28 @@
+[workspace]
+resolver = "3"
+members = ["crates/lgu-core", "crates/lgu-store", "crates/lgu-cli", "crates/lgu-wasm"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "UNLICENSED"
+publish = false
+authors = ["Kurt"]
+
+[workspace.dependencies]
+lgu-core = { path = "crates/lgu-core" }
+lgu-store = { path = "crates/lgu-store" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+
+# Browser what-if module: opt-level 3 (spike S5: 1.7x faster than "z" for about the same size).
+[profile.wasm]
+inherits = "release"
+opt-level = 3
+strip = true

@@ -1,0 +1,21 @@
+# Manual crosswalk overrides: PSA SAE 6-digit code -> HDX COD-AB v03 adm3_pcode ('' = no ADM3 unit).
+# Every row needs a reason. Checked by hand against phl_admin_boundaries.xlsx (admin3 sheet), 2026-10-21.
+code6,pcode,reason
+133901,,City of Manila district (Tondo); HDX has one ADM3 for the whole city; districts are not aggregated (no population weights)
+133902,,City of Manila district (Binondo)
+133903,,City of Manila district (Quiapo)
+133904,,City of Manila district (San Nicolas)
+133905,,City of Manila district (Santa Cruz)
+133906,,City of Manila district (Sampaloc); must not match Sampaloc Quezon
+133907,,City of Manila district (San Miguel)
+133908,,City of Manila district (Ermita)
+133909,,City of Manila district (Intramuros)
+133910,,City of Manila district (Malate)
+133911,,City of Manila district (Paco)
+133912,,City of Manila district (Pandacan)
+133913,,City of Manila district (Port Area)
+133914,,City of Manila district (Santa Ana)
+137501,PH1307501,Kalookan City = Caloocan City
+153635,PH1903635,Sultan Gumander = Picong (Sultan Gumander); ARMM 15 -> BARMM 19
+153637,PH1903637,Bumbaran = Amai Manabilang (Bumbaran)
+153811,PH1908711,Parang (Maguindanao) -> Maguindanao del Norte after the 2022 split; not Parang (Sulu)

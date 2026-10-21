@@ -1,0 +1,13 @@
+[package]
+name = "lgu-wasm"
+description = "LGU Lights browser adapter: what-if over the snapshot, raw C ABI for a Web Worker (no wasm-bindgen)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+lgu-core.workspace = true

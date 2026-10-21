@@ -1,0 +1,11 @@
+[package]
+name = "lgu-core"
+description = "LGU Lights application hexagon: feature derivation, tree-ensemble inference, intervals, tiers, what-if. No I/O."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

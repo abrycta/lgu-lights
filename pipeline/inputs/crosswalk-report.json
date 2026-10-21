@@ -1,0 +1,132 @@
+{
+  "matched": {
+    "override": 4,
+    "rule": 1511,
+    "province-name": 80,
+    "national-name": 35
+  },
+  "unmatched": [
+    {
+      "code6": "133901",
+      "names": [
+        "Tondo"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133902",
+      "names": [
+        "Binondo"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133903",
+      "names": [
+        "Quiapo"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133904",
+      "names": [
+        "San Nicolas"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133905",
+      "names": [
+        "Santa Cruz"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133906",
+      "names": [
+        "Sampaloc"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133907",
+      "names": [
+        "San Miguel"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133908",
+      "names": [
+        "Ermita"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133909",
+      "names": [
+        "Intramuros"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133910",
+      "names": [
+        "Malate"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133911",
+      "names": [
+        "Paco"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133912",
+      "names": [
+        "Pandacan"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133913",
+      "names": [
+        "Port Area"
+      ],
+      "why": "override: no ADM3 unit"
+    },
+    {
+      "code6": "133914",
+      "names": [
+        "Santa Ana"
+      ],
+      "why": "override: no ADM3 unit"
+    }
+  ],
+  "many_to_one": {},
+  "dropped_name_mismatch": [
+    {
+      "code6": "166718",
+      "year": 2012,
+      "psa_name": "Loreto",
+      "unit": "San Benito"
+    },
+    {
+      "code6": "166718",
+      "year": 2015,
+      "psa_name": "Loreto",
+      "unit": "San Benito"
+    }
+  ],
+  "rematched_by_name": 114,
+  "dropped_many_to_one_rows": 8,
+  "rows_per_round": {
+    "2012": 1624,
+    "2015": 1624,
+    "2018": 1597,
+    "2021": 1597,
+    "2023": 1597
+  }
+}
