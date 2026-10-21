@@ -29,11 +29,10 @@ health:
   issue_title_prefix: "lgu-lights source"
   issue_token_env: ARCHIVE_READ_TOKEN
   token_expiry_warn_days: 30
-  # The earliest-expiring credential the pipeline depends on. Today that is the NASA Earthdata token
-  # (EARTHDATA_TOKEN, the fallback when minting a per-run token from EARTHDATA_USERNAME/PASSWORD fails),
-  # which expires about 2026-12-20. ARCHIVE_READ_TOKEN does not exist yet; when it is created (1-year
-  # expiry), keep whichever date comes first here and rotate the Earthdata token before it lapses.
-  token_expires: "2026-12-20"
+  # No token_expires: ARCHIVE_READ_TOKEN was created without an expiry (2026-10-21), so the guard reports
+  # "no expiry date" and passes. If the token is ever regenerated with an expiry, set token_expires here.
+  # CI mints Earthdata tokens per run from EARTHDATA_USERNAME/PASSWORD; the 60-day EARTHDATA_TOKEN
+  # (about 2026-12-20) is only a fallback and is not watched here.
   user_agent: "lgu-lights-pipeline/0.1 (+https://github.com/abrycta/lgu-lights)"
   heartbeat_days: 14
 
