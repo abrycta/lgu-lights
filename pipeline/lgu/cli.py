@@ -1,6 +1,7 @@
 """Pipeline commands (`uv run python -m lgu <command>`).
 
     inputs       fetch every file source through archivekit (primary -> mirrors -> private archive)
+    inputs-direct  CI without ARCHIVE_READ_TOKEN: sha256-pinned public sources only (lgu/direct.py)
     boundaries   HDX COD-AB geodatabase -> data/interim/adm3.parquet, lgus.parquet, tile GeoJSONL
     labels       PSA SAE workbooks -> data/build/labels.parquet (+ crosswalk report)
     zonal-ee     Earth Engine: MODIS NDVI/EVI, WorldPop, SRTM -> data/interim/zonal_ee.parquet
@@ -21,6 +22,7 @@ from pathlib import Path
 from .paths import CROSSWALK_OVERRIDES, DATA, INTERIM, RAW, REPO_ROOT
 
 BUILD = DATA / "build"
+COMMITTED = Path(__file__).resolve().parents[1] / "inputs"
 FILE_SOURCES = ["psa-sae-2018-2021", "psa-sae-2023", "cod-ab-phl-tables", "cod-ab-phl-gdb"]
 DEFAULT_YEARS = "2012-2025"
 
@@ -28,6 +30,17 @@ DEFAULT_YEARS = "2012-2025"
 def years_arg(s: str) -> list[int]:
     a, _, b = s.partition("-")
     return list(range(int(a), int(b or a) + 1))
+
+
+def _strip_queries(v):  # type: ignore[no-untyped-def]
+    """Drop query strings (e.g. HDX's short-lived pre-signed S3 parameters) from published URLs."""
+    if isinstance(v, dict):
+        return {k: _strip_queries(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_strip_queries(x) for x in v]
+    if isinstance(v, str) and v.startswith("https://") and "?" in v:
+        return v.split("?", 1)[0]
+    return v
 
 
 def run(cmd: str, argv: list[str]) -> int:
@@ -47,8 +60,18 @@ def run(cmd: str, argv: list[str]) -> int:
         for sid in FILE_SOURCES:
             sources.ensure(sid, run_manifest)
         run_manifest.write(INTERIM / "run-manifest.json")
-        meta = archivekit.data_version_metadata(run_manifest, "pending")
+        meta = _strip_queries(archivekit.data_version_metadata(run_manifest, "pending"))
         (INTERIM / "provenance.json").write_text(json.dumps(meta, indent=2) + "\n")
+        return 0
+
+    if cmd == "inputs-direct":
+        from . import direct
+        for sid in ("cod-ab-phl-tables", "cod-ab-phl-gdb"):
+            print(direct.fetch(sid))
+        for f in ("labels.parquet", "crosswalk-report.json"):
+            shutil.copy2(COMMITTED / f, BUILD / f)
+        INTERIM.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(COMMITTED / "provenance.json", INTERIM / "provenance.json")
         return 0
 
     if cmd == "boundaries":
@@ -72,6 +95,12 @@ def run(cmd: str, argv: list[str]) -> int:
                                       adm3, labels.load_overrides(CROSSWALK_OVERRIDES), shas)
         df.to_parquet(BUILD / "labels.parquet", index=False)
         labels.write_report(rep, BUILD / "crosswalk-report.json")
+        # Committed copy (pipeline/inputs/): CI without ARCHIVE_READ_TOKEN uses it (lgu/direct.py).
+        COMMITTED.mkdir(exist_ok=True)
+        df.to_parquet(COMMITTED / "labels.parquet", index=False)
+        labels.write_report(rep, COMMITTED / "crosswalk-report.json")
+        if (INTERIM / "provenance.json").exists():
+            shutil.copy2(INTERIM / "provenance.json", COMMITTED / "provenance.json")
         print(json.dumps({"rows_per_round": rep["rows_per_round"], "matched": rep["matched"],
                           "unmatched": len(rep["unmatched"]), "dropped_many_to_one": rep["dropped_many_to_one_rows"]}))
         return 0
@@ -116,4 +145,4 @@ def run(cmd: str, argv: list[str]) -> int:
     return 2
 
 
-__all__ = ["run", "REPO_ROOT"]
+__all__ = ["REPO_ROOT", "run"]

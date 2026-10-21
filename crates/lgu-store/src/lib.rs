@@ -11,7 +11,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 
-use lgu_core::panel::{self, Official, Panel, N_RAW, N_STATIC, N_YEARS, RAW_FIELDS, ROUNDS};
+use lgu_core::panel::{self, N_RAW, N_STATIC, N_YEARS, Official, Panel, RAW_FIELDS, ROUNDS};
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use parquet::record::Field;
 
@@ -24,7 +24,11 @@ pub fn read_rows(path: &Path) -> Result<Vec<Row>, String> {
     let mut out = Vec::new();
     for row in iter {
         let row = row.map_err(|e| e.to_string())?;
-        out.push(row.get_column_iter().map(|(k, v)| (k.clone(), v.clone())).collect());
+        out.push(
+            row.get_column_iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        );
     }
     Ok(out)
 }
@@ -93,7 +97,11 @@ pub struct Store {
 pub fn load(lgus_path: &Path, features_path: &Path, labels_path: &Path) -> Result<Store, String> {
     let mut lgu_rows = read_rows(lgus_path)?;
     lgu_rows.sort_by_key(|r| text(r, "adm3_pcode"));
-    let index: HashMap<String, usize> = lgu_rows.iter().enumerate().map(|(i, r)| (text(r, "adm3_pcode"), i)).collect();
+    let index: HashMap<String, usize> = lgu_rows
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (text(r, "adm3_pcode"), i))
+        .collect();
     let n = lgu_rows.len();
     let mut raw = vec![f64::NAN; n * N_YEARS * N_RAW];
     let mut statics = vec![f64::NAN; n * N_STATIC];
@@ -101,8 +109,12 @@ pub fn load(lgus_path: &Path, features_path: &Path, labels_path: &Path) -> Resul
         statics[i * N_STATIC] = num(r, "area_km2");
     }
     for r in read_rows(features_path)? {
-        let Some(&i) = index.get(&text(&r, "adm3_pcode")) else { continue };
-        let Some(yi) = panel::year_index(num(&r, "year") as i32) else { continue };
+        let Some(&i) = index.get(&text(&r, "adm3_pcode")) else {
+            continue;
+        };
+        let Some(yi) = panel::year_index(num(&r, "year") as i32) else {
+            continue;
+        };
         for (k, f) in RAW_FIELDS.iter().enumerate() {
             raw[(i * N_YEARS + yi) * N_RAW + k] = num(&r, f);
         }
@@ -114,9 +126,16 @@ pub fn load(lgus_path: &Path, features_path: &Path, labels_path: &Path) -> Resul
     let mut officials = vec![Official::NONE; n * ROUNDS.len()];
     let mut labels = vec![None; n * ROUNDS.len()];
     for r in read_rows(labels_path)? {
-        let Some(&i) = index.get(&text(&r, "adm3_pcode")) else { continue };
-        let Some(k) = panel::round_index(num(&r, "round_year") as i32) else { continue };
-        officials[i * ROUNDS.len() + k] = Official { estimate: num(&r, "estimate"), se: num(&r, "se") };
+        let Some(&i) = index.get(&text(&r, "adm3_pcode")) else {
+            continue;
+        };
+        let Some(k) = panel::round_index(num(&r, "round_year") as i32) else {
+            continue;
+        };
+        officials[i * ROUNDS.len() + k] = Official {
+            estimate: num(&r, "estimate"),
+            se: num(&r, "se"),
+        };
         labels[i * ROUNDS.len() + k] = Some(Label {
             estimate: num(&r, "estimate"),
             se: num(&r, "se"),
@@ -152,7 +171,11 @@ pub fn load(lgus_path: &Path, features_path: &Path, labels_path: &Path) -> Resul
             lat: num(r, "lat"),
         });
     }
-    Ok(Store { panel: p, lgus, labels })
+    Ok(Store {
+        panel: p,
+        lgus,
+        labels,
+    })
 }
 
 /// Write a file atomically (temp file + rename), creating parent folders.
@@ -168,5 +191,10 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 pub fn write_json(path: &Path, v: &serde_json::Value) -> Result<(), String> {
-    write_atomic(path, serde_json::to_string(v).map_err(|e| e.to_string())?.as_bytes())
+    write_atomic(
+        path,
+        serde_json::to_string(v)
+            .map_err(|e| e.to_string())?
+            .as_bytes(),
+    )
 }

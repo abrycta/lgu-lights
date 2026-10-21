@@ -13,7 +13,15 @@ pub const N_YEARS: usize = (LAST_YEAR - FIRST_YEAR + 1) as usize;
 pub const ROUNDS: [i32; 5] = [2012, 2015, 2018, 2021, 2023];
 
 /// Raw yearly inputs per LGU, in this order in the snapshot.
-pub const RAW_FIELDS: [&str; 7] = ["bm_mean", "bm_sum", "bm_lit_frac", "bm_valid_frac", "ndvi_mean", "evi_mean", "pop"];
+pub const RAW_FIELDS: [&str; 7] = [
+    "bm_mean",
+    "bm_sum",
+    "bm_lit_frac",
+    "bm_valid_frac",
+    "ndvi_mean",
+    "evi_mean",
+    "pop",
+];
 pub const N_RAW: usize = RAW_FIELDS.len();
 
 pub const BM_MEAN: usize = 0;
@@ -34,7 +42,9 @@ pub fn q(x: f64) -> f64 {
 }
 
 pub fn year_index(year: i32) -> Option<usize> {
-    (FIRST_YEAR..=LAST_YEAR).contains(&year).then(|| (year - FIRST_YEAR) as usize)
+    (FIRST_YEAR..=LAST_YEAR)
+        .contains(&year)
+        .then(|| (year - FIRST_YEAR) as usize)
 }
 
 pub fn round_index(year: i32) -> Option<usize> {
@@ -49,7 +59,10 @@ pub struct Official {
 }
 
 impl Official {
-    pub const NONE: Official = Official { estimate: f64::NAN, se: f64::NAN };
+    pub const NONE: Official = Official {
+        estimate: f64::NAN,
+        se: f64::NAN,
+    };
     pub fn is_some(&self) -> bool {
         self.estimate.is_finite()
     }
@@ -81,7 +94,14 @@ impl Panel {
     }
 
     /// Append one LGU; values are quantised to f32 here (see the module docs).
-    pub fn push(&mut self, id: u32, province_id: u32, raw: &[f64], statics: &[f64], officials: &[Official]) {
+    pub fn push(
+        &mut self,
+        id: u32,
+        province_id: u32,
+        raw: &[f64],
+        statics: &[f64],
+        officials: &[Official],
+    ) {
         assert_eq!(raw.len(), N_YEARS * N_RAW);
         assert_eq!(statics.len(), N_STATIC);
         assert_eq!(officials.len(), ROUNDS.len());
@@ -96,8 +116,10 @@ impl Panel {
         self.province.push(p as u32);
         self.raw.extend(raw.iter().map(|&x| q(x)));
         self.statics.extend(statics.iter().map(|&x| q(x)));
-        self.officials
-            .extend(officials.iter().map(|o| Official { estimate: q(o.estimate), se: q(o.se) }));
+        self.officials.extend(officials.iter().map(|o| Official {
+            estimate: q(o.estimate),
+            se: q(o.se),
+        }));
     }
 
     pub fn index_of(&self, id: u32) -> Option<usize> {
@@ -126,7 +148,9 @@ impl Panel {
 
     /// The latest round strictly before `year` with an official estimate for this LGU.
     pub fn prev_round(&self, lgu: usize, year: i32) -> Option<usize> {
-        (0..ROUNDS.len()).rev().find(|&r| ROUNDS[r] < year && self.official(lgu, r).is_some())
+        (0..ROUNDS.len())
+            .rev()
+            .find(|&r| ROUNDS[r] < year && self.official(lgu, r).is_some())
     }
 
     /// Mean official estimate per (province, round) over LGUs with an estimate; NaN if none.
@@ -144,6 +168,9 @@ impl Panel {
                 }
             }
         }
-        sum.iter().zip(&n).map(|(s, &k)| if k > 0 { q(s / k as f64) } else { f64::NAN }).collect()
+        sum.iter()
+            .zip(&n)
+            .map(|(s, &k)| if k > 0 { q(s / k as f64) } else { f64::NAN })
+            .collect()
     }
 }

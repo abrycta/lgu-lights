@@ -22,7 +22,7 @@ use std::cell::RefCell;
 use lgu_core::model::{Estimate, Model};
 use lgu_core::panel::Panel;
 use lgu_core::snapshot;
-use lgu_core::whatif::{whatif as run_whatif, Scenario};
+use lgu_core::whatif::{Scenario, whatif as run_whatif};
 
 #[derive(Default)]
 struct State {
@@ -76,7 +76,9 @@ pub unsafe extern "C" fn load_snapshot(ptr: *const u8, len: usize) -> i32 {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn load_model(ptr: *const u8, len: usize) -> i32 {
-    let Ok(text) = std::str::from_utf8(unsafe { bytes(ptr, len) }) else { return E_INPUT };
+    let Ok(text) = std::str::from_utf8(unsafe { bytes(ptr, len) }) else {
+        return E_INPUT;
+    };
     match Model::from_json(text) {
         Ok(m) => STATE.with_borrow_mut(|s| {
             s.model = Some(m);
@@ -93,13 +95,27 @@ pub extern "C" fn n_lgus() -> u32 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn lgu_index(id: u32) -> i32 {
-    STATE.with_borrow(|s| s.panel.as_ref().and_then(|p| p.index_of(id)).map_or(-1, |i| i as i32))
+    STATE.with_borrow(|s| {
+        s.panel
+            .as_ref()
+            .and_then(|p| p.index_of(id))
+            .map_or(-1, |i| i as i32)
+    })
 }
 
 fn write_out(s: &mut State, e: Option<Estimate>) -> i32 {
     match e {
         Some(e) => {
-            s.out = [e.value, e.lo50, e.hi50, e.lo90, e.hi90, e.cv, e.tier as u8 as f64, f64::from(e.prev_year)];
+            s.out = [
+                e.value,
+                e.lo50,
+                e.hi50,
+                e.lo90,
+                e.hi90,
+                e.cv,
+                e.tier as u8 as f64,
+                f64::from(e.prev_year),
+            ];
             OK
         }
         None => E_NO_ESTIMATE,
@@ -109,7 +125,9 @@ fn write_out(s: &mut State, e: Option<Estimate>) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn estimate(i: u32, year: i32) -> i32 {
     STATE.with_borrow_mut(|s| {
-        let (Some(p), Some(m)) = (s.panel.as_ref(), s.model.as_ref()) else { return E_NOT_LOADED };
+        let (Some(p), Some(m)) = (s.panel.as_ref(), s.model.as_ref()) else {
+            return E_NOT_LOADED;
+        };
         if i as usize >= p.len() {
             return E_INPUT;
         }
@@ -121,11 +139,16 @@ pub extern "C" fn estimate(i: u32, year: i32) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn whatif(i: u32, year: i32, growth_pct: f64, ndvi_delta: f64) -> i32 {
     STATE.with_borrow_mut(|s| {
-        let (Some(p), Some(m)) = (s.panel.as_ref(), s.model.as_ref()) else { return E_NOT_LOADED };
+        let (Some(p), Some(m)) = (s.panel.as_ref(), s.model.as_ref()) else {
+            return E_NOT_LOADED;
+        };
         if i as usize >= p.len() {
             return E_INPUT;
         }
-        let sc = Scenario { radiance_growth_pct: growth_pct, ndvi_delta };
+        let sc = Scenario {
+            radiance_growth_pct: growth_pct,
+            ndvi_delta,
+        };
         let e = run_whatif(m, p, &s.prov_means, i as usize, year, sc);
         write_out(s, e)
     })
@@ -134,9 +157,21 @@ pub extern "C" fn whatif(i: u32, year: i32, growth_pct: f64, ndvi_delta: f64) ->
 #[unsafe(no_mangle)]
 pub extern "C" fn whatif_all(year: i32, growth_pct: f64, ndvi_delta: f64) -> i32 {
     STATE.with_borrow_mut(|s| {
-        let State { panel, prov_means, model, all, tiers, .. } = s;
-        let (Some(p), Some(m)) = (panel.as_ref(), model.as_ref()) else { return E_NOT_LOADED };
-        let sc = Scenario { radiance_growth_pct: growth_pct, ndvi_delta };
+        let State {
+            panel,
+            prov_means,
+            model,
+            all,
+            tiers,
+            ..
+        } = s;
+        let (Some(p), Some(m)) = (panel.as_ref(), model.as_ref()) else {
+            return E_NOT_LOADED;
+        };
+        let sc = Scenario {
+            radiance_growth_pct: growth_pct,
+            ndvi_delta,
+        };
         for i in 0..p.len() {
             match run_whatif(m, p, prov_means, i, year, sc) {
                 Some(e) => {

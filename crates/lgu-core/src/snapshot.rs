@@ -8,16 +8,25 @@
 //! | f32 raw[n_lgu * n_years * n_raw] | f32 statics[n_lgu * n_static] | f32 officials[n_lgu * n_rounds * 2]
 //! ```
 
-use crate::panel::{Official, Panel, FIRST_YEAR, N_RAW, N_STATIC, N_YEARS, ROUNDS};
+use crate::panel::{FIRST_YEAR, N_RAW, N_STATIC, N_YEARS, Official, Panel, ROUNDS};
 
 const MAGIC: &[u8; 4] = b"LGUS";
 const VERSION: u32 = 1;
 
 pub fn encode(p: &Panel) -> Vec<u8> {
     let n = p.len();
-    let mut out = Vec::with_capacity(40 + n * (8 + 4 * (N_YEARS * N_RAW + N_STATIC + ROUNDS.len() * 2)));
+    let mut out =
+        Vec::with_capacity(40 + n * (8 + 4 * (N_YEARS * N_RAW + N_STATIC + ROUNDS.len() * 2)));
     out.extend_from_slice(MAGIC);
-    for v in [VERSION, n as u32, p.provinces.len() as u32, N_YEARS as u32, N_RAW as u32, N_STATIC as u32, ROUNDS.len() as u32] {
+    for v in [
+        VERSION,
+        n as u32,
+        p.provinces.len() as u32,
+        N_YEARS as u32,
+        N_RAW as u32,
+        N_STATIC as u32,
+        ROUNDS.len() as u32,
+    ] {
         out.extend_from_slice(&v.to_le_bytes());
     }
     out.extend_from_slice(&FIRST_YEAR.to_le_bytes());
@@ -41,7 +50,10 @@ struct Reader<'a> {
 
 impl Reader<'_> {
     fn take(&mut self, n: usize) -> Result<&[u8], String> {
-        let s = self.b.get(self.at..self.at + n).ok_or("snapshot truncated")?;
+        let s = self
+            .b
+            .get(self.at..self.at + n)
+            .ok_or("snapshot truncated")?;
         self.at += n;
         Ok(s)
     }
@@ -63,19 +75,40 @@ pub fn decode(b: &[u8]) -> Result<Panel, String> {
     }
     let n = r.u32()? as usize;
     let np = r.u32()? as usize;
-    let shape = [r.u32()? as usize, r.u32()? as usize, r.u32()? as usize, r.u32()? as usize];
+    let shape = [
+        r.u32()? as usize,
+        r.u32()? as usize,
+        r.u32()? as usize,
+        r.u32()? as usize,
+    ];
     if shape != [N_YEARS, N_RAW, N_STATIC, ROUNDS.len()] || r.u32()? as i32 != FIRST_YEAR {
         return Err("snapshot layout differs from this build of lgu-core".into());
     }
-    let mut p = Panel::default();
-    p.ids = (0..n).map(|_| r.u32()).collect::<Result<_, _>>()?;
-    p.province = (0..n).map(|_| r.u32()).collect::<Result<_, _>>()?;
-    p.provinces = (0..np).map(|_| r.u32()).collect::<Result<_, _>>()?;
-    p.raw = (0..n * N_YEARS * N_RAW).map(|_| r.f32()).collect::<Result<_, _>>()?;
-    p.statics = (0..n * N_STATIC).map(|_| r.f32()).collect::<Result<_, _>>()?;
-    p.officials = (0..n * ROUNDS.len())
-        .map(|_| Ok(Official { estimate: r.f32()?, se: r.f32()? }))
+    let ids = (0..n).map(|_| r.u32()).collect::<Result<_, _>>()?;
+    let province = (0..n).map(|_| r.u32()).collect::<Result<_, _>>()?;
+    let provinces = (0..np).map(|_| r.u32()).collect::<Result<_, _>>()?;
+    let raw = (0..n * N_YEARS * N_RAW)
+        .map(|_| r.f32())
+        .collect::<Result<_, _>>()?;
+    let statics = (0..n * N_STATIC)
+        .map(|_| r.f32())
+        .collect::<Result<_, _>>()?;
+    let officials = (0..n * ROUNDS.len())
+        .map(|_| {
+            Ok(Official {
+                estimate: r.f32()?,
+                se: r.f32()?,
+            })
+        })
         .collect::<Result<_, String>>()?;
+    let p = Panel {
+        ids,
+        province,
+        provinces,
+        raw,
+        statics,
+        officials,
+    };
     if r.at != b.len() {
         return Err("trailing bytes after the snapshot".into());
     }
@@ -100,7 +133,11 @@ mod tests {
             for t in 2013..=2025 {
                 if let Some(r) = p.prev_round(i, t) {
                     let (a, b) = (row(&p, &pm, i, t, r), row(&q, &qm, i, t, r));
-                    assert!(a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan())));
+                    assert!(
+                        a.iter()
+                            .zip(&b)
+                            .all(|(x, y)| x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan()))
+                    );
                 }
             }
         }

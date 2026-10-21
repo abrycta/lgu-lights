@@ -1,0 +1,33 @@
+# Rust workspace: format, lint, unit + parity tests, and the wasm32 build of the browser adapter.
+name: Rust
+
+on:
+  push:
+    paths: [crates/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/rust.yml, .github/actions/setup-rust/**]
+  pull_request:
+    paths: [crates/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/rust.yml, .github/actions/setup-rust/**]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+        with: { key: check }
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - name: wasm32 build (browser what-if module, opt-level 3)
+        run: |
+          cargo build --profile wasm --target wasm32-unknown-unknown -p lgu-wasm
+          f=target/wasm32-unknown-unknown/wasm/lgu_wasm.wasm
+          echo "lgu_wasm.wasm: $(stat -c %s $f) bytes, $(gzip -9c $f | wc -c) gzipped" | tee -a "$GITHUB_STEP_SUMMARY"

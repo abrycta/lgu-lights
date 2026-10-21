@@ -56,7 +56,7 @@ def check_sae(path: Path, src: dict[str, Any]) -> list[str]:
 
     try:  # a file object: archivekit validates temp files without an .xlsx suffix
         wb = openpyxl.load_workbook(io.BytesIO(Path(path).read_bytes()), read_only=True, data_only=True)
-    except Exception as e:  # noqa: BLE001 - any parse failure means "not the workbook we expect"
+    except Exception as e:
         raise SchemaError(f"not a readable xlsx workbook: {e}") from e
     try:
         best = 0

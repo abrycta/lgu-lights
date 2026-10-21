@@ -16,7 +16,14 @@ pub struct Scenario {
     pub ndvi_delta: f64,
 }
 
-pub fn whatif(model: &Model, panel: &Panel, prov_means: &[f64], lgu: usize, year: i32, s: Scenario) -> Option<Estimate> {
+pub fn whatif(
+    model: &Model,
+    panel: &Panel,
+    prov_means: &[f64],
+    lgu: usize,
+    year: i32,
+    s: Scenario,
+) -> Option<Estimate> {
     let r = panel.prev_round(lgu, year)?;
     let ry = ROUNDS[r];
     let ri = panel::year_index(ry)?;
@@ -49,7 +56,10 @@ mod tests {
         Model {
             name: "t".into(),
             version: "t".into(),
-            features: crate::features::FEATURES.iter().map(|s| s.to_string()).collect(),
+            features: crate::features::FEATURES
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             forest: Forest {
                 n_features: crate::features::N_FEATURES,
                 scale: 1.0,
@@ -62,7 +72,11 @@ mod tests {
                     leaf_value: vec![0.0, -2.0],
                 }],
             },
-            calibration: Calibration { edges: vec![], q50: vec![1.0], q90: vec![2.0] },
+            calibration: Calibration {
+                edges: vec![],
+                q50: vec![1.0],
+                q90: vec![2.0],
+            },
             whatif_widen: 1.5,
         }
     }
@@ -72,10 +86,32 @@ mod tests {
         let (p, m) = (tiny_panel(), model());
         let pm = p.province_round_means();
         let base = m.estimate(&p, &pm, 0, 2025).unwrap();
-        let zero = whatif(&m, &p, &pm, 0, 2025, Scenario { radiance_growth_pct: 0.0, ndvi_delta: 0.0 }).unwrap();
+        let zero = whatif(
+            &m,
+            &p,
+            &pm,
+            0,
+            2025,
+            Scenario {
+                radiance_growth_pct: 0.0,
+                ndvi_delta: 0.0,
+            },
+        )
+        .unwrap();
         assert_eq!(zero.value, base.value);
         assert_eq!(zero.hi90 - zero.value, 1.5 * (base.hi90 - base.value)); // widened, stated factor
-        let bright = whatif(&m, &p, &pm, 0, 2025, Scenario { radiance_growth_pct: 40.0, ndvi_delta: 0.0 }).unwrap();
+        let bright = whatif(
+            &m,
+            &p,
+            &pm,
+            0,
+            2025,
+            Scenario {
+                radiance_growth_pct: 40.0,
+                ndvi_delta: 0.0,
+            },
+        )
+        .unwrap();
         assert_eq!(bright.value, base.value - 2.0);
         assert_eq!(bright.prev_year, 2023);
     }

@@ -39,7 +39,11 @@ impl Args {
         Args(m)
     }
     pub(crate) fn get(&self, k: &str) -> Result<&str, String> {
-        self.0.get(k).and_then(|v| v.last()).map(String::as_str).ok_or_else(|| format!("missing --{k}"))
+        self.0
+            .get(k)
+            .and_then(|v| v.last())
+            .map(String::as_str)
+            .ok_or_else(|| format!("missing --{k}"))
     }
     pub(crate) fn opt(&self, k: &str) -> Option<&str> {
         self.0.get(k).and_then(|v| v.last()).map(String::as_str)
@@ -51,7 +55,11 @@ impl Args {
 
 pub(crate) fn load_store(a: &Args) -> Result<Store, String> {
     let b = PathBuf::from(a.get("build")?);
-    lgu_store::load(&b.join("lgus.parquet"), &b.join("features.parquet"), &b.join("labels.parquet"))
+    lgu_store::load(
+        &b.join("lgus.parquet"),
+        &b.join("features.parquet"),
+        &b.join("labels.parquet"),
+    )
 }
 
 pub(crate) fn load_model(p: &Path) -> Result<Model, String> {
@@ -73,16 +81,23 @@ fn design(a: &Args) -> Result<(), String> {
     let mut n = (0, 0);
     for i in 0..p.len() {
         for t in FIRST_YEAR + 1..=LAST_YEAR {
-            let Some(r) = p.prev_round(i, t) else { continue };
+            let Some(r) = p.prev_round(i, t) else {
+                continue;
+            };
             let x = features::row(p, &pm, i, t, r);
-            let lab = lgu_core::panel::round_index(t).map(|k| p.official(i, k)).filter(|o| o.is_some());
+            let lab = lgu_core::panel::round_index(t)
+                .map(|k| p.official(i, k))
+                .filter(|o| o.is_some());
             let (label, target, y, se) = match lab {
                 Some(o) => (1, o.estimate - p.official(i, r).estimate, o.estimate, o.se),
                 None => (0, f64::NAN, f64::NAN, f64::NAN),
             };
             n.0 += 1;
             n.1 += label;
-            out.push_str(&format!("{},{t},{},{label},{target},{y},{se},{}", s.lgus[i].pcode, ROUNDS[r], s.lgus[i].province_pcode));
+            out.push_str(&format!(
+                "{},{t},{},{label},{target},{y},{se},{}",
+                s.lgus[i].pcode, ROUNDS[r], s.lgus[i].province_pcode
+            ));
             for v in x {
                 out.push(',');
                 out.push_str(&format!("{v}"));
@@ -91,7 +106,13 @@ fn design(a: &Args) -> Result<(), String> {
         }
     }
     lgu_store::write_atomic(Path::new(a.get("out")?), out.as_bytes())?;
-    eprintln!("design: {} rows, {} labelled, {} LGUs, {} features", n.0, n.1, p.len(), FEATURES.len());
+    eprintln!(
+        "design: {} rows, {} labelled, {} LGUs, {} features",
+        n.0,
+        n.1,
+        p.len(),
+        FEATURES.len()
+    );
     Ok(())
 }
 
@@ -101,20 +122,40 @@ fn parity(a: &Args) -> Result<(), String> {
     let s = load_store(a)?;
     let m = load_model(Path::new(a.get("model")?))?;
     let col = a.opt("column").unwrap_or("pred");
-    let tol: f64 = a.opt("tol").unwrap_or("1e-5").parse().map_err(|_| "bad --tol")?;
+    let tol: f64 = a
+        .opt("tol")
+        .unwrap_or("1e-5")
+        .parse()
+        .map_err(|_| "bad --tol")?;
     let text = fs::read_to_string(a.get("expected")?).map_err(|e| e.to_string())?;
     let mut lines = text.lines();
-    let head: Vec<&str> = lines.next().ok_or("empty expected file")?.split(',').collect();
-    let ix = |k: &str| head.iter().position(|h| *h == k).ok_or(format!("expected file lacks column {k}"));
+    let head: Vec<&str> = lines
+        .next()
+        .ok_or("empty expected file")?
+        .split(',')
+        .collect();
+    let ix = |k: &str| {
+        head.iter()
+            .position(|h| *h == k)
+            .ok_or(format!("expected file lacks column {k}"))
+    };
     let (ip, iy, ic) = (ix("adm3_pcode")?, ix("year")?, ix(col)?);
     let pm = s.panel.province_round_means();
-    let index: HashMap<&str, usize> = s.lgus.iter().enumerate().map(|(i, l)| (l.pcode.as_str(), i)).collect();
+    let index: HashMap<&str, usize> = s
+        .lgus
+        .iter()
+        .enumerate()
+        .map(|(i, l)| (l.pcode.as_str(), i))
+        .collect();
     let (mut n, mut worst, mut at) = (0usize, 0.0f64, String::new());
     for line in lines {
         let c: Vec<&str> = line.split(',').collect();
         let i = *index.get(c[ip]).ok_or(format!("unknown LGU {}", c[ip]))?;
         let t: i32 = c[iy].parse().map_err(|_| "bad year")?;
-        let r = s.panel.prev_round(i, t).ok_or(format!("{} {t}: no previous round", c[ip]))?;
+        let r = s
+            .panel
+            .prev_round(i, t)
+            .ok_or(format!("{} {t}: no previous round", c[ip]))?;
         let want: f64 = c[ic].parse().map_err(|_| "bad prediction")?;
         let got = m.delta(&features::row(&s.panel, &pm, i, t, r));
         let d = (got - want).abs();
@@ -124,10 +165,24 @@ fn parity(a: &Args) -> Result<(), String> {
         }
         n += 1;
     }
-    eprintln!("parity {}: {n} rows, max |core - framework| = {worst:.3e} (tolerance {tol:.0e}){}", m.name,
-              if at.is_empty() { String::new() } else { format!(", worst at {at}") });
-    println!("{{\"model\":\"{}\",\"rows\":{n},\"max_abs_diff\":{worst:e},\"tolerance\":{tol:e}}}", m.name);
-    if worst <= tol { Ok(()) } else { Err(format!("parity failed: {worst:e} > {tol:e}")) }
+    eprintln!(
+        "parity {}: {n} rows, max |core - framework| = {worst:.3e} (tolerance {tol:.0e}){}",
+        m.name,
+        if at.is_empty() {
+            String::new()
+        } else {
+            format!(", worst at {at}")
+        }
+    );
+    println!(
+        "{{\"model\":\"{}\",\"rows\":{n},\"max_abs_diff\":{worst:e},\"tolerance\":{tol:e}}}",
+        m.name
+    );
+    if worst <= tol {
+        Ok(())
+    } else {
+        Err(format!("parity failed: {worst:e} > {tol:e}"))
+    }
 }
 
 fn main() -> ExitCode {

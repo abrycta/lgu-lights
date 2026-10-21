@@ -24,7 +24,7 @@ from archivekit.registry import automatic_links
 from archivekit.snapshot import snapshot
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lgu.paths import REGISTRY_PATH, REPO_ROOT  # noqa: E402
+from lgu.paths import REGISTRY_PATH, REPO_ROOT
 
 
 def main() -> int:

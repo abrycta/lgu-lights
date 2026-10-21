@@ -8,13 +8,17 @@ use std::path::{Path, PathBuf};
 use lgu_core::model::{Estimate, Model, Z90};
 use lgu_core::panel::{self, FIRST_YEAR, LAST_YEAR, ROUNDS};
 use lgu_core::snapshot;
-use lgu_core::tiers::{cv_tier, BREAKS};
-use serde_json::{json, Value};
+use lgu_core::tiers::{BREAKS, cv_tier};
+use serde_json::{Value, json};
 
-use crate::{load_model, load_store, Args};
+use crate::{Args, load_model, load_store};
 
 fn r2(x: f64) -> Value {
-    if x.is_finite() { json!((x * 100.0).round() / 100.0) } else { Value::Null }
+    if x.is_finite() {
+        json!((x * 100.0).round() / 100.0)
+    } else {
+        Value::Null
+    }
 }
 
 fn r1(x: f64) -> String {
@@ -54,7 +58,10 @@ pub fn run(a: &Args) -> Result<(), String> {
     let mut backtests: BTreeMap<i32, Model> = BTreeMap::new();
     for spec in a.all("backtest") {
         let (y, path) = spec.split_once('=').ok_or("--backtest takes YEAR=path")?;
-        backtests.insert(y.parse().map_err(|_| "bad backtest year")?, load_model(Path::new(path))?);
+        backtests.insert(
+            y.parse().map_err(|_| "bad backtest year")?,
+            load_model(Path::new(path))?,
+        );
     }
     let out = PathBuf::from(a.get("out")?);
     let version = a.get("version")?;
@@ -80,7 +87,8 @@ pub fn run(a: &Args) -> Result<(), String> {
         let (mut v, mut t, mut src) = (Vec::new(), Vec::new(), Vec::new());
         for y in FIRST_YEAR..=LAST_YEAR {
             let yi = panel::year_index(y).unwrap();
-            let official = panel::round_index(y).and_then(|k| s.labels[i * ROUNDS.len() + k].clone());
+            let official =
+                panel::round_index(y).and_then(|k| s.labels[i * ROUNDS.len() + k].clone());
             let kind = if panel::round_index(y).is_some() {
                 Kind::Backtest
             } else if y > last_round {
@@ -105,7 +113,13 @@ pub fn run(a: &Args) -> Result<(), String> {
                 v.push(r1(val));
                 t.push(tier.to_string());
                 src.push(so.to_string());
-                *counts.entry(if so == 0 { "official".into() } else { format!("model_{}", kind.as_str()) }).or_default() += 1;
+                *counts
+                    .entry(if so == 0 {
+                        "official".into()
+                    } else {
+                        format!("model_{}", kind.as_str())
+                    })
+                    .or_default() += 1;
             } else {
                 v.push(String::new());
                 t.push(String::new());
@@ -121,11 +135,17 @@ pub fn run(a: &Args) -> Result<(), String> {
                 "inputs": {"radiance": r2(raw[panel::BM_MEAN]), "lit": r2(raw[panel::BM_LIT]),
                            "ndvi": r2(raw[panel::NDVI]), "pop": r2(raw[panel::POP].round())},
             }));
-            let f = |x: Option<f64>| x.filter(|v| v.is_finite()).map(|v| format!("{:.4}", v)).unwrap_or_default();
+            let f = |x: Option<f64>| {
+                x.filter(|v| v.is_finite())
+                    .map(|v| format!("{:.4}", v))
+                    .unwrap_or_default()
+            };
             est_csv.push_str(&format!(
                 "{},{y},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
                 l.pcode,
-                shown.map(|x| if x.2 == 0 { "official" } else { "model" }).unwrap_or(""),
+                shown
+                    .map(|x| if x.2 == 0 { "official" } else { "model" })
+                    .unwrap_or(""),
                 f(shown.map(|x| x.0)),
                 shown.map(|x| x.1.to_string()).unwrap_or_default(),
                 f(official.as_ref().map(|o| o.estimate)),
@@ -142,7 +162,14 @@ pub fn run(a: &Args) -> Result<(), String> {
                 m.map(|e| e.prev_year.to_string()).unwrap_or_default(),
             ));
         }
-        attrs.push_str(&format!("{},\"{}\",{},{},{}\n", l.pcode, l.name.replace('"', "'"), v.join(","), t.join(","), src.join(",")));
+        attrs.push_str(&format!(
+            "{},\"{}\",{},{},{}\n",
+            l.pcode,
+            l.name.replace('"', "'"),
+            v.join(","),
+            t.join(","),
+            src.join(",")
+        ));
         let doc = json!({
             "pcode": l.pcode, "psgc": format!("{}000", &l.pcode[2..]), "name": l.name,
             "province": {"pcode": l.province_pcode, "name": l.province},
@@ -150,48 +177,73 @@ pub fn run(a: &Args) -> Result<(), String> {
             "class": l.class, "area_km2": r2(l.area_km2), "years": years,
         });
         lgu_store::write_json(&out.join("lgu").join(format!("{}.json", l.pcode)), &doc)?;
-        index_lgus.push(json!({"p": l.pcode, "n": l.name, "pv": l.province_pcode, "r": l.region_pcode,
-                               "c": l.class, "x": r2(l.lon), "y": r2(l.lat)}));
+        index_lgus.push(
+            json!({"p": l.pcode, "n": l.name, "pv": l.province_pcode, "r": l.region_pcode,
+                               "c": l.class, "x": r2(l.lon), "y": r2(l.lat)}),
+        );
     }
 
     let provinces: Value = match a.opt("provinces") {
-        Some(f) => serde_json::from_str(&fs::read_to_string(f).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?,
+        Some(f) => serde_json::from_str(&fs::read_to_string(f).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?,
         None => json!([]),
     };
     let mut regions: BTreeMap<&str, &str> = BTreeMap::new();
     for l in &s.lgus {
         regions.insert(&l.region_pcode, &l.region);
     }
-    lgu_store::write_json(&out.join("index.json"), &json!({
-        "lgus": index_lgus, "provinces": provinces,
-        "regions": regions.iter().map(|(p, n)| json!({"p": p, "n": n})).collect::<Vec<_>>(),
-    }))?;
+    lgu_store::write_json(
+        &out.join("index.json"),
+        &json!({
+            "lgus": index_lgus, "provinces": provinces,
+            "regions": regions.iter().map(|(p, n)| json!({"p": p, "n": n})).collect::<Vec<_>>(),
+        }),
+    )?;
     lgu_store::write_atomic(&out.join("tiles-attrs.csv"), attrs.as_bytes())?;
     lgu_store::write_atomic(&out.join("estimates.csv"), est_csv.as_bytes())?;
-    lgu_store::write_atomic(&out.join("whatif").join("snapshot.bin"), &snapshot::encode(p))?;
-    lgu_store::write_atomic(&out.join("whatif").join("model.json"), &fs::read(&model_path).map_err(|e| e.to_string())?)?;
+    lgu_store::write_atomic(
+        &out.join("whatif").join("snapshot.bin"),
+        &snapshot::encode(p),
+    )?;
+    lgu_store::write_atomic(
+        &out.join("whatif").join("model.json"),
+        &fs::read(&model_path).map_err(|e| e.to_string())?,
+    )?;
     if let Some(mp) = a.opt("metrics") {
-        lgu_store::write_atomic(&out.join("metrics.json"), &fs::read(mp).map_err(|e| e.to_string())?)?;
+        lgu_store::write_atomic(
+            &out.join("metrics.json"),
+            &fs::read(mp).map_err(|e| e.to_string())?,
+        )?;
     }
     let provenance: Value = match a.opt("provenance") {
-        Some(f) => serde_json::from_str(&fs::read_to_string(f).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?,
+        Some(f) => serde_json::from_str(&fs::read_to_string(f).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?,
         None => Value::Null,
     };
-    lgu_store::write_json(&out.join("manifest.json"), &json!({
-        "version": version,
-        "generated_at": a.opt("generated"),
-        "git_sha": a.opt("sha"),
-        "years": (FIRST_YEAR..=LAST_YEAR).collect::<Vec<_>>(),
-        "rounds": ROUNDS,
-        "breaks": BREAKS,
-        "tiers": {"reliable_max_cv": 10, "caution_max_cv": 20},
-        "z90": Z90,
-        "lgus": p.len(),
-        "counts": counts,
-        "model": {"name": model.name, "version": model.version, "whatif_widen": model.whatif_widen,
-                  "backtests": backtests.keys().collect::<Vec<_>>()},
-        "provenance": provenance,
-    }))?;
-    eprintln!("materialised {} LGUs x {} years into {}: {:?}", p.len(), panel::N_YEARS, out.display(), counts);
+    lgu_store::write_json(
+        &out.join("manifest.json"),
+        &json!({
+            "version": version,
+            "generated_at": a.opt("generated"),
+            "git_sha": a.opt("sha"),
+            "years": (FIRST_YEAR..=LAST_YEAR).collect::<Vec<_>>(),
+            "rounds": ROUNDS,
+            "breaks": BREAKS,
+            "tiers": {"reliable_max_cv": 10, "caution_max_cv": 20},
+            "z90": Z90,
+            "lgus": p.len(),
+            "counts": counts,
+            "model": {"name": model.name, "version": model.version, "whatif_widen": model.whatif_widen,
+                      "backtests": backtests.keys().collect::<Vec<_>>()},
+            "provenance": provenance,
+        }),
+    )?;
+    eprintln!(
+        "materialised {} LGUs x {} years into {}: {:?}",
+        p.len(),
+        panel::N_YEARS,
+        out.display(),
+        counts
+    );
     Ok(())
 }

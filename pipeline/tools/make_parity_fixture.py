@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lgu import train  # noqa: E402
+from lgu import train
 
 OUT = Path(__file__).resolve().parents[2] / "crates" / "lgu-core" / "tests" / "fixtures"
 

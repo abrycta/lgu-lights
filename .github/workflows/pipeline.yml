@@ -1,0 +1,44 @@
+# Pipeline code checks: lint, unit tests (offline), and registry validation when the private kit is installable.
+name: Pipeline
+
+on:
+  push:
+    paths: [pipeline/**, .github/workflows/pipeline.yml]
+  pull_request:
+    paths: [pipeline/**, .github/workflows/pipeline.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with: { enable-cache: true, cache-dependency-glob: pipeline/uv.lock }
+      - name: Sync (archivekit only when ARCHIVE_READ_TOKEN exists)
+        id: sync
+        working-directory: pipeline
+        env: { ARCHIVE_READ_TOKEN: "${{ secrets.ARCHIVE_READ_TOKEN }}" }
+        run: |
+          if [ -n "$ARCHIVE_READ_TOKEN" ]; then
+            git config --global url."https://x-access-token:${ARCHIVE_READ_TOKEN}@github.com/abrycta/data-archive-kit".insteadOf "https://github.com/abrycta/data-archive-kit"
+            uv sync --locked --group sources --group train && echo "kit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=registry validation skipped::ARCHIVE_READ_TOKEN is not set; the private archivekit can't be installed."
+            uv sync --locked --group train && echo "kit=false" >> "$GITHUB_OUTPUT"
+          fi
+      - run: uv run ruff check lgu tests tools
+        working-directory: pipeline
+      - run: uv run pytest -q
+        working-directory: pipeline
+      - if: steps.sync.outputs.kit == 'true'
+        run: uv run python -m lgu sources validate-registry
+        working-directory: pipeline

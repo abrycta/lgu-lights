@@ -1,0 +1,60 @@
+{
+  "data_version": "pending",
+  "inputs": {
+    "cod-ab-phl-gdb": {
+      "link_id": "hdx",
+      "served_by": "primary",
+      "url": "https://s3.us-east-1.amazonaws.com/hdx-production-filestore/resources/3fa0dbcf-e07d-4506-9821-ba15baa6da07/phl_admin_boundaries.gdb.zip",
+      "sha256": "e7fc18f1383a21066ecfbe595c5c1d77375c93341dedf7284f09d66dbd28c5ad",
+      "rows": 45,
+      "data_as_of": "2026-10-21",
+      "snapshot_date": null,
+      "archive_tag": null,
+      "last_modified": "Thu, 28 May 2026 12:13:07 GMT",
+      "archivekit_version": "1.1.0"
+    },
+    "cod-ab-phl-tables": {
+      "link_id": "hdx",
+      "served_by": "primary",
+      "url": "https://s3.us-east-1.amazonaws.com/hdx-production-filestore/resources/159ffd3d-679f-431c-812f-b6d6f957045e/phl_admin_boundaries.xlsx",
+      "sha256": "3fbaa5f9aab058960ec48e8c8c490b8c7e1257db911913f967d70a7497091f49",
+      "rows": 0,
+      "data_as_of": "2026-10-20",
+      "snapshot_date": null,
+      "archive_tag": null,
+      "last_modified": "Thu, 28 May 2026 12:27:36 GMT",
+      "archivekit_version": "1.1.0"
+    },
+    "psa-sae-2018-2021": {
+      "link_id": "wayback",
+      "served_by": "fallback",
+      "url": "https://web.archive.org/web/20250521080034id_/https://psa.gov.ph/system/files/phdsd/2018%20-%202021%20SAE_with%20PSGC_noHUC.xlsx",
+      "sha256": "5f3c95bb01ed45c2ec1ae7a126fa96f0ea53c12c55fd634a9b3d460a78ff1fa0",
+      "rows": 0,
+      "data_as_of": "2026-10-20",
+      "snapshot_date": null,
+      "archive_tag": null,
+      "last_modified": null,
+      "archivekit_version": "1.1.0"
+    },
+    "psa-sae-2023": {
+      "link_id": "archive",
+      "served_by": "archive",
+      "url": "https://github.com/abrycta/lgu-lights-archive/releases/tag/psa-sae-2023-2026-10-21",
+      "sha256": "303fb0e87bff046acaa21e3ac586f6def6b737b9082eb1f51451a887fd93a026",
+      "rows": 0,
+      "data_as_of": "2026-10-21",
+      "snapshot_date": "2026-10-21",
+      "archive_tag": "psa-sae-2023-2026-10-21",
+      "last_modified": null,
+      "archivekit_version": "1.1.0"
+    }
+  },
+  "fallbacks_used": [
+    "psa-sae-2018-2021",
+    "psa-sae-2023"
+  ],
+  "archive_used": true,
+  "data_as_of": "2026-10-21",
+  "archivekit_version": "1.1.0"
+}

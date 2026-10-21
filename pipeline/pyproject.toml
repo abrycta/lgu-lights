@@ -5,7 +5,6 @@ description = "LGU Lights data pipeline: sources (archivekit), PSA SAE labels, A
 authors = [{ name = "Kurt" }]
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "archivekit",
     "numpy>=2.3",
     "pandas>=2.3",
     "pyarrow>=21",
@@ -13,11 +12,14 @@ dependencies = [
     "pyogrio>=0.11",
     "shapely>=2.1",
     "httpx>=0.28",
+    "pyyaml>=6",
     "pytest>=8.4",
 ]
 
 [dependency-groups]
 dev = ["ruff>=0.13"]
+# archivekit (private kit, pinned tag): installing it needs ARCHIVE_READ_TOKEN in CI (DATA-ARCHIVING.md §6)
+sources = ["archivekit"]
 # Satellite zonal statistics (GitHub Actions only)
 zonal = ["exactextract>=0.2", "rasterio>=1.4", "h5py>=3.14", "earthengine-api>=1.6", "geopandas>=1.1"]
 # Offline training (GitHub Actions or locally; tiny)

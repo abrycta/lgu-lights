@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::features::{self, FEATURES, N_FEATURES};
 use crate::forest::Forest;
 use crate::panel::{Panel, ROUNDS};
-use crate::tiers::{cv_tier, Tier};
+use crate::tiers::{Tier, cv_tier};
 
 /// z for a two-sided 90 % normal interval, used to turn an interval half-width into a CV.
 pub const Z90: f64 = 1.644_853_626_951_472_2;
@@ -56,7 +56,10 @@ impl Model {
     pub fn from_json(s: &str) -> Result<Model, String> {
         let m: Model = serde_json::from_str(s).map_err(|e| e.to_string())?;
         if m.features != FEATURES {
-            return Err(format!("model features {:?} differ from the core's {:?}", m.features, FEATURES));
+            return Err(format!(
+                "model features {:?} differ from the core's {:?}",
+                m.features, FEATURES
+            ));
         }
         if m.forest.n_features != N_FEATURES {
             return Err("forest.n_features differs from the core's feature count".into());
@@ -79,8 +82,15 @@ impl Model {
         let y_prev = x[0];
         let value = (y_prev + self.delta(x)).clamp(0.0, 100.0);
         let b = self.calibration.bin(y_prev);
-        let (h50, h90) = (self.calibration.q50[b] * widen, self.calibration.q90[b] * widen);
-        let cv = if value > 0.0 { 100.0 * (h90 / Z90) / value } else { f64::INFINITY };
+        let (h50, h90) = (
+            self.calibration.q50[b] * widen,
+            self.calibration.q90[b] * widen,
+        );
+        let cv = if value > 0.0 {
+            100.0 * (h90 / Z90) / value
+        } else {
+            f64::INFINITY
+        };
         Estimate {
             value,
             lo50: (value - h50).max(0.0),
@@ -95,7 +105,13 @@ impl Model {
 
     /// Model estimate for (lgu, year) from the last official round before `year`; None when the LGU
     /// has no earlier official estimate.
-    pub fn estimate(&self, panel: &Panel, prov_means: &[f64], lgu: usize, year: i32) -> Option<Estimate> {
+    pub fn estimate(
+        &self,
+        panel: &Panel,
+        prov_means: &[f64],
+        lgu: usize,
+        year: i32,
+    ) -> Option<Estimate> {
         let r = panel.prev_round(lgu, year)?;
         let x = features::row(panel, prov_means, lgu, year, r);
         Some(self.estimate_from_row(&x, ROUNDS[r], 1.0))

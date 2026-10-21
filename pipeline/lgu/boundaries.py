@@ -30,7 +30,6 @@ def lgu_class(name: str) -> str:
 
 
 def build(gdb_zip: Path, out_dir: Path) -> dict:
-    import geopandas as gpd
     import pyogrio
 
     src = _gdb(gdb_zip)

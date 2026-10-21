@@ -160,13 +160,13 @@ def crosswalk(rows: list[SaeRow], adm3: pd.DataFrame, overrides: dict[str, str])
             how["rule"] += 1
             continue
         pool = adm3[(adm3.adm2_name.map(norm) == norm(prov[code]))]
-        hits = pool[pool.adm3_name.map(lambda u: any(same_name(n, u) for n in ns))]
+        hits = pool[pool.adm3_name.map(lambda u, ns=ns: any(same_name(n, u) for n in ns))]
         if len(hits) == 1:
             mapping[code] = hits.adm3_pcode.iloc[0]
             how["province-name"] += 1
             continue
-        hits = adm3[adm3.adm3_name.map(lambda u: any(norm(n) == norm(u) for n in ns))
-                    & adm3.adm3_pcode.map(lambda p: _region_ok(code, p))]
+        hits = adm3[adm3.adm3_name.map(lambda u, ns=ns: any(norm(n) == norm(u) for n in ns))
+                    & adm3.adm3_pcode.map(lambda p, code=code: _region_ok(code, p))]
         if len(hits) == 1:
             mapping[code] = hits.adm3_pcode.iloc[0]
             how["national-name"] += 1

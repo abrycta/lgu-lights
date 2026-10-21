@@ -79,8 +79,7 @@ def _download(client: httpx.Client, product: str, year: int, doy: str, name: str
                 if r.status_code != 200 or "html" in r.headers.get("content-type", ""):
                     raise httpx.HTTPError(f"HTTP {r.status_code} ({r.headers.get('content-type')})")
                 with open(out, "wb") as f:
-                    for chunk in r.iter_bytes(1 << 20):
-                        f.write(chunk)
+                    f.writelines(r.iter_bytes(1 << 20))
             if out.stat().st_size < 1_000_000 or out.read_bytes()[:4] != b"\x89HDF":
                 raise httpx.HTTPError("not an HDF5 file")
             return out
@@ -118,8 +117,8 @@ def bm_year_mosaic(client: httpx.Client, year: int, work: Path) -> np.ndarray:
             a = ds[:].astype(np.float32)
             fill = float(np.asarray(ds.attrs.get("_FillValue", [-999.9])).ravel()[0])
             a[np.isclose(a, fill) | (a < 0)] = np.nan
-        x0 = int(round(((-180 + 10 * h) - BM_WEST) / BM_RES))
-        y0 = int(round((BM_NORTH - (90 - 10 * v)) / BM_RES))
+        x0 = round(((-180 + 10 * h) - BM_WEST) / BM_RES)
+        y0 = round((BM_NORTH - (90 - 10 * v)) / BM_RES)
         mosaic[y0:y0 + 2400, x0:x0 + 2400] = a
         f.unlink()
     return mosaic
@@ -178,10 +177,9 @@ def zonal_black_marble(adm3_path: Path, years: list[int], out: Path) -> Path:
     """Per-LGU yearly Black Marble stats -> Parquet (adm3_pcode, year, bm_mean, bm_sum, bm_lit_frac, bm_valid_frac)."""
     import geopandas as gpd
     import pandas as pd
+    import rasterio
     from exactextract import exact_extract
     from rasterio.transform import from_origin
-
-    import rasterio
 
     polys = gpd.read_parquet(adm3_path)[["adm3_pcode", "geometry"]]
     n = len(years)

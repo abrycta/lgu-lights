@@ -54,9 +54,14 @@ impl Tree {
             if missing != 2 && v.is_nan() {
                 v = 0.0;
             }
-            let go_default = (missing == 1 && v.abs() <= K_ZERO_THRESHOLD) || (missing == 2 && v.is_nan());
+            let go_default =
+                (missing == 1 && v.abs() <= K_ZERO_THRESHOLD) || (missing == 2 && v.is_nan());
             node = if go_default {
-                if dt & 2 != 0 { self.left_child[n] } else { self.right_child[n] }
+                if dt & 2 != 0 {
+                    self.left_child[n]
+                } else {
+                    self.right_child[n]
+                }
             } else if v <= self.threshold[n] {
                 self.left_child[n]
             } else {
@@ -77,19 +82,34 @@ impl Forest {
     pub fn validate(&self) -> Result<(), ForestError> {
         for t in &self.trees {
             let n = t.split_feature.len();
-            if t.threshold.len() != n || t.decision_type.len() != n || t.left_child.len() != n || t.right_child.len() != n {
+            if t.threshold.len() != n
+                || t.decision_type.len() != n
+                || t.left_child.len() != n
+                || t.right_child.len() != n
+            {
                 return Err(ForestError::Malformed("node arrays differ in length"));
             }
             if t.leaf_value.len() != n + 1 {
-                return Err(ForestError::Malformed("a tree needs one more leaf than internal nodes"));
+                return Err(ForestError::Malformed(
+                    "a tree needs one more leaf than internal nodes",
+                ));
             }
             if t.decision_type.iter().any(|d| d & 1 != 0) {
                 return Err(ForestError::Categorical);
             }
-            if t.split_feature.iter().any(|&f| f as usize >= self.n_features) {
+            if t.split_feature
+                .iter()
+                .any(|&f| f as usize >= self.n_features)
+            {
                 return Err(ForestError::Malformed("split feature out of range"));
             }
-            let in_range = |c: &i32| if *c >= 0 { (*c as usize) < n } else { (!*c as usize) <= n };
+            let in_range = |c: &i32| {
+                if *c >= 0 {
+                    (*c as usize) < n
+                } else {
+                    (!*c as usize) <= n
+                }
+            };
             if !t.left_child.iter().chain(&t.right_child).all(in_range) {
                 return Err(ForestError::Malformed("child index out of range"));
             }

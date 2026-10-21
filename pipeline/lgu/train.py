@@ -144,7 +144,7 @@ def conformal(res: np.ndarray, bins: int = N_BINS) -> dict:
 
     q50 = [cq(r[idx == b], 0.5) for b in range(bins)]
     q90 = [cq(r[idx == b], 0.9) for b in range(bins)]
-    return {"edges": [float(e) for e in edges], "q50": q50, "q90": q90, "n": int(len(r))}
+    return {"edges": [float(e) for e in edges], "q50": q50, "q90": q90, "n": len(r)}
 
 
 def apply_calibration(cal: dict, y_prev: np.ndarray, est: np.ndarray) -> dict[str, np.ndarray]:
@@ -154,40 +154,43 @@ def apply_calibration(cal: dict, y_prev: np.ndarray, est: np.ndarray) -> dict[st
             "lo90": np.maximum(est - h90, 0), "hi90": np.minimum(est + h90, 100), "h90": h90}
 
 
+def _flatten(root: dict) -> dict:
+    """One dump_model tree -> LightGBM's flat node encoding (children < 0 are leaves, ~index)."""
+    sf: list[int] = []
+    th: list[float] = []
+    dt: list[int] = []
+    lc: list[int] = []
+    rc: list[int] = []
+    lv: dict[int, float] = {}
+    if "split_feature" not in root:
+        return {"split_feature": [], "threshold": [], "decision_type": [], "left_child": [], "right_child": [],
+                "leaf_value": [float(root["leaf_value"])]}
+
+    def walk(node: dict) -> int:
+        if "leaf_index" in node:
+            lv[int(node["leaf_index"])] = float(node["leaf_value"])
+            return ~int(node["leaf_index"])
+        i = len(sf)
+        sf.append(int(node["split_feature"]))
+        th.append(float(node["threshold"]))
+        if node["decision_type"] != "<=":
+            raise ValueError("only numerical <= splits are supported")
+        miss = {"None": 0, "Zero": 1, "NaN": 2}[node["missing_type"]]
+        dt.append((2 if node["default_left"] else 0) | (miss << 2))
+        lc.append(0)
+        rc.append(0)
+        lc[i] = walk(node["left_child"])
+        rc[i] = walk(node["right_child"])
+        return i
+
+    walk(root)
+    return {"split_feature": sf, "threshold": th, "decision_type": dt, "left_child": lc, "right_child": rc,
+            "leaf_value": [lv[k] for k in range(len(lv))]}
+
+
 def export(f: Fit, cal: dict, name: str, cfg: dict, trained_on: list[int]) -> dict:
     """LightGBM dump_model -> flat arrays read by lgu-core::forest (LightGBM's own node encoding)."""
-    trees = []
-    for b in f.boosters:
-        for t in b.dump_model()["tree_info"]:
-            sf, th, dt, lc, rc, lv = [], [], [], [], [], []
-
-            def walk(node: dict) -> int:
-                if "leaf_index" in node:
-                    lv_i = node["leaf_index"]
-                    while len(lv) <= lv_i:
-                        lv.append(0.0)
-                    lv[lv_i] = float(node["leaf_value"])
-                    return ~lv_i
-                i = len(sf)
-                sf.append(int(node["split_feature"]))
-                th.append(float(node["threshold"]))
-                if node["decision_type"] != "<=":
-                    raise ValueError("only numerical <= splits are supported")
-                miss = {"None": 0, "Zero": 1, "NaN": 2}[node["missing_type"]]
-                dt.append((2 if node["default_left"] else 0) | (miss << 2))
-                lc.append(0)
-                rc.append(0)
-                lc[i] = walk(node["left_child"])
-                rc[i] = walk(node["right_child"])
-                return i
-
-            root = t["tree_structure"]
-            if "leaf_value" in root and "split_feature" not in root:
-                lv = [float(root["leaf_value"])]
-            else:
-                walk(root)
-            trees.append({"split_feature": sf, "threshold": th, "decision_type": dt, "left_child": lc,
-                          "right_child": rc, "leaf_value": lv})
+    trees = [_flatten(t["tree_structure"]) for b in f.boosters for t in b.dump_model()["tree_info"]]
     return {"name": name, "version": time.strftime("%Y-%m-%d"), "features": f.features,
             "forest": {"n_features": len(f.features), "trees": trees, "scale": 1.0 / len(f.boosters)},
             "calibration": {k: cal[k] for k in ("edges", "q50", "q90")}, "whatif_widen": WHATIF_WIDEN,
@@ -199,7 +202,7 @@ def metrics(test: pd.DataFrame, est: np.ndarray, iv: dict | None) -> dict:
     y, yp = test.y.to_numpy(), test.y_prev.to_numpy()
     se = test.se.to_numpy()
     ss_tot = np.sum((y - y.mean()) ** 2)
-    out = {"n": int(len(y)), "mae": float(np.mean(np.abs(est - y))), "rmse": rmse(est, y),
+    out = {"n": len(y), "mae": float(np.mean(np.abs(est - y))), "rmse": rmse(est, y),
            "r2": float(1 - np.sum((est - y) ** 2) / ss_tot)}
     # within-region R2 (between-region variance cannot flatter the score)
     reg = test.adm3_pcode.str[:4].to_numpy()

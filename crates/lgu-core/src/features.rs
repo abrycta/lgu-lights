@@ -31,12 +31,23 @@ pub const FEATURES: [&str; 19] = [
 pub const N_FEATURES: usize = FEATURES.len();
 
 fn ln1p(x: f64) -> f64 {
-    if x.is_finite() && x > -1.0 { x.ln_1p() } else { f64::NAN }
+    if x.is_finite() && x > -1.0 {
+        x.ln_1p()
+    } else {
+        f64::NAN
+    }
 }
 
 /// Feature row for (lgu, year t) given the previous round index `r`.
 /// `raw_at(year_idx)` returns the raw inputs (the panel's, or a what-if scenario's).
-pub fn row_with(panel: &Panel, prov_means: &[f64], lgu: usize, t: i32, r: usize, raw_at: &dyn Fn(usize) -> [f64; panel::N_RAW]) -> [f64; N_FEATURES] {
+pub fn row_with(
+    panel: &Panel,
+    prov_means: &[f64],
+    lgu: usize,
+    t: i32,
+    r: usize,
+    raw_at: &dyn Fn(usize) -> [f64; panel::N_RAW],
+) -> [f64; N_FEATURES] {
     let ry = ROUNDS[r];
     let ti = panel::year_index(t).expect("year in range");
     let ri = panel::year_index(ry).expect("round in range");
@@ -51,8 +62,16 @@ pub fn row_with(panel: &Panel, prov_means: &[f64], lgu: usize, t: i32, r: usize,
     let area = panel.stat(lgu, 0);
     let l_bm_t = ln1p(now[panel::BM_MEAN]);
     let l_bm_r = ln1p(then[panel::BM_MEAN]);
-    let rpc = if now[panel::POP] > 0.0 { ln1p(1000.0 * now[panel::BM_SUM] / now[panel::POP]) } else { f64::NAN };
-    let dens = if area > 0.0 { ln1p(now[panel::POP] / area) } else { f64::NAN };
+    let rpc = if now[panel::POP] > 0.0 {
+        ln1p(1000.0 * now[panel::BM_SUM] / now[panel::POP])
+    } else {
+        f64::NAN
+    };
+    let dens = if area > 0.0 {
+        ln1p(now[panel::POP] / area)
+    } else {
+        f64::NAN
+    };
     let d_pop = if now[panel::POP] > 0.0 && then[panel::POP] > 0.0 {
         now[panel::POP].ln() - then[panel::POP].ln()
     } else {
@@ -94,7 +113,7 @@ pub fn row(panel: &Panel, prov_means: &[f64], lgu: usize, t: i32, r: usize) -> [
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::panel::{Official, N_RAW, N_YEARS};
+    use crate::panel::{N_RAW, N_YEARS, Official};
 
     pub(crate) fn tiny_panel() -> Panel {
         let mut p = Panel::default();
@@ -102,14 +121,34 @@ pub(crate) mod tests {
             let mut raw = vec![0.0; N_YEARS * N_RAW];
             for y in 0..N_YEARS {
                 let g = 1.0 + 0.05 * y as f64;
-                raw[y * N_RAW..(y + 1) * N_RAW].copy_from_slice(&[base * g, base * g * 900.0, 0.3, 1.0, 0.6, 0.4, 10_000.0 * g]);
+                raw[y * N_RAW..(y + 1) * N_RAW].copy_from_slice(&[
+                    base * g,
+                    base * g * 900.0,
+                    0.3,
+                    1.0,
+                    0.6,
+                    0.4,
+                    10_000.0 * g,
+                ]);
             }
             let off = [
-                Official { estimate: 30.0 / base, se: 2.0 },
-                Official { estimate: 28.0 / base, se: 2.0 },
+                Official {
+                    estimate: 30.0 / base,
+                    se: 2.0,
+                },
+                Official {
+                    estimate: 28.0 / base,
+                    se: 2.0,
+                },
                 Official::NONE,
-                Official { estimate: 20.0 / base, se: 1.5 },
-                Official { estimate: 18.0 / base, se: 1.0 },
+                Official {
+                    estimate: 20.0 / base,
+                    se: 1.5,
+                },
+                Official {
+                    estimate: 18.0 / base,
+                    se: 1.0,
+                },
             ];
             p.push(id, prov, &raw, &[100.0, 50.0, 3.0], &off);
         }

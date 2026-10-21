@@ -119,8 +119,10 @@ sources:
         url: https://data.humdata.org/dataset/caf116df-f984-4deb-85ca-41b349d3f313/resource/159ffd3d-679f-431c-812f-b6d6f957045e/download/phl_admin_boundaries.xlsx
       - id: archive
         archive: true
+    pin: { version: v03, valid_on: "2025-02-13", hdx_last_modified: "2026-05-28" }
     checks:
       bytes: { min: 5000000, max: 30000000 }
+      sha256: 3fbaa5f9aab058960ec48e8c8c490b8c7e1257db911913f967d70a7497091f49
       zip_member: "xl/workbook.xml"
       member_format: xml
     archived: { enabled: true, retention: all, max_age_days: 400 }
@@ -150,8 +152,10 @@ sources:
         probe_contains: "gbOpen"
       - id: archive
         archive: true
+    pin: { version: v03, valid_on: "2025-02-13", hdx_last_modified: "2026-05-28" }
     checks:
       bytes: { min: 200000000, max: 800000000 }
+      sha256: e7fc18f1383a21066ecfbe595c5c1d77375c93341dedf7284f09d66dbd28c5ad   # a new HDX version is a deliberate update
       zip_member: "*.gdb/gdb"
     archived: { enabled: true, retention: all, max_age_days: 400 }
 
