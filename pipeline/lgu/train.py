@@ -2,9 +2,18 @@
 executes the exported trees (lgu-core::forest) and must match LightGBM's own predict() (parity gate).
 
 Data: the design matrix written by the Rust CLI (`lgu design`), so training and serving share one
-feature implementation. A labelled row is a transition "official in round r -> official in round t";
-the target is the change in percentage points. Transitions: 2012->2015, 2015->2018, 2018->2021,
-2021->2023 (plus longer gaps where an LGU missed a round).
+feature implementation. A labelled row is a transition "official in round r -> official in round t".
+Transitions: 2012->2015, 2015->2018, 2018->2021, 2021->2023 (plus longer gaps where an LGU missed a round).
+
+Target (model v2, DECISIONS "v2 enhancement"): the change in percentage points **minus the mean change
+of the LGU's province in the same transition** (`within_target`). Most of the change between two PSA
+rounds is shared by a whole province (47-84 % of its variance) and is not predictable from these inputs:
+its correlation with the province's previous level, trend or lights flips from round to round. Trees
+fitted on the raw change (v1) learned each training round's provincial shifts and applied them to the
+next round, which failed across the ELL -> Census EB change. The v2 model learns only how an LGU moves
+relative to its province (mean reversion towards the province, persistence of the previous trend), which
+is stable across rounds, and otherwise carries the province's level forward. The estimate is still
+`clamp(official_r + prediction, 0, 100)`, so the Rust core is unchanged.
 
 Validation, forward-chaining by target round (no information from the test round or later is used for
 fitting, tuning or interval calibration):
@@ -12,7 +21,8 @@ fitting, tuning or interval calibration):
   F2  train t<=2018           -> test 2021  (across the ELL -> Census EB estimator change)
   F3  train t<=2021           -> test 2023  (the nowcast case; headline)
 Hyper-parameters for fold k are chosen by inner forward-chaining inside its training rounds (F1 uses
-the defaults). Conformal intervals for a model trained on rounds S use absolute residuals that models
+the defaults), scored on the within-province error (`within_rmse`): the provincial shift of an inner
+test round is the same for every configuration and would only add noise to the ranking. Conformal intervals for a model trained on rounds S use absolute residuals that models
 made on rounds in S they had not seen (inner forward-chaining); for a single training round, 5-fold
 province-grouped cross-validation. The final model (all rounds) is tuned and calibrated the same way.
 
@@ -45,6 +55,7 @@ MONOTONE = {"d_l_bm": -1, "l_rpc": -1}
 SEEDS = (11, 23, 37, 41, 53)
 Z90 = 1.6448536269514722
 WHATIF_WIDEN = 1.25
+TARGET_NOTE = "change since the previous round minus the province's mean change in the same transition (v2)"
 N_BINS = 4
 DEFAULT = {"num_leaves": 15, "learning_rate": 0.03, "n_estimators": 400, "min_child_samples": 40,
            "lambda_l2": 5.0, "objective": "huber"}
@@ -73,10 +84,27 @@ def _params(cfg: dict, features: list[str], seed: int) -> dict:
     return p
 
 
-def fit(train: pd.DataFrame, cfg: dict, features: list[str] = FEATURES, seeds: tuple[int, ...] = SEEDS) -> Fit:
+GROUP = ["year", "prev_year", "province"]  # one transition of one province
+
+
+def within_target(lab: pd.DataFrame) -> pd.Series:
+    """Change since the previous round minus the mean change of the province's LGUs in the same transition.
+
+    Uses only the labels of that transition, so a model trained on rounds S never sees a later round."""
+    return lab["target"] - lab.groupby(GROUP)["target"].transform("mean")
+
+
+def within_rmse(test: pd.DataFrame, est: np.ndarray) -> float:
+    """RMSE after removing each province's mean error: the part of the error the model controls."""
+    e = pd.Series(est - test["y"].to_numpy(), index=test.index)
+    return float(np.sqrt(np.mean((e - e.groupby([test[c] for c in GROUP]).transform("mean")) ** 2)))
+
+
+def fit(train: pd.DataFrame, cfg: dict, features: list[str] = FEATURES, seeds: tuple[int, ...] = SEEDS,
+        target: str = "target_within") -> Fit:
     """An average of boosters with different bagging seeds (variance reduction; one forest in the core)."""
     x = train[features].to_numpy(dtype=np.float64)
-    y = train["target"].to_numpy(dtype=np.float64)
+    y = train[target].to_numpy(dtype=np.float64)
     boosters = [lgb.train(_params(cfg, features, s), lgb.Dataset(x, y, free_raw_data=False),
                           num_boost_round=cfg["n_estimators"]) for s in seeds]
     return Fit(boosters, features)
@@ -103,10 +131,10 @@ def tune(lab: pd.DataFrame, rounds: list[int]) -> tuple[dict, list[dict]]:
         for tr, te in folds:
             f = fit(lab[lab.year.isin(tr)], cfg, seeds=SEEDS[:1])  # tuning: one seed keeps CI minutes low
             test = lab[lab.year == te]
-            errs.append(rmse(test.y_prev + f.predict(test), test.y))
-        results.append({"cfg": cfg, "rmse": float(np.mean(errs))})
-    best = min(results, key=lambda r: r["rmse"])
-    return best["cfg"], sorted(results, key=lambda r: r["rmse"])[:5]
+            errs.append(within_rmse(test, (test.y_prev + f.predict(test)).to_numpy()))
+        results.append({"cfg": cfg, "within_rmse": float(np.mean(errs))})
+    best = min(results, key=lambda r: r["within_rmse"])
+    return best["cfg"], sorted(results, key=lambda r: r["within_rmse"])[:5]
 
 
 def calibration_residuals(lab: pd.DataFrame, rounds: list[int], cfg: dict) -> np.ndarray:
@@ -194,7 +222,7 @@ def export(f: Fit, cal: dict, name: str, cfg: dict, trained_on: list[int]) -> di
     return {"name": name, "version": time.strftime("%Y-%m-%d"), "features": f.features,
             "forest": {"n_features": len(f.features), "trees": trees, "scale": 1.0 / len(f.boosters)},
             "calibration": {k: cal[k] for k in ("edges", "q50", "q90")}, "whatif_widen": WHATIF_WIDEN,
-            "meta": {"trained_on_rounds": trained_on, "config": cfg, "seeds": list(SEEDS),
+            "meta": {"trained_on_rounds": trained_on, "config": cfg, "seeds": list(SEEDS), "target": TARGET_NOTE,
                      "calibration_residuals": cal["n"], "lightgbm": lgb.__version__}}
 
 
@@ -203,7 +231,10 @@ def metrics(test: pd.DataFrame, est: np.ndarray, iv: dict | None) -> dict:
     se = test.se.to_numpy()
     ss_tot = np.sum((y - y.mean()) ** 2)
     out = {"n": len(y), "mae": float(np.mean(np.abs(est - y))), "rmse": rmse(est, y),
-           "r2": float(1 - np.sum((est - y) ** 2) / ss_tot)}
+           "r2": float(1 - np.sum((est - y) ** 2) / ss_tot), "bias": float(np.mean(est - y))}
+    # error left after removing each province's mean error (the shared provincial shift)
+    e = pd.Series(est - y, index=test.index)
+    out["mae_within_province"] = float(np.mean(np.abs(e - e.groupby([test[c] for c in GROUP]).transform("mean"))))
     # within-region R2 (between-region variance cannot flatter the score)
     reg = test.adm3_pcode.str[:4].to_numpy()
     dy = y - pd.Series(y).groupby(reg).transform("mean").to_numpy()
@@ -228,6 +259,12 @@ def metrics(test: pd.DataFrame, est: np.ndarray, iv: dict | None) -> dict:
         lo, hi = test.ci_lo.to_numpy(), test.ci_hi.to_numpy()
         out["overlap_psa_ci"] = float(np.mean((iv["lo90"] <= hi) & (iv["hi90"] >= lo)))
         out["psa_ci_width90"] = float(np.nanmean(hi - lo))
+        # reliability tiers as the core assigns them: model CV = (90 % half-width / z90) / estimate
+        with np.errstate(divide="ignore"):
+            cv = np.where(est > 0, 100 * (iv["h90"] / Z90) / est, np.inf)
+        out["tier_reliable"] = float(np.mean(cv <= 10))
+        out["tier_caution"] = float(np.mean((cv > 10) & (cv <= 20)))
+        out["tier_unreliable"] = float(np.mean(cv > 20))
     return out
 
 
@@ -239,6 +276,7 @@ def run(design_path: Path, out: Path) -> dict:
     # PSA CV and CI for the test rows (scoring against PSA's own uncertainty)
     labels = pd.read_parquet(design_path.parent / "labels.parquet")[["adm3_pcode", "round_year", "cv", "ci_lo", "ci_hi"]]
     lab = lab.merge(labels.rename(columns={"round_year": "year"}), on=["adm3_pcode", "year"], how="left")
+    lab["target_within"] = within_target(lab)
     rounds = sorted(lab.year.unique().tolist())  # [2015, 2018, 2021, 2023]
     log.info("labelled transitions per target round: %s", lab.year.value_counts().sort_index().to_dict())
 

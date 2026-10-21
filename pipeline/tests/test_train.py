@@ -14,3 +14,13 @@ def test_conformal_quantile_is_finite_sample_corrected_and_bins_match_core():
     assert cal["q50"] == [26.0] * 4
     iv = train.apply_calibration(cal, np.array([cal["edges"][0]]), np.array([10.0]))
     assert iv["h90"][0] == 46.0  # a value equal to an edge stays in the lower bin, as in the core
+
+
+def test_within_target_removes_the_province_mean_change_of_each_transition():
+    import pandas as pd
+    lab = pd.DataFrame({"year": [2018, 2018, 2018, 2021], "prev_year": [2015, 2015, 2015, 2018],
+                        "province": ["A", "A", "B", "A"], "target": [-4.0, 2.0, 5.0, 3.0],
+                        "y": [10.0, 20.0, 30.0, 40.0]})
+    assert train.within_target(lab).tolist() == [-3.0, 3.0, 0.0, 0.0]
+    # a province-wide shift in the estimate is not counted as within-province error
+    assert train.within_rmse(lab, lab.y.to_numpy() + [1.0, 1.0, -2.0, 7.0]) == 0.0
