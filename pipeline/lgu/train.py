@@ -22,8 +22,9 @@ fitting, tuning or interval calibration):
   F3  train t<=2021           -> test 2023  (the nowcast case; headline)
 Hyper-parameters for fold k are chosen by inner forward-chaining inside its training rounds (F1 uses
 the defaults), scored on the within-province error (`within_rmse`): the provincial shift of an inner
-test round is the same for every configuration and would only add noise to the ranking. Conformal intervals for a model trained on rounds S use absolute residuals that models
-made on rounds in S they had not seen (inner forward-chaining); for a single training round, 5-fold
+test round is the same for every configuration and would only add noise to the ranking. Conformal
+intervals for a model trained on rounds S use absolute residuals that models made on rounds in S they
+had not seen (inner forward-chaining); for a single training round, 5-fold
 province-grouped cross-validation. The final model (all rounds) is tuned and calibrated the same way.
 
 Outputs (out/): model.json (final), backtest-<year>.json (fold models, displayed as backtests),

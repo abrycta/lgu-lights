@@ -77,14 +77,20 @@ never the reverse. Python never re-implements a feature: it trains on the design
 from the latest earlier PSA round (`between` for 2013–2022 gaps, `nowcast` for 2024–2025). In round years
 the panel also shows the **backtest**: what a model trained only on earlier rounds would have said.
 
-## Model v0 (see docs/DECISIONS.md, Build notes B5–B7, and `metrics.json`)
+## Model v2 (see docs/DECISIONS.md, "v2 enhancement", and `metrics.json`)
 
-LightGBM on changes since the last PSA round (19 features derived in `lgu-core::features`), five-seed
-average, monotone constraints on radiance growth and radiance per person, hyper-parameters tuned by inner
-forward-chaining inside each training window, split-conformal 50/90 % intervals from residuals on rounds
-the model had not seen, binned by the previous official level; model CV = (90 % half-width / 1.645) /
-estimate, tiers at 10/20 %. Validated forward-chaining: F1 → 2018, F2 → 2021, F3 → 2023 (headline), with
-carry-forward and no-satellite baselines on the same rows.
+LightGBM on the change since the last PSA round **relative to the LGU's province**: the training target is
+the LGU's change minus the mean change of its province in the same transition, so the model learns how a
+place moves within its province (mean reversion, persistence of the previous trend) and carries the
+province's level forward; provincial shifts between rounds are not predictable from these inputs and stay
+in the interval. 19 features derived in `lgu-core::features` (unchanged from v1), five-seed average,
+monotone constraints on radiance growth and radiance per person, hyper-parameters tuned by inner
+forward-chaining inside each training window (scored on the within-province error), split-conformal
+50/90 % intervals from residuals on rounds the model had not seen, binned by the previous official level;
+model CV = (90 % half-width / 1.645) / estimate, tiers at 10/20 %. The estimate is still
+`clamp(official_r + forest(x), 0, 100)`, so the core, the snapshot and `model.json` keep their v1 format.
+Validated forward-chaining: F1 → 2018, F2 → 2021, F3 → 2023 (headline), with carry-forward, drift and
+no-satellite baselines on the same rows.
 
 ## Local commands (fanless laptop: `taskpolicy -b`, `-j 2`)
 

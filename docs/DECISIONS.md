@@ -78,3 +78,73 @@ Milestone-2 candidates from these numbers: model the estimator break explicitly 
 ### Rename (2026-10-21)
 
 The public name is **Lights**, at **lights.krtmtthw.dev** (Kurt's call: it reads better). `lgu.krtmtthw.dev` stays in DNS and the page sends visitors on to the new host (`web/public/host-redirect.js`), because DNS is at Porkbun and there is no edge redirect. Internal IDs keep `lgu`: repos, the Pages project `lgu-lights`, the Earth Engine project, the crates and the archive.
+
+## v2 enhancement (data version v2, run 39571434610, 2026-10-21)
+
+Kurt asked to tune the data and the model for accuracy and reliability, stated as an enhancement. **What changed: one thing, the training target.** The features, the Rust core, the snapshot, `model.json` and the read-model contract are unchanged, and data version v2 is trained on the v1 feature store (`features-v1`; `data.yml` gained `features_from` for that).
+
+### What the v1 numbers were hiding
+
+Splitting each fold's error into a shared provincial part and the rest:
+
+- **Most of the change between two PSA rounds is shared by a whole province**: the province means explain 47 % (2015), 76 % (2018), 84 % (2021) and 66 % (2023) of the variance of LGU changes.
+- **That provincial shift is not predictable from these inputs.** Its correlation with the province's previous level, previous trend, population growth or night-light growth changes size and sign from round to round (for example population growth −0.61 in 2018, +0.40 in 2021; light growth +0.05 to +0.20, the "wrong" sign, every round). The national part alone was −5.2 pp (2015 → 2018), +0.2 pp (2018 → 2021) and −3.3 pp (2021 → 2023).
+- **What is left after removing each province's mean error is small and stable**: about 3 pp MAE for every method, close to PSA's own uncertainty (mean SE 2.3–3.3 pp). Inside a province, places move back towards the province (correlation of the change with the distance from the province mean −0.42 to −0.62 in every round) and a previous rise tends to reverse (−0.19 to −0.61).
+
+v1's trees, fitted on the raw change, learned each training round's provincial shifts from features that happened to line up with them and applied them to the next round. That is why F2 (2018 → 2021, across the ELL → Census EB change and COVID) was worse than carrying the 2018 value forward.
+
+### The change
+
+The target is now **the LGU's change minus the mean change of its province in the same transition** (`train.within_target`). The model learns only how a place moves relative to its province and otherwise carries the province's level forward. The estimate is still `clamp(official_r + forest(x), 0, 100)`. Tuning (same grid, same inner forward-chaining) is scored on the within-province RMSE (`train.within_rmse`), because the provincial shift of an inner test round is the same for every configuration and only adds noise to the ranking. Intervals are calibrated as before (B12). `metrics.json` gains `bias`, `mae_within_province` and the tier shares per fold (`tier_reliable`, `tier_caution`, `tier_unreliable`).
+
+### Before and after (forward-chaining, same rows and baselines as v1)
+
+| Fold | Test | Version | Model MAE | Carry | Drift | No-sat | Model R² | Spearman | 90 % coverage | 50 % coverage | Mean 90 % width | PSA mean 90 % CI width |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| F1 | 2018 | v1 | 8.34 | 8.13 | **7.48** | 8.15 | 0.65 | 0.90 | 0.65 | 0.21 | 19.0 | 8.1 |
+| F1 | 2018 | v2 | 8.04 | 8.13 | **7.48** | 8.08 | 0.68 | 0.91 | 0.66 | 0.23 | 19.5 | 8.1 |
+| F2 | 2021 | v1 | 9.60 | **7.97** | 9.13 | 9.52 | −0.25 | 0.79 | 0.69 | 0.40 | 23.2 | 8.1 |
+| F2 | 2021 | v2 | **7.53** | 7.97 | 9.13 | 7.51 | 0.13 | 0.79 | 0.83 | 0.55 | 25.4 | 8.1 |
+| F3 | 2023 | v1 | **5.57** | 6.33 | 5.89 | 5.62 | 0.55 | 0.83 | 0.95 | 0.71 | 30.1 | 7.5 |
+| F3 | 2023 | v2 | 5.98 | 6.33 | 5.89 | 6.04 | 0.54 | 0.83 | 0.95 | 0.66 | 28.5 | 7.5 |
+
+Plainly:
+
+- **v2 beats carry-forward in every fold** (−0.09, −0.44, −0.35 pp); v1 beat it only in F3. The mean MAE over the three folds falls from 7.84 to 7.18 pp.
+- **F3 (the 2023 headline) gets worse: 5.57 → 5.98 pp**, and R² 0.55 → 0.54. v1's F3 result came largely from guessing the national decline; v2 does not bet on the national direction. **Drift beats v2 in F1 and F3**, the two periods in which poverty fell, and loses badly in F2 (9.13).
+- **F2 improves by 2.07 pp** and its R² turns positive (−0.25 → 0.13). F2 Spearman is slightly lower (0.794 → 0.786).
+- **The predicted change now points the right way**: the correlation between predicted and actual change is 0.31, 0.43 and 0.37 (v1: −0.02, −0.29, 0.26).
+- **Coverage**: F2 rises from 0.69 to 0.83 with intervals 2.2 pp wider; F3 stays at 0.95 with intervals 1.6 pp narrower. **F1 is still under-covered (0.66)**: a model calibrated on one round (2012 → 2015, national change −1.3 pp) cannot know that the next round's provincial shifts will be larger (−5.2 pp nationally). No interval method tried here fixes that without inventing a number. The 2018 backtest on the site comes from this F1 model.
+- **Satellites still add little**: without them v2 is 0.04 pp worse in F1, 0.02 pp better in F2 and 0.06 pp worse in F3.
+- **Reliability tiers** (share of model estimates in the published estimates table, all years and kinds): v1 0 % reliable, 3.9 % use with caution, 96.1 % unreliable; v2 0 %, 4.3 %, 95.7 %. In the test folds: F1 0/39/61 %, F2 0/3/97 %, F3 0/0/100 %. F1's "use with caution" share comes from its too-narrow intervals, so it is not earned. Mean 90 % width of all model estimates: backtest 23.9 → 24.2, between 31.3 → 29.1, nowcast 26.9 → 25.1 pp.
+- **Parity**: Rust core vs LightGBM over 21,154 design rows × 4 models, max |Δ| 4.8e-14 (tolerance 1e-5). The read models keep the v1 layout and fields (`manifest.json`, `index.json`, `lgu/`, `tiles/`, `whatif/`; `snapshot.bin` is byte-identical); `metrics.json` only gains fields, and `tuning_top5[].rmse` is now `within_rmse`.
+
+How the design was chosen, honestly: the decomposition above and the screening below used all four transitions, including 2023, so the choice of target is not a nested out-of-sample result. It was not picked for its F3 score: it is worse on F3 than v1. It was picked because the within-province part improves on its own baseline in every fold, for every option for the provincial part. Inside each fold, the hyper-parameters and the calibration still see only that fold's training rounds.
+
+### Tried and not kept
+
+Screening runs with default hyper-parameters (no tuning), no monotone constraints unless noted, two to five seeds, MAE for F1/F2/F3 (so the numbers differ slightly from the tuned table above):
+
+| Idea | Result | Kept? |
+|---|---|---|
+| Provincial part = drift (training-period mean change per year × gap) instead of carry | 7.36 / 8.60 / 5.52: beats drift in every fold but loses to carry in F2 by 0.6 pp, the v1 failure in smaller form | no |
+| Provincial part = province mean reversion (fitted on training rounds), with or without drift | 8.27 / 7.04 / 6.19 and 7.50 / 8.07 / 5.68: the gain in F2 or F1 is lost in another fold | no |
+| Choosing between carry and drift levels by inner folds | picks drift for F2 (8.60) and carry for F3 (5.95): selection chases the last round's national shift | no |
+| Spatial history features: province mean of the previous trend, region mean, 8 nearest neighbours' previous level and trend, distance from the province mean | within-province MAE better by 0.02–0.17 pp, total MAE worse in two of three folds (best set: 8.02 / 7.83 / 6.03 vs 8.05 / 7.58 / 5.94) | no |
+| Second previous level (`y_prev2`) | 8.05 / 7.57 / 5.96: no change | no |
+| Sample weights 1/(SE² + SE_prev² + τ²), τ² = 0.5 or 4 | 8.04–8.05 / 7.63 / 5.99–6.01: slightly worse | no |
+| Dropping `d_l_pop` (WorldPop is carried from 2020 after 2020) | 8.08 / 7.58 / 6.00: slightly worse | no |
+| No monotone constraints | 8.05 / 7.58 / 5.94 vs 8.04 / 7.58 / 5.91 with them | constraints kept |
+| L2 instead of Huber | left to tuning (it picks L2 for F2, F3 and the final model) | in the grid |
+| Re-centring the predictions to a zero mean per province | worse in all three folds (8.14 / 7.81 / 6.23): the trees' small provincial component helps | no |
+| Shrinking the prediction towards carry (×0.5, ×0.75) or stretching it (×1.25, ×1.5) | ×1 is within 0.10 pp of the best weight in every fold, and the best weight differs by fold (×0.75–1 in F1, ×1.5 in F2 and F3) | no |
+| Intervals: province-grouped CV pooled over all training rounds; union with forward residuals; per-round maximum quantile | coverage 0.66 / 0.78 / 0.92, 0.66 / 0.80 / 0.93, 0.66 / 0.82 / 0.98 (width 36 pp in F3) | no (v1 method kept) |
+| Intervals scaled by √gap (random walk) | F3 (2-year gap, calibrated on 3-year gaps) drops to 0.86: errors do not shrink with the gap that fast, so 1-year intervals are not narrowed | no |
+| Mondrian bins by PSA SE, by province volatility, or 8 bins instead of 4 | coverage within ±0.03 and widths within ±1 pp of the quartile bins | no |
+
+**Not computed:** VIIRS VNL v2 composites, GHSL urban fraction, population-weighted lights and other NDVI aggregations. The whole satellite block is worth 0.02–0.06 pp; light growth correlates at most 0.09 with the within-province change and +0.05 to +0.20 (wrong sign, unstable) with the provincial change in every round, and a second lights product measures the same thing. Not worth the Earth Engine quota until something can predict the provincial shift.
+
+### Next steps for the remaining problems
+
+- **F1 coverage** needs evidence on how much provinces move between rounds from more than one transition. The 2006 and 2009 SAE rounds (in the archived "2018 − 2021" workbook) could calibrate the provincial part of the interval without entering the model. That changes Q4 ("history only"), so it is Kurt's call.
+- **The provincial shift** is where the remaining error is. Province-level inputs with a stable relationship to it (for example FIES-based provincial estimates, which PSA publishes before the SAE round) would be the next lever, with the leakage rules of MODELING-PLAN §5.5.
