@@ -51,6 +51,7 @@ never the reverse. Python never re-implements a feature: it trains on the design
 | inputs | `uv run python -m lgu inputs` (archivekit; needs `ARCHIVE_READ_TOKEN` in CI) or `inputs-direct` (B4) | `raw/psa/*.xlsx`, `raw/boundaries/*`, provenance sidecars, `interim/provenance.json` |
 | boundaries | `lgu boundaries` | `interim/adm3.parquet` (GeoParquet, full resolution), `lgus.parquet`, `provinces.json`, `tiles/*.geojsonl` |
 | labels | `lgu labels` | `build/labels.parquet`, `crosswalk-report.json` (+ committed copy in `pipeline/inputs/`) |
+| fies | `lgu fies` (OpenSTAT tables fetched by `tools/fetch_openstat.py`, archived) | `build/provinces_fies.parquet` (+ committed copy in `pipeline/inputs/`) |
 | zonal | `lgu zonal-ee`, `lgu zonal-bm` (`zonal-vj` optional) | `interim/zonal_*.parquet` |
 | features | `lgu features` (gated: row counts, ranges, missing values) | `build/features.parquet` |
 | design | `target/release/lgu design --build data/build --out data/build/design.csv` | one row per (LGU, year) with a previous PSA round; labelled rows = round years |
@@ -70,27 +71,30 @@ never the reverse. Python never re-implements a feature: it trains on the design
 | `lgu/<pcode>.json` | per year: `official` (PSA estimate, SE, CV, 90 % CI, tier, estimator ELL/Census EB), `model` (estimate, 50/90 % intervals, CV, tier, `from` round, `kind` backtest/between/nowcast), `shown` (what the map draws and its source), `inputs` (radiance, lit fraction, NDVI, population) |
 | `metrics.json` | the validation leaderboard (folds F1–F3, baselines, ablation, calibration, tuning) |
 | `tiles/` | MVT z0–10, layer `lgu` with `v12…v25` (value), `t12…t25` (tier), `s12…s25` (0 official, 1 model) per S1; layer `prov` |
-| `whatif/` | `snapshot.bin` (panel, f32) and `model.json` for the WASM what-if |
+| `whatif/` | `snapshot.bin` (panel, f32; version 2 since v3 adds the provincial FIES table, version 1 still readable) and `model.json` for the WASM what-if |
 | `estimates.csv` / `.parquet` | the long table (also published with the data release) |
 
 **Which value the map shows:** the PSA official estimate in round years; otherwise the model estimate
 from the latest earlier PSA round (`between` for 2013–2022 gaps, `nowcast` for 2024–2025). In round years
 the panel also shows the **backtest**: what a model trained only on earlier rounds would have said.
 
-## Model v2 (see docs/DECISIONS.md, "v2 enhancement", and `metrics.json`)
+## Model v3 (see docs/DECISIONS.md, "v2 enhancement" and "v3 enhancement", and `metrics.json`)
 
-LightGBM on the change since the last PSA round **relative to the LGU's province**: the training target is
-the LGU's change minus the mean change of its province in the same transition, so the model learns how a
-place moves within its province (mean reversion, persistence of the previous trend) and carries the
-province's level forward; provincial shifts between rounds are not predictable from these inputs and stay
-in the interval. 19 features derived in `lgu-core::features` (unchanged from v1), five-seed average,
-monotone constraints on radiance growth and radiance per person, hyper-parameters tuned by inner
-forward-chaining inside each training window (scored on the within-province error), split-conformal
-50/90 % intervals from residuals on rounds the model had not seen, binned by the previous official level;
-model CV = (90 % half-width / 1.645) / estimate, tiers at 10/20 %. The estimate is still
-`clamp(official_r + forest(x), 0, 100)`, so the core, the snapshot and `model.json` keep their v1 format.
-Validated forward-chaining: F1 → 2018, F2 → 2021, F3 → 2023 (headline), with carry-forward, drift and
-no-satellite baselines on the same rows.
+Training labels: the PSA SAE rounds 2006–2023 (2006 and 2009 since v3; no satellite inputs before
+2012, NaN). Estimate = `clamp(official_r + forest(x) + linear(x), 0, 100)`:
+
+- **forest**: LightGBM on the change since the last round **relative to the LGU's province** (the change
+  minus the province's mean change in that transition), so it learns how a place moves within its
+  province; 19 features from `lgu-core::features`, five-seed average, monotone constraints on radiance
+  growth and radiance per person, hyper-parameters tuned by inner forward-chaining (within-province error);
+- **linear** (`model.json` `linear`, optional): the national drift (coefficient on `gap`) and the
+  province's lagged FIES-vs-SAE gap (`prov_fies_gap`, PSA's provincial FIES figure of the previous round),
+  each kept only when inner forward-chaining inside the training rounds prefers it.
+
+Split-conformal 50/90 % intervals from residuals on rounds the model had not seen, binned by the previous
+official level; model CV = (90 % half-width / 1.645) / estimate, tiers at 10/20 %. Validated
+forward-chaining: F1 → 2018, F2 → 2021, F3 → 2023 (headline), with carry-forward, drift and no-satellite
+baselines on the same rows, plus province-level MAE against PSA's SAE aggregates and FIES.
 
 ## Local commands (fanless laptop: `taskpolicy -b`, `-j 2`)
 
