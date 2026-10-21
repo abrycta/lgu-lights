@@ -14,6 +14,8 @@ setWorkerUrl(workerUrl);
 // dev server) answers a missing file with the SPA's index.html and status 200. This protocol turns a
 // 404 or an HTML answer into an empty tile instead of a parse error.
 maplibregl.addProtocol("lgutile", async (params, abort) => {
+  const packed = packedTile(params.url.slice("lgutile://".length));
+  if (packed) return { data: packed };
   const r = await fetch(params.url.slice("lgutile://".length), { signal: abort.signal });
   if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return { data: new ArrayBuffer(0) };
   return { data: await r.arrayBuffer() };
@@ -25,7 +27,7 @@ import * as maplibregl from "maplibre-gl";
 import type { MapGeoJSONFeature, Map as MlMap } from "maplibre-gl";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
-import { tilesUrl } from "@/data/load";
+import { packedTile, tilesUrl } from "@/data/load";
 import type { IndexProvince } from "@/data/types";
 import { sourceLabel, TIER_LABEL, type Lang } from "@/lib/honesty";
 import { pct } from "@/lib/format";
@@ -42,6 +44,8 @@ export interface MapViewProps {
   lgu: string | null;
   names: Map<string, string>;
   onPick: (pcode: string) => void;
+  /** The frozen /embed view: no interaction or controls, no animation, a set pixel ratio, and a callback once the first full frame is drawn. */
+  frozen?: { pixelRatio: number; onReady: () => void };
 }
 
 const yy = (year: number) => String(year % 100).padStart(2, "0");
@@ -50,13 +54,14 @@ function idOf(pcode: string | null): number {
   return pcode ? Number.parseInt(pcode.slice(2), 10) : -1;
 }
 
-export default function MapView({ base, year, breaks, theme, lang, province, lgu, names, onPick }: MapViewProps) {
+export default function MapView({ base, year, breaks, theme, lang, province, lgu, names, onPick, frozen }: MapViewProps) {
   const t = useT();
   const el = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const loaded = useRef(false);
   // Latest props for event handlers registered once.
   const props = useRef({ year, lang, names, onPick, province });
+  const frozenRef = useRef(frozen);
   const themeRef = useRef(theme);
   useLayoutEffect(() => {
     props.current = { year, lang, names, onPick, province };
@@ -77,8 +82,10 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
       dragRotate: false,
       pitchWithRotate: false,
       attributionControl: { compact: true },
+      ...(frozen ? { interactive: false, pixelRatio: frozen.pixelRatio } : {}),
       style: {
         version: 8,
+        ...(frozen ? { transition: { duration: 0, delay: 0 } } : {}),
         sources: {
           lgu: {
             type: "vector",
@@ -135,13 +142,18 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     });
     mapRef.current = map;
     if (import.meta.env.DEV) (window as unknown as { __map?: MlMap }).__map = map;
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
+    if (!frozen) {
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
+    }
 
     map.on("load", () => {
       loaded.current = true;
       addHatchImages(map, theme);
+      if (frozen) map.once("idle", () => frozenRef.current?.onReady());
     });
+    // Frozen: the view is the province's fit for the final box (late web fonts can still change its height).
+    if (frozen) map.on("resize", () => map.fitBounds(props.current.province?.bbox ?? PH_BOUNDS, { padding: 32, maxZoom: 10, duration: 0 }));
     // Akari's hatch images on demand: tiles can be parsed before "load", and setStyle() drops added images.
     map.setMissingStyleImageResolver(async (id) => {
       if (id.startsWith("hatch-")) addHatchImages(map, themeRef.current);
@@ -243,7 +255,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     const map = mapRef.current;
     if (!map) return;
     const b = province?.bbox ?? PH_BOUNDS;
-    map.fitBounds(b, { padding: 32, maxZoom: 10, duration: 800 });
+    map.fitBounds(b, { padding: 32, maxZoom: 10, duration: frozenRef.current ? 0 : 800 });
   }, [province]);
 
   // Localise MapLibre's control labels (its locale option is read only at construction).

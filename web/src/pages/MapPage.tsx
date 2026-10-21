@@ -13,6 +13,7 @@ import { Guide } from "@/features/Guide";
 import { ProvinceView } from "@/features/ProvinceTable";
 import { Glossary } from "@/features/Term";
 import { YearControl } from "@/features/YearControl";
+import type { MapViewProps } from "@/map/MapView";
 import { themeKey } from "@/map/style";
 import { LguPanel } from "@/panel/LguPanel";
 
@@ -76,7 +77,8 @@ function Intro() {
   );
 }
 
-export default function MapPage() {
+/** `embed`: the frozen /embed view (src/embed): the full viewport, no first-visit guide, a frozen map. */
+export default function MapPage({ embed }: { embed?: MapViewProps["frozen"] } = {}) {
   const t = useT();
   const { lang } = useLang();
   const { resolvedTheme } = useTheme();
@@ -121,7 +123,7 @@ export default function MapPage() {
   return (
     <>
       <SyntheticBanner version={manifest.version} />
-      <div className="flex flex-col lg:h-[calc(100dvh-81px)] lg:flex-row">
+      <div className={`flex flex-col lg:flex-row ${embed ? "h-dvh" : "lg:h-[calc(100dvh-81px)]"}`}>
         <section className="flex min-w-0 flex-1 flex-col" aria-label={t("Map and controls", "地図と操作")}>
           <div className="grid gap-3 border-b border-border px-ak-gutter py-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
             <YearControl years={manifest.years} rounds={manifest.rounds} year={year} onChange={setYear} />
@@ -134,15 +136,17 @@ export default function MapPage() {
           <div className="relative min-h-[55vh] flex-1">
             <ErrorBoundary>
               <Suspense fallback={<Loading />}>
-                <MapView base={base} year={year} breaks={manifest.breaks} theme={themeKey(resolvedTheme, hc)} lang={lang} province={province} lgu={url.lgu} names={names} onPick={onPick} />
+                <MapView base={base} year={year} breaks={manifest.breaks} theme={themeKey(resolvedTheme, hc)} lang={lang} province={province} lgu={url.lgu} names={names} onPick={onPick} frozen={embed} />
               </Suspense>
             </ErrorBoundary>
             <div className="pointer-events-none absolute bottom-8 left-ak-gutter hidden max-w-[70%] md:block [&>*]:pointer-events-auto">
               <Legend breaks={manifest.breaks} year={year} isRound={manifest.rounds.includes(year)} />
             </div>
-            <div className="absolute top-2 right-2 z-10">
-              <Guide />
-            </div>
+            {embed ? null : (
+              <div className="absolute top-2 right-2 z-10">
+                <Guide />
+              </div>
+            )}
             {province ? (
               <div className="absolute top-2 left-ak-gutter">
                 <Button variant="outline" size="sm" className="bg-background" onClick={() => selectProvince(null)}>

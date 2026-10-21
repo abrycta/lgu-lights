@@ -83,3 +83,41 @@ export function loadNational(): Promise<NationalValues | null> {
 
 /** z/x/y tile template for MapLibre (absolute, as MapLibre requires). */
 export const tilesUrl = (b: string) => `${b}tiles/{z}/{x}/{y}.pbf`;
+
+// The frozen /embed view reads everything from one pre-packed file (scripts/build-embed.mjs): seeding
+// fills the caches above, so the shared components never fetch, and the tiles come from the pack.
+export interface EmbedPack {
+  version: string;
+  manifest: Manifest;
+  index: Index;
+  lgus: Record<string, LguDetail>;
+  /** tiles-attrs.csv cut down to the frozen year. */
+  attrs: string;
+  /** "z/x/y" -> base64 MVT. */
+  tiles: Record<string, string>;
+}
+
+let packedTiles: Map<string, ArrayBuffer> | null = null;
+
+/** Seed every loader from a pack; returns the (synthetic, never fetched) data base. */
+export function seedFromPack(pack: EmbedPack): string {
+  const b = new URL(`${DATA_ROOT}${pack.version}/`, location.href).href;
+  base = Promise.resolve(b);
+  const put = (path: string, v: unknown) => inBaseCache.set(path, Promise.resolve(v));
+  put("manifest.json", pack.manifest);
+  put("index.json", pack.index);
+  for (const [p, d] of Object.entries(pack.lgus)) put(`lgu/${p}.json`, d);
+  national = Promise.resolve(parseAttrsCsv(pack.attrs));
+  packedTiles = new Map(Object.entries(pack.tiles).map(([k, v]) => [`${b}tiles/${k}.pbf`, Uint8Array.from(atob(v), (c) => c.charCodeAt(0)).buffer]));
+  return b;
+}
+
+/** A tile from the seeded pack: its bytes, an empty tile when the pack lacks it, or null when not seeded. */
+export function packedTile(url: string): ArrayBuffer | null {
+  if (!packedTiles) return null;
+  const t = packedTiles.get(url);
+  if (t) return t;
+  // The view needs a tile the pack lacks: the layout and scripts/build-embed.mjs disagree (e2e fails on this).
+  console.warn(`embed: tile not in pack: ${url}`);
+  return new ArrayBuffer(0);
+}

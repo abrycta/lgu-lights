@@ -117,3 +117,9 @@
 .dark .maplibregl-map .maplibregl-ctrl-attrib-button {
   filter: invert(1);
 }
+
+/* The frozen /embed frame (embed.html): one fixed viewport, no scrolling. */
+html:has([data-testid="embed-frame"]),
+html:has([data-testid="embed-frame"]) body {
+  overflow: hidden;
+}

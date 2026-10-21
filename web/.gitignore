@@ -4,3 +4,5 @@ dist/
 public/data/
 public/wasm/
 *.tsbuildinfo
+test-results/
+playwright-report/

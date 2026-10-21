@@ -39,6 +39,8 @@ jobs:
       - run: npm run lint
       - run: npm test --if-present
       - run: npm run build
+      - run: npm run e2e:install
+      - run: npm run e2e
       - name: Size
         run: |
           {
