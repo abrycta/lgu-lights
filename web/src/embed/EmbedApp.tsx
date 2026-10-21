@@ -77,7 +77,12 @@ export function EmbedApp() {
   return (
     <AkariProvider defaultLang={urlLang ?? "en"} toaster={false} sharedCookieDomain={COOKIE_DOMAIN} inlineScript={false}>
       <LangFromUrl />
-      <div inert className="h-dvh overflow-hidden" data-testid="embed-frame">
+      {/* Frozen view: panels are clipped at the frame like the screenshot, never scrollable (no scrollbars). */}
+      <div
+        inert
+        className="h-dvh overflow-hidden [&_*]:[scrollbar-width:none] [&_aside]:!overflow-y-hidden"
+        data-testid="embed-frame"
+      >
         <ErrorBoundary>
           <Suspense fallback={null}>
             <Frozen />
