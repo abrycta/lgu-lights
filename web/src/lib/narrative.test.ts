@@ -23,7 +23,7 @@ const official: YearRecord = {
 describe("narrative", () => {
   it("speaks the interval and the tier and says a model value is not official (EN)", () => {
     expect(narrative(model, 2024, "Adams", "en")).toBe(
-      "In 2024 the model estimates poverty in Adams at 18.0 % (90 % interval 12.0–24.0 %). This is an estimate, not an official figure; reliability: “Use with care”. It builds on the 2023 PSA round and satellite data (night lights, vegetation) since then.",
+      "In 2024 the model estimates poverty in Adams at 18.0 % (90 % interval 12.0–24.0 %). This is an estimate, not an official figure; reliability: “Use with care”. It builds on the 2023 PSA round, the national trend, a provincial adjustment and satellite data (night lights, vegetation) since then.",
     );
   });
 

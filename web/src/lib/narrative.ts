@@ -27,8 +27,8 @@ export function narrative(rec: YearRecord | undefined, year: number, place: stri
   if (!m) return ja ? `${year}年の${place}の推計はありません。` : `There is no estimate for ${place} in ${year}.`;
   const iv = interval(m.lo90, m.hi90, lang).text;
   const basis = ja
-    ? `${m.from}年のPSA推計と、その後の衛星データ（夜間光・植生）に基づきます。`
-    : `It builds on the ${m.from} PSA round and satellite data (night lights, vegetation) since then.`;
+    ? `${m.from}年のPSA推計を出発点に、全国の傾向、州の補正、その後の衛星データ（夜間光・植生）を使っています。`
+    : `It builds on the ${m.from} PSA round, the national trend, a provincial adjustment and satellite data (night lights, vegetation) since then.`;
   return ja
     ? `${year}年のモデル推計では、${place}の貧困率は${pct(m.estimate, lang)}です（90%区間 ${iv}）。これは推計値であり、公式統計ではありません。信頼性：${tier}。${basis}`
     : `In ${year} the model estimates poverty in ${place} at ${pct(m.estimate, lang)} (90 % interval ${iv}). This is an estimate, not an official figure; reliability: “${tier}”. ${basis}`;

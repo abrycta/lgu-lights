@@ -325,8 +325,8 @@ export function whyModelSentence(years: YearRecord[], rec: YearRecord | undefine
       ? `PSA has no ${year} figure for this place; it last measured it in ${from}.`
       : `PSA last measured this place in ${from}.`;
   const second = ja
-    ? `この${year}年の値はそこを出発点に、過去のPSA調査と衛星データからモデルが推定したその後の傾向を加えたものです。`
-    : `This ${year} figure starts from that one and adds the trend since, estimated by a model from past PSA rounds and satellite data.`;
+    ? `この${year}年の値はそこを出発点に、全国の傾向と州ごとの補正を加え、州の中でこの市町村がどう動いたかを過去のPSA調査と衛星データからモデルで推定したものです。`
+    : `This ${year} figure starts from that one, adds the national trend and an adjustment for the province, and estimates how the place moved within its province from past PSA rounds and satellite data.`;
   const again = next ? (ja ? `PSAは${next}年に再び調べています。` : ` PSA measured it again in ${next}.`) : "";
   return ja ? `${first}${second}${again}` : `${first} ${second}${again}`;
 }

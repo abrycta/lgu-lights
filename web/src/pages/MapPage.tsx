@@ -58,8 +58,8 @@ function Intro() {
       </h2>
       <p>
         <T
-          en="PSA publishes official small-area poverty estimates only every few years (2012, 2015, 2018, 2021, 2023). Between and after those rounds, Lights fills the gaps with model estimates from night-time lights and vegetation."
-          ja="PSAの公式な小地域貧困推計は数年ごと（2012・2015・2018・2021・2023年）にしか公表されません。その間と以後の年は、夜間光と植生からのモデル推計で補っています。"
+          en="PSA publishes official small-area poverty estimates only every few years (2012, 2015, 2018, 2021, 2023). Between and after those rounds, Lights fills the gaps with model estimates built on past PSA rounds, PSA's provincial poverty survey and satellite data (night-time lights, vegetation)."
+          ja="PSAの公式な小地域貧困推計は数年ごと（2012・2015・2018・2021・2023年）にしか公表されません。その間と以後の年は、過去のPSA調査、PSAの州別貧困調査、衛星データ（夜間光・植生）に基づくモデル推計で補っています。"
         />
       </p>
       <p>

@@ -1,7 +1,8 @@
-import { Page, StatCard, T, useLang } from "@abrycta/akari/react";
+import { Page, StatCard, T, Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow, useLang } from "@abrycta/akari/react";
 import { use } from "react";
 
 import { loadManifest, loadMetrics } from "@/data/load";
+import type { Metrics } from "@/data/types";
 
 const LINK = "underline underline-offset-4 hover:text-foreground";
 
@@ -24,11 +25,12 @@ function Validation() {
         />
       </p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="validation">
-        <StatCard label={lang === "ja" ? "モデル" : "Model"} value={fmt(h.model.mae, 2)} unit="pp" detail={lang === "ja" ? "夜間光＋植生" : "night lights + vegetation"} />
+        <StatCard label={lang === "ja" ? "モデル" : "Model"} value={fmt(h.model.mae, 2)} unit="pp" detail={lang === "ja" ? "PSAの履歴、州別調査、衛星" : "PSA history, provincial survey, satellites"} />
         <StatCard label={lang === "ja" ? "前回値の据え置き" : "Carry forward"} value={fmt(h.carry_forward_mae, 2)} unit="pp" detail={lang === "ja" ? "前回の公式値をそのまま使う" : "last official value, unchanged"} />
         <StatCard label={lang === "ja" ? "衛星データなし" : "No satellite data"} value={fmt(h.no_satellite_mae, 2)} unit="pp" detail={lang === "ja" ? "同じモデルから衛星特徴量を除外" : "same model, satellite features removed"} />
         <StatCard label={lang === "ja" ? "90%区間の的中率" : "90 % interval coverage"} value={cov} unit="%" detail={lang === "ja" ? "目標は90%" : "target 90 %"} />
       </div>
+      <Folds m={m} />
       {/synthetic|^v0/.test(manifest.version) ? (
         <p className="text-xs text-seal-text">
           <T
@@ -38,6 +40,58 @@ function Validation() {
         </p>
       ) : null}
     </section>
+  );
+}
+
+/** Every backtest, not only the headline one, with the province-level error and the rounds where the model loses. */
+function Folds({ m }: { m: Metrics }) {
+  const { lang } = useLang();
+  const ja = lang === "ja";
+  const f2 = (v: number | undefined) => (v == null ? "—" : v.toFixed(2));
+  const pctTxt = (v: number | undefined) => (v == null ? "—" : `${(v * 100).toFixed(0)} %`);
+  const losses = m.folds.filter((f) => f.model.mae > f.carry_forward.mae);
+  const hasProv = m.folds.some((f) => f.model.province_mae_vs_sae != null);
+  return (
+    <>
+      <Table className="text-xs" data-testid="folds">
+        <TableCaption className="text-left">
+          <T
+            en="Every backtest: each one is trained only on the PSA rounds before its test year. Town level is the mean absolute error over cities and municipalities; province level compares population-weighted province averages of the same figures with the same weighting of PSA's town figures."
+            ja="すべての検証：それぞれ検証年より前のPSA調査回だけで学習しています。市町村レベルは市町村ごとの平均絶対誤差、州レベルは同じ値を人口で重み付けした州平均を、PSAの市町村値の同じ重み付け平均と比べたものです。"
+          />
+        </TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{ja ? "検証年" : "Test year"}</TableHead>
+            <TableHead className="text-right">{ja ? "モデル" : "Model"}</TableHead>
+            <TableHead className="text-right">{ja ? "据え置き" : "Carry forward"}</TableHead>
+            <TableHead className="text-right">{ja ? "90%的中率" : "90 % coverage"}</TableHead>
+            {hasProv ? <TableHead className="text-right">{ja ? "州レベル：モデル" : "Province: model"}</TableHead> : null}
+            {hasProv ? <TableHead className="text-right">{ja ? "州レベル：据え置き" : "Province: carry forward"}</TableHead> : null}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {m.folds.map((f) => (
+            <TableRow key={f.fold}>
+              <TableCell className="font-mono tabular">{f.test_round}</TableCell>
+              <TableCell className={`text-right font-mono tabular ${f.model.mae <= f.carry_forward.mae ? "font-medium" : ""}`}>{f2(f.model.mae)}</TableCell>
+              <TableCell className={`text-right font-mono tabular ${f.model.mae > f.carry_forward.mae ? "font-medium" : ""}`}>{f2(f.carry_forward.mae)}</TableCell>
+              <TableCell className="text-right font-mono tabular">{pctTxt(f.model.coverage90)}</TableCell>
+              {hasProv ? <TableCell className="text-right font-mono tabular">{f2(f.model.province_mae_vs_sae)}</TableCell> : null}
+              {hasProv ? <TableCell className="text-right font-mono tabular">{f2(f.carry_forward.province_mae_vs_sae)}</TableCell> : null}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {losses.length ? (
+        <p data-testid="folds-losses">
+          <T
+            en={`Where the model loses: in ${losses.map((f) => f.test_round).join(" and ")} it was worse than simply carrying the last official value forward (${losses.map((f) => `${f2(f.model.mae)} against ${f2(f.carry_forward.mae)} pp`).join("; ")}).`}
+            ja={`モデルが負けた年：${losses.map((f) => f.test_round).join("年と")}年は、前回の公式値をそのまま使うより誤差が大きくなりました（${losses.map((f) => `${f2(f.model.mae)}ポイント対${f2(f.carry_forward.mae)}ポイント`).join("、")}）。`}
+          />
+        </p>
+      ) : null}
+    </>
   );
 }
 
@@ -60,8 +114,8 @@ export default function AboutPage() {
           </h2>
           <p className="rounded-sm border border-seal p-3">
             <T
-              en="Model estimates are not official statistics. They are predictions from satellite data, anchored on the last PSA round, with intervals that show how uncertain they are. Use PSA’s official figures for decisions whenever they exist."
-              ja="モデル推計は公式統計ではありません。直近のPSA調査回を基準に衛星データから予測した値で、区間が不確かさを示します。判断には、公式値がある限りPSAの公式統計を使ってください。"
+              en="Model estimates are not official statistics. The model starts from the last PSA round and estimates how the place moved within its province. It adds the national trend and the province’s previous PSA survey (FIES) figure when past rounds show those help, and it learns from PSA rounds back to 2006. Intervals show how uncertain each estimate is. Use PSA’s official figures for decisions whenever they exist."
+              ja="モデル推計は公式統計ではありません。モデルは直近のPSA調査回を出発点に、その市町村が州の中でどう動いたかを推定します。過去の調査回で効果が確かめられた場合には、全国の傾向と、その州の前回のPSA家計調査（FIES）の値も加えます。学習には2006年までさかのぼるPSA調査回を使います。区間がそれぞれの推計の不確かさを示します。判断には、公式値がある限りPSAの公式統計を使ってください。"
             />
           </p>
           <ul className="grid list-disc gap-1 pl-5">
@@ -91,8 +145,8 @@ export default function AboutPage() {
             </li>
             <li>
               <T
-                en="Backtests: in round years the panel also shows what the model would have said without that round, so you can judge it."
-                ja="検証：調査年には、その調査回がなかった場合のモデル推計も表示し、精度を確かめられるようにしています。"
+                en="Backtests: in round years the panel also shows what the model would have said without that round, so you can judge it. The 2021 backtest assumed that the downward trend before COVID-19 would continue; poverty stopped falling between 2018 and 2021 (COVID-19, and PSA’s change of method), which is why it misses that round."
+                ja="検証：調査年には、その調査回がなかった場合のモデル推計も表示し、精度を確かめられるようにしています。2021年の検証は、新型コロナ以前の低下傾向が続くと仮定していました。実際には2018〜2021年に貧困率の低下が止まった（新型コロナとPSAの手法変更）ため、この回は外れています。"
               />
             </li>
             <li>
@@ -160,9 +214,15 @@ export default function AboutPage() {
           </h2>
           <ul className="grid list-disc gap-2 pl-5">
             <li>
-              <T en="Poverty incidence: Philippine Statistics Authority (PSA), City and Municipal Level Small Area Poverty Estimates, 2012–2023. Used with attribution under PSA/OpenSTAT terms (CC BY; to be confirmed with PSA)." ja="貧困率：フィリピン統計庁（PSA）市町村別小地域貧困推計 2012〜2023年。PSA/OpenSTATの条件（CC BY、PSAに確認中）に従い出典を明記して使用。" />{" "}
+              <T en="Poverty incidence: Philippine Statistics Authority (PSA), City and Municipal Level Small Area Poverty Estimates, 2012–2023; the 2006 and 2009 rounds are used only to train the model. Used with attribution under PSA/OpenSTAT terms (CC BY; to be confirmed with PSA)." ja="貧困率：フィリピン統計庁（PSA）市町村別小地域貧困推計 2012〜2023年。2006年・2009年の調査回はモデルの学習にのみ使用。PSA/OpenSTATの条件（CC BY、PSAに確認中）に従い出典を明記して使用。" />{" "}
               <a className={LINK} href="https://psa.gov.ph/">
                 psa.gov.ph
+              </a>
+            </li>
+            <li>
+              <T en="Provincial poverty: PSA Family Income and Expenditure Survey (FIES) official poverty statistics by province, 2006–2023, from PSA OpenSTAT. The model uses only the previous round’s figure, never the figure for the year it estimates." ja="州別の貧困率：PSA家計所得支出調査（FIES）に基づく州別公式貧困統計 2006〜2023年、PSA OpenSTATより。モデルは前回の調査回の値だけを使い、推計する年の値は使いません。" />{" "}
+              <a className={LINK} href="https://openstat.psa.gov.ph/">
+                OpenSTAT
               </a>
             </li>
             <li>

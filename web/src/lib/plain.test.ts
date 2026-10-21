@@ -112,7 +112,7 @@ describe("model explanation and what-if", () => {
   it("says where a model figure starts", () => {
     const years = [off(2023, 24, 2), mod(2025, 25, 10, 40, 2023)];
     expect(whyModelSentence(years, years[1], "en")).toBe(
-      "PSA last measured this place in 2023. This 2025 figure starts from that one and adds the trend since, estimated by a model from past PSA rounds and satellite data.",
+      "PSA last measured this place in 2023. This 2025 figure starts from that one, adds the national trend and an adjustment for the province, and estimates how the place moved within its province from past PSA rounds and satellite data.",
     );
   });
 
