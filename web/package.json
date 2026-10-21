@@ -22,7 +22,7 @@
     "e2e:install": "playwright install ${CI:+--with-deps} chromium"
   },
   "dependencies": {
-    "@abrycta/akari": "^0.10.1",
+    "@abrycta/akari": "^0.11.0",
     "lucide-react": "^1.60.0",
     "maplibre-gl": "^6.15.0",
     "react": "^19.3.1",
