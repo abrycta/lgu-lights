@@ -9,6 +9,7 @@ type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
 
 let worker: Worker | null = null;
 let ready: Promise<unknown> | null = null;
+let loaded = false;
 let nextId = 1;
 const pending = new Map<number, Pending>();
 
@@ -52,9 +53,17 @@ function ensureReady(): Promise<unknown> {
         modelUrl: `${base}whatif/model.json`,
       }),
     );
-    ready.catch(() => (ready = null));
+    ready.then(
+      () => (loaded = true),
+      () => (ready = null),
+    );
   }
   return ready;
+}
+
+/** True once the WASM module, snapshot and model (about 1 MB) are in the worker. */
+export function whatIfLoaded(): boolean {
+  return loaded;
 }
 
 export async function runWhatIf(pcode: string, year: number, growthPct: number, ndviDelta: number): Promise<WasmEstimate | null> {

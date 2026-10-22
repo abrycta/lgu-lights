@@ -24,6 +24,12 @@
 /data/:version/tiles/*
   Content-Type: application/x-protobuf
 
+# The what-if panel snapshot is a raw binary; Cloudflare does not compress application/octet-stream, so it
+# is served as application/x-protobuf, a type on Cloudflare's compressible list (771 kB raw, about 540 kB br).
+# The worker reads it with arrayBuffer(), so the declared type does not matter to the app.
+/data/:version/whatif/snapshot.bin
+  Content-Type: application/x-protobuf
+
 # The pointer to the current data version: short cache so a new release shows up quickly.
 /data/latest.json
   Cache-Control: public, max-age=60, must-revalidate
