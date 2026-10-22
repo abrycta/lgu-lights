@@ -1,7 +1,7 @@
 import { T, Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow, useLang, useT } from "@abrycta/akari/react";
 
 import type { YearRecord } from "@/data/types";
-import { cvText, interval, num } from "@/lib/format";
+import { cvText, interval, numShown } from "@/lib/format";
 import { estimatorLabel, TIER_LABEL } from "@/lib/honesty";
 
 /** Every year with value, interval, CV, tier, source and method. Backtest years show both lines. */
@@ -68,7 +68,7 @@ export function YearTable({ years, selected, onSelectYear }: { years: YearRecord
                 ) : null}
               </TableCell>
               <TableCell className={l.italic ? "italic text-muted-foreground" : "font-medium"}>{l.source}</TableCell>
-              <TableCell className={`text-right font-mono tabular ${l.italic ? "italic text-muted-foreground" : ""}`}>{num(l.v)}</TableCell>
+              <TableCell className={`text-right font-mono tabular ${l.italic ? "italic text-muted-foreground" : ""}`}>{numShown(l.v, l.italic)}</TableCell>
               <TableCell className="font-mono tabular">{interval(l.lo, l.hi, lang).text}</TableCell>
               <TableCell className="text-right font-mono tabular">{cvText(l.cv)}</TableCell>
               <TableCell>{TIER_LABEL[l.tier][lang]}</TableCell>
