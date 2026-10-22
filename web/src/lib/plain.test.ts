@@ -104,7 +104,12 @@ describe("comparison", () => {
   it("parses the published attribute table", () => {
     const n = parseAttrsCsv('pcode,n,v23,v24,t23,t24,s23,s24\nPH1,"A, B",17.1,,2,2,0,1\n');
     expect(n.years).toEqual([2023, 2024]);
-    expect(n.rows.get("PH1")).toEqual({ v: [17.1, null], s: [0, 1] });
+    expect(n.tiers).toBe(true);
+    expect(n.rows.get("PH1")).toEqual({ v: [17.1, null], t: [2, 2], s: [0, 1] });
+    // The embed's cut-down copy: one year's value and source, no tiers.
+    const e = parseAttrsCsv("pcode,n,v23,s23\nPH1,,17.1,0\n");
+    expect(e.tiers).toBe(false);
+    expect(e.rows.get("PH1")).toEqual({ v: [17.1], t: [null], s: [0] });
   });
 });
 
