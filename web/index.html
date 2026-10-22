@@ -13,6 +13,27 @@
     <link rel="preload" href="/data/latest.json" as="fetch" crossorigin="anonymous" />
     <!-- data-preload: scripts/deploy-web.sh puts the current version's manifest, index and tiles-attrs.csv here -->
     <meta name="description" content="Poverty incidence for every Philippine city and municipality, 2012–2025: PSA official estimates and clearly labelled model estimates from PSA history and satellite data." />
+    <!-- Pre-load still: the project's kanji glyph, the same quiet tile as krtmtthw.dev's embed slots (Akari muted tokens),
+      until the view is ready. Inside #root, so React's first render replaces it. -->
+    <style>
+      .glyph-seal {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: grid;
+        place-items: center;
+        background: var(--muted);
+        color: var(--muted-foreground);
+        font-family: var(--font-heading);
+        font-size: clamp(48px, 9vw, 80px);
+        font-weight: 700;
+        line-height: 1;
+        pointer-events: none;
+      }
+      html[data-embed-ready] .glyph-seal {
+        display: none;
+      }
+    </style>
     <title>Lights</title>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Lights" />
@@ -26,7 +47,7 @@
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="glyph-seal" aria-hidden="true" lang="ja">光</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
