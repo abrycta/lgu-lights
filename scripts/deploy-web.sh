@@ -15,7 +15,7 @@
 #      <link rel=preload> tags in dist/index.html for LATEST's manifest.json, index.json and tiles-attrs.csv
 #   4. npx --yes wrangler@4 pages deploy dist --project-name lgu-lights --branch main
 #   5. live checks: /deploy.json is this commit, latest.json reports LATEST, the home page serves this build's script, /embed and the
-#      WASM answer 200 (retried for up to 2 minutes while the deploy propagates)
+#      WASM answer 200, a missing tile answers 404 (retried for up to 2 minutes while the deploy propagates)
 #
 # Env: DATA_VERSIONS (default "v1 v3 v4"), LATEST (default v4), LIVE_URL (default https://lights.krtmtthw.dev),
 #      CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (locally: Keychain cloudflare-api-token and the
@@ -99,6 +99,10 @@ for v in $DATA_VERSIONS; do
   done
 done
 printf '{"version":"%s","base":"%s/"}\n' "$LATEST" "$LATEST" > "$web/dist/data/latest.json"
+# Missing data paths (empty ocean tiles are simply absent) get a real 404: Pages serves the closest 404.html,
+# and without one under data/ it would answer with the SPA's index.html and status 200 (labelled protobuf by
+# _headers for tiles), which MapLibre then fails to parse. The app's own routes keep the SPA fallback.
+printf 'Not found\n' > "$web/dist/data/404.html"
 # The app reads latest.json first and only then the version's files; the home page already knows LATEST, so it
 # preloads them too (same URLs and request mode as src/data/load.ts; latest.json stays the runtime truth).
 marker='<!-- data-preload: scripts/deploy-web.sh puts the current version'"'"'s manifest, index and tiles-attrs.csv here -->'
@@ -151,6 +155,7 @@ check() {
   grep -q "$script" <<<"$home" || { echo "home page does not load $script yet"; return 1; }
   grep -qF "/data/$LATEST/manifest.json" <<<"$home" || { echo "home page does not preload data/$LATEST yet"; return 1; }
   curl -fsS -o /dev/null "$LIVE_URL/embed?$bust" || return 1
+  [ "$(curl -sS -o /dev/null -w '%{http_code}' "$LIVE_URL/data/$LATEST/tiles/0/0/missing.pbf?$bust")" = 404 ] || { echo "a missing tile is not a 404"; return 1; }
   [ "$(curl -fsS "$LIVE_URL/wasm/lgu_wasm.wasm?$bust" | wc -c | tr -d ' ')" = "$wasm_size" ] || { echo "wasm size differs"; return 1; }
   [ "$(curl -fsS "$LIVE_URL/deploy.json?$bust" | node -p 'JSON.parse(require("fs").readFileSync(0)).sha')" = "$sha" ] || { echo "deploy.json is not $sha yet"; return 1; }
   manifest=$(curl -fsS "$LIVE_URL/data/$LATEST/manifest.json?$bust") || return 1
@@ -158,7 +163,7 @@ check() {
 }
 for i in $(seq 1 12); do
   if check; then
-    echo "live: deploy.json is ${sha:0:7}; latest.json is $LATEST; / serves $script; /embed, /wasm/lgu_wasm.wasm and data/$LATEST/manifest.json OK"
+    echo "live: deploy.json is ${sha:0:7}; latest.json is $LATEST; / serves $script; /embed, /wasm/lgu_wasm.wasm and data/$LATEST/manifest.json OK; missing tiles 404"
     exit 0
   fi
   echo "not live yet (try $i/12), waiting 10 s"
