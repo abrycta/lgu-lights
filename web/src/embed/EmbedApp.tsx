@@ -1,8 +1,8 @@
 // /embed: the portfolio's live picture of Lights. The real MapPage, fed from one pre-packed file
 // (scripts/build-embed.mjs), without the Header or footer. It is wholly inert with nothing to focus (live
 // embeds carry no link: the portfolio around the frame links to the app), and the map is non-interactive.
-// It tours a few places (TOUR, chosen in build-embed.mjs): the same view, only the place changes, every
-// DWELL_MS. It starts on the first place, stays there under reduced motion (a still view), and pauses while
+// It tours a few places (TOUR, chosen from the data by tour-select.ts): the same view, only the place changes,
+// every DWELL_MS. It starts on STILL (the densest place, step 0), stays there under reduced motion, and pauses while
 // the parent says so (off-screen, or another embed is the one moving on a touch device), while the frame is out
 // of sight, or while the tab is hidden.
 // Phones and tablets get the frame at the portfolio's picture slot's real size: the compact layout (layout.ts),
@@ -24,7 +24,7 @@ import { parseUrl } from "@/app/url";
 import { type EmbedPack, seedFromPack } from "@/data/load";
 
 import { COMPACT_PADDING, useLayout } from "./layout";
-import { TOUR, VIEW } from "./pack.gen";
+import { STILL, TOUR, VIEW } from "./pack.gen";
 import {
   COOKIE_DOMAIN,
   listenToParent,
@@ -175,8 +175,9 @@ function useTour(frame: RefObject<HTMLDivElement | null>) {
     io.observe(el);
     const motion = matchMedia("(prefers-reduced-motion: reduce)");
     const onMotion = () => {
-      // Reduced motion: back to the first place (the poster's), statically.
-      if (motion.matches && step !== 0) show(0);
+      // Reduced motion: back to the densest place (STILL), statically.
+      const still = Math.max(0, (TOUR as readonly string[]).indexOf(STILL));
+      if (motion.matches && step !== still) show(still);
       schedule();
     };
     motion.addEventListener("change", onMotion);

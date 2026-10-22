@@ -1,19 +1,19 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { TOUR } from "../src/embed/pack.gen";
+import { STILL, TOUR } from "../src/embed/pack.gen";
 
 // The /embed tour krtmtthw.dev frames: no Header, nothing to focus (no link: the portfolio links out),
 // a non-interactive map, the ready message to the parent, a few places in turn, and nothing fetched from
 // anywhere but the app's own origin (never /api/).
 
-// The panel's heading for each TOUR place (scripts/build-embed.mjs says why each was chosen).
+// The panel's heading for each TOUR place (chosen from the data by src/embed/tour-select.ts; re-check after a data release).
 const NAMES: Record<string, string> = {
-  PH1705101: "Abra de Ilog",
   PH0907215: "Siayan",
-  PH0604532: "Salvador Benedicto",
-  PH0305416: "City of San Fernando",
-  PH0803747: "Tacloban City",
-  PH1102319: "City of Tagum",
+  PH1400125: "Tineg",
+  PH0704607: "Bindoy",
+  PH1908825: "Guindulungan",
+  PH0501714: "Garchitorena",
+  PH0301424: "Doña Remedios Trinidad",
 };
 
 function watch(page: Page, origin: string) {
@@ -54,13 +54,13 @@ test("embed: first place, own origin only, ready message", async ({ page, baseUR
   });
 
   // Start still (?paused=1, as the parent does), so the tour cannot move past the first place on a slow runner.
-  await page.goto("/embed?year=2023&lgu=PH1705101&lang=en&paused=1");
+  await page.goto(`/embed?year=2023&lgu=${STILL}&lang=en&paused=1`);
   await expect(page.locator("html[data-embed-ready]")).toBeAttached();
   const posted = await page.evaluate(() => (window as unknown as { __posted: unknown[] }).__posted);
   expect(posted).toEqual([{ msg: { type: "akari:embed-ready", app: "lights" }, target: "https://krtmtthw.dev" }]);
 
   await expect(page.locator("[data-akari-header]")).toHaveCount(0);
-  await expect(page.getByTestId("lgu-panel")).toContainText("Abra de Ilog");
+  await expect(page.getByTestId("lgu-panel")).toContainText(NAMES[STILL]!);
   await expect(page.getByTestId("open-live")).toHaveCount(0);
   // Everything is inert and the map has no controls: Tab finds nothing to focus in the frame.
   await expect(page.getByTestId("embed-frame")).toHaveAttribute("inert", "");
@@ -84,7 +84,7 @@ test("embed: first place, own origin only, ready message", async ({ page, baseUR
 test("embed: tours every place and loops, each fully packed", async ({ page, baseURL }) => {
   test.setTimeout(90_000);
   const { bad, warnings } = watch(page, new URL(baseURL!).origin);
-  await page.goto("/embed?year=2023&lgu=PH1705101&lang=en");
+  await page.goto(`/embed?year=2023&lgu=${STILL}&lang=en`);
   await expect(page.locator("html[data-embed-ready]")).toBeAttached();
   for (const [i, lgu] of [...TOUR.entries(), [0, TOUR[0]] as const]) {
     await expect(page.locator(`html[data-tour-step="${i}"]`)).toBeAttached({ timeout: 10_000 });
@@ -95,13 +95,13 @@ test("embed: tours every place and loops, each fully packed", async ({ page, bas
   expect(bad).toEqual([]);
 });
 
-test("embed: reduced motion stays on the first place", async ({ page }) => {
+test("embed: reduced motion stays on the densest place (STILL)", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/embed?year=2023&lgu=PH1705101&lang=en");
+  await page.goto(`/embed?year=2023&lgu=${STILL}&lang=en`);
   await expect(page.locator("html[data-embed-ready]")).toBeAttached();
   await page.waitForTimeout(7_000); // longer than one step
   await expect(page.locator('html[data-tour-step="0"]')).toBeAttached();
-  await expect(page.getByTestId("lgu-panel")).toContainText("Abra de Ilog");
+  await expect(page.getByTestId("lgu-panel")).toContainText(NAMES[STILL]!);
 });
 
 // The parent (krtmtthw.dev) starts the frame still (?paused=1) and pauses or resumes it by message: a stand-in
@@ -114,7 +114,7 @@ test("embed: the parent pauses and resumes the tour, and only the parent", async
     const u = new URL(r.request().url());
     r.fulfill({ response: await r.fetch({ url: `${baseURL}${u.pathname}${u.search}` }) });
   });
-  const src = `${app}/embed?year=2023&lgu=PH1705101&lang=en&paused=1`;
+  const src = `${app}/embed?year=2023&lgu=${STILL}&lang=en&paused=1`;
   await page.route("https://krtmtthw.dev/", (r) =>
     r.fulfill({ contentType: "text/html", body: `<!doctype html><iframe src="${src}" width="1280" height="800"></iframe>` }),
   );
@@ -153,12 +153,12 @@ for (const { name, viewport, pack } of [
     const { bad, warnings } = watch(page, new URL(baseURL!).origin);
     const packs: string[] = [];
     page.on("request", (r) => r.url().includes("/embed-data/") && packs.push(new URL(r.url()).pathname));
-    await page.goto("/embed?year=2023&lgu=PH1705101&lang=en");
+    await page.goto(`/embed?year=2023&lgu=${STILL}&lang=en`);
     await expect(page.locator("html[data-embed-ready]")).toBeAttached();
     await expect(page.locator('[data-layout="compact"]')).toBeVisible();
     await expect(page.getByTestId("lgu-panel")).toHaveCount(0);
     const caption = page.getByTestId("embed-caption");
-    await expect(caption).toContainText("Abra de Ilog");
+    await expect(caption).toContainText(NAMES[STILL]!);
     await expect(caption).toContainText("below the poverty line");
     // Readable at the slot's real size: 14 px place, 12 px figure line; the map keeps most of the frame.
     const sizes = await caption.locator("p").evaluateAll((ps) => ps.map((p) => parseFloat(getComputedStyle(p).fontSize)));
