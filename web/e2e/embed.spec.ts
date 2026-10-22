@@ -8,12 +8,12 @@ import { STILL, TOUR } from "../src/embed/pack.gen";
 
 // The panel's heading for each TOUR place (chosen from the data by src/embed/tour-select.ts; re-check after a data release).
 const NAMES: Record<string, string> = {
-  PH0701242: "Tagbilaran City",
-  PH0501717: "Lagonoy",
-  PH0907209: "Piñan",
-  PH0806019: "Talalora",
-  PH0304910: "General Tinio",
-  PH1004201: "Aloran",
+  PH0907215: "Siayan",
+  PH1400125: "Tineg",
+  PH0704607: "Bindoy",
+  PH1908825: "Guindulungan",
+  PH0501714: "Garchitorena",
+  PH0301424: "Doña Remedios Trinidad",
 };
 
 function watch(page: Page, origin: string) {
