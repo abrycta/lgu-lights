@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
+import { preloadMap } from "./scripts/vite-preload-map.ts";
 import { akariThemeInit } from "./scripts/vite-theme-init.ts";
 
 // Commit shown in the footer: CI sets BUILD_SHA or GITHUB_SHA; the local checkout is the fallback.
@@ -24,6 +25,8 @@ export default defineConfig({
     tailwindcss(),
     // Akari's pre-paint theme script (shared krtmtthw.dev theme cookie), served from our own origin.
     akariThemeInit(),
+    // <link rel=modulepreload> for the lazy MapPage/MapView chunks and the MapLibre worker (every page shows the map).
+    preloadMap(),
   ],
   define: {
     __COMMIT_SHA__: JSON.stringify(commitSha()),
