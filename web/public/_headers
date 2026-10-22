@@ -30,6 +30,10 @@
 /data/:version/whatif/snapshot.bin
   Content-Type: application/x-protobuf
 
+# Cloudflare does not compress text/csv; text/plain is compressed (br/gzip) and the app reads it with r.text().
+/data/:version/tiles-attrs.csv
+  Content-Type: text/plain; charset=utf-8
+
 # The pointer to the current data version: short cache so a new release shows up quickly.
 /data/latest.json
   Cache-Control: public, max-age=60, must-revalidate
