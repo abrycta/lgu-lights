@@ -41,7 +41,7 @@ export function Legend({ breaks, year, isRound }: { breaks: readonly number[]; y
           { fill: "seq-3", label: <T en="Solid (CV ≤ 10 %): no stripes" ja="確かな値（CV 10%以下）：斜線なし" /> },
           { fill: "seq-3", hatch: "sparse", label: <T en="Use with care (CV 10–20 %)" ja="注意して使う値（CV 10〜20%）" /> },
           { fill: "seq-3", hatch: "dense", label: <T en="Rough guess (CV > 20 %)" ja="おおよその目安（CV 20%超）" /> },
-          { fill: "muted", label: <T en="No estimate" ja="推計なし" /> },
+          { fill: "var(--ak-map-no-data)", label: <T en="No estimate" ja="推計なし" /> },
         ]}
       />
       {!isRound ? (

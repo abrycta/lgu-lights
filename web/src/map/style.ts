@@ -81,12 +81,12 @@ export function sourceExpr(year: number, nat: NationalValues | null): Expression
 export function fillColor(year: number, breaks: readonly number[], key: ThemeKey, nat: NationalValues | null): Expression {
   const v = valueExpr(year, nat);
   const theme = key.startsWith("dark") ? "dark" : "light";
-  return ["case", ["<", v, 0], tokenColor("color.surface-subtle", key), stepColor(v as AkariExpression, breaks, { scale: "seq", theme }) as unknown as Expression];
+  return ["case", ["<", v, 0], tokenColor("map.no-data", key), stepColor(v as AkariExpression, breaks, { scale: "seq", theme }) as unknown as Expression];
 }
 
-/** Official figures are opaque; model estimates are lighter; no data is a faint ground. */
+/** Official figures are opaque; model estimates are lighter; no data is Akari's map.no-data, opaque. */
 export function fillOpacity(year: number, nat: NationalValues | null): Expression {
-  return ["case", ["<", valueExpr(year, nat), 0], 0.6, ["==", sourceExpr(year, nat), 0], OFFICIAL_OPACITY, MODEL_OPACITY];
+  return ["case", ["<", valueExpr(year, nat), 0], 1, ["==", sourceExpr(year, nat), 0], OFFICIAL_OPACITY, MODEL_OPACITY];
 }
 
 /** Hatch overlay (Akari's reliability hatching): tier 1 sparse, tier 2 dense, only where the year has a value. */
