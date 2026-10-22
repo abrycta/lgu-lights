@@ -6,7 +6,7 @@ import { useViewMode } from "@/app/prefs";
 import { loadLgu } from "@/data/load";
 import type { Index, Manifest } from "@/data/types";
 import { Glossary } from "@/features/Term";
-import { cvText, interval, pctShown } from "@/lib/format";
+import { cvText, interval, pctInline } from "@/lib/format";
 import { backtestNote, narrative } from "@/lib/narrative";
 import { TIER_LABEL } from "@/lib/honesty";
 import { reliabilitySentence, shownFigure } from "@/lib/plain";
@@ -108,7 +108,8 @@ export function LguPanel({
                 <SourceBadge source="estimate" year={year} data-testid="source-badge" />
               )}
               <p className="flex flex-wrap items-baseline gap-x-3">
-                <span className={`font-mono text-3xl tabular ${shown.source === "model" ? "text-muted-foreground italic" : ""}`}>{pctShown(shown.value, lang, shown.source === "model")}</span>
+                {/* The badge above already says "Model estimate", so a 0.0 estimate reads just "below 1 %" (no duplicate facts). */}
+                <span className={`font-mono text-3xl tabular ${shown.source === "model" ? "text-muted-foreground italic" : ""}`}>{pctInline(shown.value, lang, shown.source === "model")}</span>
                 {src && detailed ? (
                   <span className="text-sm">
                     <T en="90 % interval" ja="90%区間" /> <span className="font-mono">{interval(src.lo90, src.hi90, lang).text}</span>
