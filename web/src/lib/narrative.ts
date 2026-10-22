@@ -5,9 +5,9 @@
 import type { YearRecord } from "@/data/types";
 
 import { belowOne, interval, pct, pctInline } from "./format";
-import { estimatorLabel, type Lang, TIER_LABEL } from "./honesty";
+import { combinedNote, estimatorLabel, type Lang, TIER_LABEL } from "./honesty";
 
-export function narrative(rec: YearRecord | undefined, year: number, place: string, lang: Lang): string {
+export function narrative(rec: YearRecord | undefined, year: number, place: string, lang: Lang, pcode?: string): string {
   const ja = lang === "ja";
   if (!rec?.shown) {
     return ja ? `${year}年の${place}の推計はありません。` : `There is no estimate for ${place} in ${year}.`;
@@ -18,6 +18,11 @@ export function narrative(rec: YearRecord | undefined, year: number, place: stri
   if (shown.source === "official" && rec.official) {
     const o = rec.official;
     const ci = interval(o.lo90, o.hi90, lang).text;
+    const combined = combinedNote(pcode, lang);
+    if (combined)
+      return ja
+        ? `${year}年の${place}の貧困率は${pct(o.estimate, lang)}です（90%信頼区間 ${ci}）。この値は${combined}したものです（${estimatorLabel(o.estimator)}法）。信頼性：${tier}（CV ${o.cv.toFixed(0)}%）。`
+        : `In ${year} poverty in ${place} was ${pct(o.estimate, lang)} (90 % confidence interval ${ci}). This figure is ${combined}, weighted by population (${estimatorLabel(o.estimator)}); reliability: “${tier}” (CV ${o.cv.toFixed(0)} %).`;
     return ja
       ? `${year}年、PSAは${place}の貧困率を${pct(o.estimate, lang)}と推計しています（90%信頼区間 ${ci}）。これはPSAの公式統計（小地域推計、${estimatorLabel(o.estimator)}法）です。信頼性：${tier}（CV ${o.cv.toFixed(0)}%）。`
       : `In ${year} the PSA estimated poverty in ${place} at ${pct(o.estimate, lang)} (90 % confidence interval ${ci}). This is an official figure (PSA small area estimate, ${estimatorLabel(o.estimator)}); reliability: “${tier}” (CV ${o.cv.toFixed(0)} %).`;

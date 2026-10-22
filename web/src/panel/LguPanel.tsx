@@ -137,7 +137,7 @@ export function LguPanel({
         <>
           {/* Caption-first narration: the interval and the reliability are always spoken. */}
           <p className="text-sm leading-relaxed" data-testid="narrative">
-            {narrative(rec, year, lgu.name, lang)}
+            {narrative(rec, year, lgu.name, lang, lgu.pcode)}
           </p>
           {bt ? (
             <p className="rounded-sm border border-dashed border-border p-2 text-xs italic" data-testid="backtest">
@@ -150,7 +150,7 @@ export function LguPanel({
         </>
       ) : (
         <p className="sr-only" aria-live="polite">
-          {narrative(rec, year, lgu.name, lang)}
+          {narrative(rec, year, lgu.name, lang, lgu.pcode)}
         </p>
       )}
 
@@ -191,7 +191,7 @@ export function LguPanel({
             <T en="All years (table)" ja="全年の表" />
           </summary>
           <div className="mt-2 overflow-x-auto">
-            <YearTable years={lgu.years} selected={year} onSelectYear={onSelectYear} />
+            <YearTable years={lgu.years} selected={year} onSelectYear={onSelectYear} pcode={lgu.pcode} />
           </div>
         </details>
       ) : null}

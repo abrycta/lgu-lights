@@ -2,12 +2,13 @@ import { T, Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, T
 
 import type { YearRecord } from "@/data/types";
 import { cvText, interval, numShown } from "@/lib/format";
-import { estimatorLabel, TIER_LABEL } from "@/lib/honesty";
+import { combinedNote, estimatorLabel, TIER_LABEL } from "@/lib/honesty";
 
 /** Every year with value, interval, CV, tier, source and method. Backtest years show both lines. */
-export function YearTable({ years, selected, onSelectYear }: { years: YearRecord[]; selected: number; onSelectYear: (y: number) => void }) {
+export function YearTable({ years, selected, onSelectYear, pcode }: { years: YearRecord[]; selected: number; onSelectYear: (y: number) => void; pcode?: string }) {
   const t = useT();
   const { lang } = useLang();
+  const combined = combinedNote(pcode, lang);
   return (
     <Table className="text-xs" data-testid="year-table">
       <TableCaption className="text-left">
@@ -31,7 +32,7 @@ export function YearTable({ years, selected, onSelectYear }: { years: YearRecord
         {years.map((r) => {
           const lines: { key: string; source: string; italic: boolean; v: number; lo: number; hi: number; cv: number; tier: 0 | 1 | 2; method: string }[] = [];
           if (r.official)
-            lines.push({ key: "o", source: t("PSA official", "PSA公式"), italic: false, v: r.official.estimate, lo: r.official.lo90, hi: r.official.hi90, cv: r.official.cv, tier: r.official.tier, method: `SAE · ${estimatorLabel(r.official.estimator)}` });
+            lines.push({ key: "o", source: combined ? t("PSA, districts combined", "PSA（地区を合算）") : t("PSA official", "PSA公式"), italic: false, v: r.official.estimate, lo: r.official.lo90, hi: r.official.hi90, cv: r.official.cv, tier: r.official.tier, method: combined ? `${combined.charAt(0).toUpperCase()}${combined.slice(1)} · ${estimatorLabel(r.official.estimator)}` : `SAE · ${estimatorLabel(r.official.estimator)}` });
           if (r.model)
             lines.push({
               key: "m",
