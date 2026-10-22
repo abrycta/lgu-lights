@@ -5,13 +5,17 @@
 // The rule, for one year (a PSA round):
 // 1. A province qualifies only when EVERY place in it has a PSA official figure that year, so the view never
 //    shows a model-only figure.
-// 2. Its density is the number of its places whose official figure is solid (tier 0, CV at most 10 %).
-// 3. Its featured place is one of those solid places where the light-based model, trained WITHOUT that round
-//    (kind "backtest"), still put the official figure inside its 90 % range; of those, the one it came
-//    closest to (smallest |model − official|, then the pcode). A province with no such place does not qualify.
-// 4. One province per region (its densest), the regions ranked by that density (ties: the pcode); the top
-//    `steps` make the tour, interleaved across Luzon, Visayas and Mindanao in the order each group first
-//    appears, so step 0 is always the densest province: the reduced-motion still.
+// 2. Its density is how many distinct colours it puts on the map: its number of places × the spread of their
+//    official figures (highest − lowest, in points), so a province of many places, high and low together,
+//    beats a flat one.
+// 3. Its featured place is its solid place (tier 0, CV at most 10 %) with the HIGHEST official figure, so the tour reaches the high end.
+//    Ties go to a place where the light-based model, trained WITHOUT that round (kind "backtest"), put the
+//    official figure inside its 90 % range, then to the smaller |model − official|, then the pcode.
+// 4. One province per region: its densest (ties: the higher featured figure, then the pcode).
+// 5. The high end (the knob: HIGH_VALUE, HIGH_STEPS): first up to HIGH_STEPS regions whose featured figure is
+//    at least HIGH_VALUE, the densest first; then the densest other regions fill the tour up to `steps`.
+// 6. The tour is ordered by density and interleaved across Luzon, Visayas and Mindanao in the order each group
+//    first appears, so step 0 is always the densest province: the reduced-motion still.
 
 /** The fields of one year of a place's file (public/data/<v>/lgu/<pcode>.json) the rule reads. */
 export type TourYear = {
@@ -30,11 +34,17 @@ export type TourPick = {
   name: string;
   province: string;
   region: string;
-  /** The province's density: places with a solid official figure. */
+  /** The province's density: places × spread (rule 2). */
+  density: number;
+  /** Its places with a solid official figure. */
   solid: number;
   places: number;
+  /** The lowest and highest official figure among its places. */
+  low: number;
+  highest: number;
   official: number;
-  model: number;
+  /** The model's estimate without the round, when it has one. */
+  model: number | null;
 };
 
 export type Tour = { tour: string[]; still: string; picks: TourPick[] };
@@ -49,10 +59,15 @@ export function islandGroup(region: string): "Luzon" | "Visayas" | "Mindanao" {
 
 const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
+/** The knob for the high end: how many steps (if the data has them) show a figure of at least HIGH_VALUE %. */
+export const HIGH_VALUE = 50;
+export const HIGH_STEPS = 3;
+
 export function chooseTour(
   index: TourIndex,
   yearOf: (pcode: string) => TourYear | undefined,
   steps = 6,
+  high: { value: number; steps: number } = { value: HIGH_VALUE, steps: HIGH_STEPS },
 ): Tour {
   const names = new Map(index.provinces.map((p) => [p.pcode, p.name]));
   const byProvince = new Map<string, TourIndexLgu[]>();
@@ -66,45 +81,47 @@ export function chooseTour(
   for (const [pv, places] of byProvince) {
     const years = places.map((l) => ({ l, y: yearOf(l.p) }));
     if (!years.every(({ y }) => y?.official)) continue; // rule 1
-    const solid = years.filter(({ y }) => y!.official!.tier === 0); // rule 2
-    const fits = solid
-      .filter(({ y }) => {
+    const values = years.map(({ y }) => y!.official!.estimate);
+    const [low, highest] = [Math.min(...values), Math.max(...values)];
+    const solid = years.filter(({ y }) => y!.official!.tier === 0);
+    const ranked = solid
+      .map(({ l, y }) => {
         const m = y!.model;
         const o = y!.official!.estimate;
-        return m?.kind === "backtest" && m.lo90 <= o && o <= m.hi90;
+        const fit = m?.kind === "backtest" && m.lo90 <= o && o <= m.hi90;
+        return { l, official: o, model: m?.estimate ?? null, fit, err: m ? Math.abs(m.estimate - o) : Infinity };
       })
-      .map(({ l, y }) => ({
-        l,
-        official: y!.official!.estimate,
-        model: y!.model!.estimate,
-        err: Math.abs(y!.model!.estimate - y!.official!.estimate),
-      }))
-      .sort((a, b) => a.err - b.err || byCode(a.l.p, b.l.p)); // rule 3
-    const best = fits[0];
+      .sort(
+        (a, b) =>
+          b.official - a.official || Number(b.fit) - Number(a.fit) || a.err - b.err || byCode(a.l.p, b.l.p),
+      ); // rule 3
+    const best = ranked[0];
     if (!best) continue;
     candidates.push({
       pcode: best.l.p,
       name: best.l.n,
       province: names.get(pv) ?? pv,
       region: best.l.r,
+      density: Math.round(places.length * (highest - low) * 100) / 100, // rule 2
       solid: solid.length,
       places: places.length,
+      low,
+      highest,
       official: best.official,
       model: best.model,
     });
   }
 
-  // Rule 4: the densest province of each region, then the top regions.
-  candidates.sort((a, b) => b.solid - a.solid || byCode(a.pcode, b.pcode));
+  // Rule 4: the densest province of each region.
+  const dense = (a: TourPick, b: TourPick) => b.density - a.density || b.official - a.official || byCode(a.pcode, b.pcode);
+  candidates.sort(dense);
   const seen = new Set<string>();
-  const top: TourPick[] = [];
-  for (const c of candidates) {
-    if (seen.has(c.region)) continue;
-    seen.add(c.region);
-    top.push(c);
-    if (top.length === steps) break;
-  }
+  const perRegion = candidates.filter((c) => !seen.has(c.region) && !!seen.add(c.region));
+  // Rule 5: the high end first, then the densest.
+  const top = perRegion.filter((c) => c.official >= high.value).slice(0, Math.min(high.steps, steps));
+  for (const c of perRegion) if (top.length < steps && !top.includes(c)) top.push(c);
   if (!top.length) throw new Error("no province qualifies for the embed tour");
+  top.sort(dense); // rule 6
 
   // Interleave the island groups (each group keeps its density order).
   const groups = new Map<string, TourPick[]>();

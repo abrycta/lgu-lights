@@ -57,7 +57,7 @@ const chosen = chooseTour(index, (p) => fileOf(p).years.find((y) => y.year === Y
 const TOUR = chosen.tour;
 const VIEW = { year: YEAR, lgu: chosen.still };
 for (const [i, c] of chosen.picks.entries())
-  console.log(`tour ${i}: ${c.pcode} ${c.name}, ${c.province}: ${c.official} % official (model without the round ${c.model} %), ${c.solid}/${c.places} solid`);
+  console.log(`tour ${i}: ${c.pcode} ${c.name}, ${c.province}: ${c.official} % official; ${c.places} places, ${c.low}–${c.highest} %, ${c.solid} solid`);
 const provinces = [...new Set(TOUR.map((p) => p.slice(0, 7)))].map((pc) => {
   const province = index.provinces.find((p) => p.pcode === pc);
   if (!province) throw new Error(`no province ${pc}`);

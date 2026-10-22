@@ -35,18 +35,22 @@ describe("chooseTour", () => {
     expect(t.picks.every((p) => p.region !== "PH08")).toBe(true);
   });
 
-  it("features the solid place the backtest came closest to, never one outside its 90 % range", () => {
+  it("features the highest solid figure; the backtest's 90 % fit only breaks ties", () => {
     const { index, yearOf } = data({
       PH03001: {
         r: "PH03",
-        years: [off(20, 0, 23), off(20, 0, 20.5), off(20, 1, 20), off(20, 0, 40), off(20, 0, 20, "between")],
+        years: [off(20, 0, 23), off(20, 0, 20.5), off(70, 1), off(20, 0, 40), off(10, 0)],
       },
     });
+    // 70 is not solid (tier 1); of the solid 20s, two fit the backtest's range and 20.5 is closer.
     expect(chooseTour(index, yearOf).tour).toEqual(["PH0300102"]);
+    const { index: i2, yearOf: y2 } = data({ PH03001: { r: "PH03", years: [off(20), off(30, 0, 60)] } });
+    expect(chooseTour(i2, y2).picks[0]!.official).toBe(30); // outside its range, still the highest
   });
 
-  it("takes one province per region and interleaves the island groups", () => {
-    const n = (k: number) => Array.from({ length: k }, () => off(25));
+  it("ranks provinces by places × spread, one per region, interleaving the island groups", () => {
+    // k places from 10 % up in steps of 5: density k × 5(k − 1).
+    const n = (k: number) => Array.from({ length: k }, (_, i) => off(10 + 5 * i));
     const { index, yearOf } = data({
       PH01001: { r: "PH01", years: n(9) },
       PH01002: { r: "PH01", years: n(8) }, // same region: dropped
@@ -54,15 +58,29 @@ describe("chooseTour", () => {
       PH07001: { r: "PH07", years: n(6) },
       PH10001: { r: "PH10", years: n(5) },
       PH06001: { r: "PH06", years: n(4) },
+      PH09001: { r: "PH09", years: [off(20), off(20)] }, // flat: density 0
     });
-    const t = chooseTour(index, yearOf, 4);
+    const t = chooseTour(index, yearOf, 4, { value: 50, steps: 0 });
     expect(t.picks.map((p) => [p.province, islandGroup(p.region)])).toEqual([
       ["PPH01001", "Luzon"],
       ["PPH07001", "Visayas"],
       ["PPH10001", "Mindanao"],
       ["PPH03001", "Luzon"],
     ]);
-    expect(t.still).toBe("PH0100101");
+    expect(t.still).toBe(t.tour[0]);
+  });
+
+  it("reaches the high end: up to `steps` regions at or above the value come first", () => {
+    const n = (k: number, top = 40) => Array.from({ length: k }, (_, i) => off(top - i));
+    const { index, yearOf } = data({
+      PH01001: { r: "PH01", years: n(20) },
+      PH05001: { r: "PH05", years: n(18) },
+      PH07001: { r: "PH07", years: n(16) },
+      PH09001: { r: "PH09", years: [off(30), off(62)] }, // sparse but high
+      PH14001: { r: "PH14", years: [off(30), off(55)] },
+    });
+    const t = chooseTour(index, yearOf, 3, { value: 50, steps: 2 });
+    expect(t.picks.map((p) => p.official).sort()).toEqual([40, 55, 62]);
   });
 
   it("is deterministic and fails loudly when nothing qualifies", () => {
