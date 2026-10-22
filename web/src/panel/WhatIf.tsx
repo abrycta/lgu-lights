@@ -7,7 +7,7 @@ import { Badge, Button, T, useLang, useT } from "@abrycta/akari/react";
 import { useEffect, useId, useState } from "react";
 
 import type { YearRecord } from "@/data/types";
-import { interval, pct } from "@/lib/format";
+import { belowOne, interval, pctInline } from "@/lib/format";
 import { TIER_LABEL, tierOf } from "@/lib/honesty";
 import { whatIfExplanation } from "@/lib/plain";
 import { runWhatIf, whatIfLoaded } from "@/whatif/client";
@@ -146,10 +146,10 @@ export function WhatIf({ pcode, name, rec, widen }: { pcode: string; name: strin
         ) : est ? (
           <p className={stale ? "opacity-60" : ""}>
             <T
-              en={`Hypothetical: ${shownZero ? "with no change" : `with night lights ${signed(shownGrowth, 0)} %/yr and NDVI ${signed(shownNdvi, 2)}`}, the model would put poverty in ${name} in ${year} at `}
+              en={`Hypothetical: ${shownZero ? "with no change" : `with night lights ${signed(shownGrowth, 0)} %/yr and NDVI ${signed(shownNdvi, 2)}`}, the model would put poverty in ${name} in ${year} ${belowOne(est.value, true) ? "" : "at "}`}
               ja={`仮定：${shownZero ? "変化なしの場合" : `夜間光 年${signed(shownGrowth, 0)}%、NDVI ${signed(shownNdvi, 2)}の場合`}、${year}年の${name}の貧困率は `}
             />
-            <strong className="font-mono">{pct(est.value, lang)}</strong>
+            <strong className="font-mono">{pctInline(est.value, lang, true)}</strong>
             <T en=" (widened 90 % interval " ja="（拡張90%区間 " />
             <span className="font-mono">{interval(est.lo90, est.hi90, lang).text}</span>
             <T en={`; ${TIER_LABEL[est.tier][lang]}).`} ja={`、${TIER_LABEL[est.tier][lang]}）。`} />

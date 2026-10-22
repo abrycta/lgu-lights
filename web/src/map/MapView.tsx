@@ -32,7 +32,7 @@ import { use, useEffect, useLayoutEffect, useRef } from "react";
 import { loadNational, packedTile, tilesUrl } from "@/data/load";
 import type { IndexProvince } from "@/data/types";
 import { sourceLabel, TIER_LABEL, type Lang } from "@/lib/honesty";
-import { pct } from "@/lib/format";
+import { pctShown } from "@/lib/format";
 
 import { isHtml } from "./tile";
 import { featurePcode, fillColor, fillOpacity, hatchFilter, hatchPattern, PH_BOUNDS, pcodeId, placeYear, type ThemeKey, tokenColor } from "./style";
@@ -203,7 +203,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
       if (v != null) {
         const label = sourceLabel(s === 0 ? "official" : "model", y, l);
         const tier = tr == null ? "" : (TIER_LABEL[tr as 0 | 1 | 2]?.[l] ?? "");
-        line.textContent = `${label}: ${pct(v, l)} · ${tier}`;
+        line.textContent = `${label}: ${pctShown(v, l, s !== 0)} · ${tier}`;
         if (s !== 0) line.className = "lgu-popup-model";
       } else {
         line.textContent = l === "ja" ? `${y}年：データなし` : `${y}: no data`;
