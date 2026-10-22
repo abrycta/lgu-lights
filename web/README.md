@@ -29,9 +29,9 @@ npm run build     # dist/ for Cloudflare Pages (public/_headers sets caching and
 
 Deploys follow CI: on `main`, `.github/workflows/web.yml` runs `scripts/deploy-web.sh` (repo root) after
 the checks pass. The script builds the WASM module and the app from a staged `public/` (never the local
-`public/data/` dev links), adds only the published data versions (`DATA_VERSIONS`, default `v1 v3 v4`) from
+`public/data/` dev links), adds only the published data versions (`DATA_VERSIONS`, default `v1 v3 v4 v5`) from
 their `data-<v>` GitHub releases with each tarball's sha256 checked against the release digest, writes
-`data/latest.json` (`LATEST`, default `v4`), runs `wrangler pages deploy`, then checks the live site. To
+`data/latest.json` (`LATEST`, default `v5`), runs `wrangler pages deploy`, then checks the live site. To
 publish a new data release, change the two defaults in the script and push, or run the workflow on `main`.
 `scripts/deploy-web.sh --no-deploy` stages `dist/` locally without uploading.
 

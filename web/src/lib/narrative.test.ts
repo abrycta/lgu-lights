@@ -51,3 +51,13 @@ describe("narrative", () => {
     expect(backtestNote(model, "en")).toBeNull();
   });
 });
+
+describe("City of Manila (districts combined, data v5)", () => {
+  it("says the figure is combined from PSA's 14 district estimates, not an official SAE", () => {
+    const rec = { year: 2023, official: { estimate: 1.89, se: 0.2, cv: 10.8, lo90: 1.56, hi90: 2.23, tier: 1 as const, estimator: "CensusEB" }, model: null, shown: { value: 1.89, tier: 1 as const, source: "official" as const } } as unknown as Parameters<typeof narrative>[0];
+    const en = narrative(rec, 2023, "City of Manila", "en", "PH1303901");
+    expect(en).toContain("combined from PSA's 14 district estimates");
+    expect(en).not.toContain("official figure");
+    expect(narrative(rec, 2023, "City of Manila", "ja", "PH1303901")).toContain("14地区の推計");
+  });
+});

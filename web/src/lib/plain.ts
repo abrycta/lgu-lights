@@ -11,7 +11,7 @@
 
 import type { LguDetail, Source, Tier, YearRecord } from "@/data/types";
 
-import { CENSUS_EB_FROM, type Lang } from "./honesty";
+import { CENSUS_EB_FROM, combinedNote, type Lang } from "./honesty";
 
 const Z90 = 1.645;
 
@@ -488,8 +488,9 @@ export function nationalSentence(
 // ---------------------------------------------------------------------------------------------
 // #11 Copy a plain summary
 
-export function plainSummary(args: { place: string; province: string; rec: YearRecord | undefined; year: number; url: string }, lang: Lang): string | null {
+export function plainSummary(args: { place: string; province: string; rec: YearRecord | undefined; year: number; url: string; pcode?: string }, lang: Lang): string | null {
   const { place, province, rec, year, url } = args;
+  const combined = combinedNote(args.pcode, lang);
   const f = shownFigure(rec);
   if (!f || !rec) return null;
   const lo = r100(f.lo);
@@ -498,13 +499,17 @@ export function plainSummary(args: { place: string; province: string; rec: YearR
   if (lang === "ja") {
     const label =
       f.source === "official"
-        ? "これはPSA（フィリピン統計庁）の公式統計（小地域推計）です。"
+        ? combined
+          ? `この値はPSA（フィリピン統計庁）の${combined.replace(/^PSAの/, "")}したものです。`
+          : "これはPSA（フィリピン統計庁）の公式統計（小地域推計）です。"
         : `これはLightsのモデル推計で、公式統計ではありません（PSAの${rec.model!.from}年の値を出発点にしています）。`;
     return `${p}（${year}年）：${freq(f.est, lang)}が貧困線を下回る暮らしをしていました（100人あたりおそらく${lo}〜${hi}人）。${label}出典：Lights ${url}`;
   }
   const label =
     f.source === "official"
-      ? "This is an official figure from the Philippine Statistics Authority (PSA small area estimate)."
+      ? combined
+        ? `This figure is ${combined} (Philippine Statistics Authority), weighted by population.`
+        : "This is an official figure from the Philippine Statistics Authority (PSA small area estimate)."
       : `This is a Lights model estimate, not an official figure; it starts from PSA's ${rec.model!.from} figure.`;
   return `${p}, ${year}: ${freq(f.est, lang)} people lived below the poverty line (likely between ${lo} and ${hi} in every 100). ${label} Source: Lights, ${url}`;
 }

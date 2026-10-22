@@ -78,7 +78,7 @@ export function PlainWords({ lgu, rec, year, index }: { lgu: LguDetail; rec: Yea
   const why = whyModelSentence(lgu.years, rec, lang);
   const change = changeSentence(lgu.years, rec, lang);
   const url = `${location.origin}${formatUrl({ page: "map", year, prov: lgu.province.pcode, lgu: lgu.pcode, lang })}`;
-  const summary = plainSummary({ place: lgu.name, province: lgu.province.name, rec, year, url }, lang);
+  const summary = plainSummary({ place: lgu.name, province: lgu.province.name, rec, year, url, pcode: lgu.pcode }, lang);
   return (
     <section className="grid gap-2 rounded-sm border border-border bg-muted/40 p-3 text-sm leading-relaxed" aria-labelledby="plain-h" data-testid="plain-words">
       <h3 id="plain-h" className="text-xs font-medium tracking-wide text-muted-foreground uppercase">

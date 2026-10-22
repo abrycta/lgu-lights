@@ -17,14 +17,14 @@
 #   5. live checks: /deploy.json is this commit, latest.json reports LATEST, the home page serves this build's script, /embed and the
 #      WASM answer 200, a missing tile answers 404 (retried for up to 2 minutes while the deploy propagates)
 #
-# Env: DATA_VERSIONS (default "v1 v3 v4"), LATEST (default v4), LIVE_URL (default https://lights.krtmtthw.dev),
+# Env: DATA_VERSIONS (default "v1 v3 v4 v5"), LATEST (default v5), LIVE_URL (default https://lights.krtmtthw.dev),
 #      CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (locally: Keychain cloudflare-api-token and the
 #      account ID from ../typhoon-replay/.env.deploy when unset), GH_TOKEN for the release download in CI.
 # Needs: node 24, npm deps installed in web/ (npm ci), cargo with the wasm32 target, gh, zstd, curl.
 set -euo pipefail
 
-DATA_VERSIONS="${DATA_VERSIONS:-v1 v3 v4}"
-LATEST="${LATEST:-v4}"
+DATA_VERSIONS="${DATA_VERSIONS:-v1 v3 v4 v5}"
+LATEST="${LATEST:-v5}"
 LIVE_URL="${LIVE_URL:-https://lights.krtmtthw.dev}"
 PROJECT=lgu-lights
 REPO=abrycta/lgu-lights

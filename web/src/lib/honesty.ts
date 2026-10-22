@@ -76,6 +76,17 @@ export function tierOf(cv: number, reliableMax = 10, cautionMax = 20): Tier {
   return cv <= reliableMax ? 0 : cv <= cautionMax ? 1 : 2;
 }
 
+/** Places whose "official" figure Lights combines from PSA's district estimates (data v5): the City of Manila,
+ *  which PSA publishes only as its 14 districts; weighted by 2020 Census population (pipeline/lgu/labels.py). */
+export const COMBINED_DISTRICTS: Readonly<Record<string, number>> = { PH1303901: 14 };
+
+/** "Combined from PSA's 14 district estimates" for such a place, else null. */
+export function combinedNote(pcode: string | undefined, lang: "en" | "ja"): string | null {
+  const n = pcode ? COMBINED_DISTRICTS[pcode] : undefined;
+  if (!n) return null;
+  return lang === "ja" ? `PSAの${n}地区の推計を人口で加重して合算` : `combined from PSA's ${n} district estimates`;
+}
+
 /** PSA's SAE method changed from ELL (2012–2018) to Census EB (2021 onwards). */
 export function estimatorLabel(e: string): string {
   return e === "CensusEB" ? "Census EB" : e;
