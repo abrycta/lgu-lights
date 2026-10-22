@@ -297,10 +297,10 @@ jobs:
           sudo apt-get install -y -qq libsqlite3-dev zlib1g-dev >/dev/null
           git clone -q --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe /tmp/tc
           make -C /tmp/tc -j4 >/dev/null && make -C /tmp/tc install PREFIX="$HOME/.local/tippecanoe" >/dev/null
-      - name: Join attributes onto the geometry tiles
+      - name: Geometry-only tiles (the app styles them from tiles-attrs.csv by feature id)
         run: |
           export PATH="$HOME/.local/tippecanoe/bin:$PATH"
-          pipeline/tools/build_tiles.sh join data/build/geom.pmtiles "data/dist/$VERSION/tiles-attrs.csv" "data/dist/$VERSION"
+          pipeline/tools/build_tiles.sh export data/build/geom.pmtiles "data/dist/$VERSION"
       - name: Publish the data release (draft first, published after the archive is complete)
         run: |
           cd data/dist

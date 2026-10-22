@@ -202,8 +202,10 @@ export function clearChanges(years: YearRecord[]): Map<number, "up" | "down"> {
 /** Everyone's shown value per year, from the published tiles-attrs.csv (one row per place). */
 export interface NationalValues {
   years: number[];
-  /** pcode → per-year value (null: no estimate) and source (0 official, 1 model). */
-  rows: Map<string, { v: (number | null)[]; s: (number | null)[] }>;
+  /** Whether the file has the tier columns (t<yy>): the embed's cut-down copy leaves them out. */
+  tiers: boolean;
+  /** pcode → per-year value (null: no estimate), reliability tier (0–2) and source (0 official, 1 model). */
+  rows: Map<string, { v: (number | null)[]; t: (number | null)[]; s: (number | null)[] }>;
 }
 
 export function parseAttrsCsv(text: string): NationalValues {
@@ -211,17 +213,19 @@ export function parseAttrsCsv(text: string): NationalValues {
   const head = lines[0]!.split(",");
   const vCols = head.flatMap((h, i) => (/^v\d\d$/.test(h) ? [[i, 2000 + Number(h.slice(1))] as const] : []));
   const years = vCols.map(([, y]) => y);
-  const sIdx = years.map((y) => head.indexOf(`s${String(y % 100).padStart(2, "0")}`));
-  const rows = new Map<string, { v: (number | null)[]; s: (number | null)[] }>();
+  const col = (k: string) => years.map((y) => head.indexOf(`${k}${String(y % 100).padStart(2, "0")}`));
+  const sIdx = col("s");
+  const tIdx = col("t");
+  const rows: NationalValues["rows"] = new Map();
   for (const line of lines.slice(1)) {
     // Names are quoted and may contain commas; the pcode is first and the numbers follow the name.
     const m = /^([^,]+),("(?:[^"]|"")*"|[^,]*),(.*)$/.exec(line);
     if (!m) continue;
     const cells = [m[1]!, m[2]!, ...m[3]!.split(",")];
     const num = (i: number) => (cells[i] === "" || cells[i] == null ? null : Number(cells[i]));
-    rows.set(m[1]!, { v: vCols.map(([i]) => num(i)), s: sIdx.map((i) => (i < 0 ? null : num(i))) });
+    rows.set(m[1]!, { v: vCols.map(([i]) => num(i)), t: tIdx.map((i) => (i < 0 ? null : num(i))), s: sIdx.map((i) => (i < 0 ? null : num(i))) });
   }
-  return { years, rows };
+  return { years, tiers: tIdx.some((i) => i >= 0), rows };
 }
 
 /** Values of one source in one year, optionally keyed by pcode. */

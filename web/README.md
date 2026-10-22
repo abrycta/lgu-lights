@@ -29,9 +29,9 @@ npm run build     # dist/ for Cloudflare Pages (public/_headers sets caching and
 
 Deploys follow CI: on `main`, `.github/workflows/web.yml` runs `scripts/deploy-web.sh` (repo root) after
 the checks pass. The script builds the WASM module and the app from a staged `public/` (never the local
-`public/data/` dev links), adds only the published data versions (`DATA_VERSIONS`, default `v1 v3`) from
+`public/data/` dev links), adds only the published data versions (`DATA_VERSIONS`, default `v1 v3 v4`) from
 their `data-<v>` GitHub releases with each tarball's sha256 checked against the release digest, writes
-`data/latest.json` (`LATEST`, default `v3`), runs `wrangler pages deploy`, then checks the live site. To
+`data/latest.json` (`LATEST`, default `v4`), runs `wrangler pages deploy`, then checks the live site. To
 publish a new data release, change the two defaults in the script and push, or run the workflow on `main`.
 `scripts/deploy-web.sh --no-deploy` stages `dist/` locally without uploading.
 
@@ -39,8 +39,10 @@ publish a new data release, change the two defaults in the script and push, or r
 
 `/data/latest.json` → `{"version","base"}`; everything else is read from that immutable version folder:
 `manifest.json`, `index.json`, `metrics.json`, `tiles-attrs.csv` (every place's value, tier and source per year:
-the national and province comparisons; optional, they are left out without it), `lgu/<pcode>.json`, `tiles/{z}/{x}/{y}.pbf` (uncompressed
-MVT, layers `lgu` and `prov`, per-year `v/t/s` properties), `whatif/snapshot.bin` + `whatif/model.json`.
+the map's colours, stripes and popups, looked up by tile feature id, and the national and province comparisons),
+`lgu/<pcode>.json`, `tiles/{z}/{x}/{y}.pbf` (uncompressed MVT, layers `lgu` and `prov`; from data v4 geometry,
+feature id and `pcode` only; v1–v3 tiles also carry per-year `v/t/s` properties, which the map reads only when
+the CSV is missing), `whatif/snapshot.bin` + `whatif/model.json`.
 Missing tiles (open sea) come back from Pages as the SPA's `index.html`; the `lgutile://` protocol in
 `src/map/MapView.tsx` turns that (or a 404) into an empty tile.
 
