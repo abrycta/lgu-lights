@@ -10,15 +10,17 @@ import { setWorkerUrl } from "maplibre-gl";
 
 setWorkerUrl(workerUrl);
 
-// Tiles are a sparse z/x/y directory: empty (ocean) tiles do not exist, and Cloudflare Pages (like the
-// dev server) answers a missing file with the SPA's index.html and status 200. This protocol turns a
-// 404 or an HTML answer into an empty tile instead of a parse error.
+// Tiles are a sparse z/x/y directory: empty (ocean) tiles do not exist. The deploy puts a 404.html in
+// data/ so Pages answers 404 there, but the dev server (and Pages without it) answers with the SPA's
+// index.html and status 200, which _headers labels application/x-protobuf. This protocol turns a 404 or
+// an HTML body (sniffed: an MVT never starts with "<") into an empty tile instead of a parse error.
 maplibregl.addProtocol("lgutile", async (params, abort) => {
   const packed = packedTile(params.url.slice("lgutile://".length));
   if (packed) return { data: packed };
   const r = await fetch(params.url.slice("lgutile://".length), { signal: abort.signal });
   if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return { data: new ArrayBuffer(0) };
-  return { data: await r.arrayBuffer() };
+  const data = await r.arrayBuffer();
+  return { data: isHtml(data) ? new ArrayBuffer(0) : data };
 });
 
 import { addHatchImages, choroplethLayers } from "@abrycta/akari/maps";
@@ -32,6 +34,7 @@ import type { IndexProvince } from "@/data/types";
 import { sourceLabel, TIER_LABEL, type Lang } from "@/lib/honesty";
 import { pct } from "@/lib/format";
 
+import { isHtml } from "./tile";
 import { featurePcode, fillColor, fillOpacity, hatchFilter, hatchPattern, PH_BOUNDS, pcodeId, placeYear, type ThemeKey, tokenColor } from "./style";
 
 export interface MapViewProps {
