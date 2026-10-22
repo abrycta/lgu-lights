@@ -258,9 +258,10 @@ jobs:
           echo "feature store: features-$FEATURES_FROM" >> "$GITHUB_STEP_SUMMARY"
           if [ "$FEATURES_FROM" != "$VERSION" ]; then
             # A reused satellite store keeps its zonal statistics; the PSA inputs (labels, provincial
-            # FIES) are this commit's committed copies, as a rebuilt store would have them (B4).
+            # FIES) are this commit's committed copies, as a rebuilt store would have them (B4); so is the
+            # provenance of the PSA inputs (since v5 it lists psa-psgc, the City of Manila district weights).
             cp ../../pipeline/inputs/labels.parquet ../../pipeline/inputs/crosswalk-report.json \
-               ../../pipeline/inputs/provinces_fies.parquet .
+               ../../pipeline/inputs/provinces_fies.parquet ../../pipeline/inputs/provenance.json .
             echo "PSA inputs: pipeline/inputs/ at $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           fi
       - uses: ./.github/actions/setup-rust

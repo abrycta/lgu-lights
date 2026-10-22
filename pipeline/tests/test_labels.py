@@ -22,3 +22,14 @@ def test_rematch_prefers_province_then_region_and_refuses_ambiguity():
 def test_region_guard_allows_armm_to_barmm_only():
     assert labels._region_ok("153811", "PH1908711")
     assert not labels._region_ok("133906", "PH0405639")
+
+
+def test_manila_districts_combine_by_population_with_the_upper_bound_se():
+    w = {"133901": 3, "133902": 1}
+    rows = [labels.SaeRow("133901", "1st district", "Tondo", 2023, 2.0, 10.0, 0.2, None, None, "s"),
+            labels.SaeRow("133902", "", "Binondo", 2023, 6.0, None, 0.6, None, None, "s"),
+            labels.SaeRow("133901", "1st district", "Tondo", 2021, 2.0, 10.0, 0.2, None, None, "s")]
+    (c,) = labels.combine_districts(rows, w)  # 2021 lacks Binondo: no city row
+    assert (c.code6, c.year, c.name) == ("133900", 2023, "City of Manila")
+    assert c.estimate == 3.0 and abs(c.se - 0.3) < 1e-12 and abs(c.cv - 10.0) < 1e-9
+    assert abs(c.ci_lo - (3.0 - labels.Z90 * 0.3)) < 1e-12

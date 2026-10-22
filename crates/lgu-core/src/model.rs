@@ -11,6 +11,25 @@ use crate::tiers::{Tier, cv_tier};
 /// z for a two-sided 90 % normal interval, used to turn an interval half-width into a CV.
 pub const Z90: f64 = 1.644_853_626_951_472_2;
 
+/// Share of the previous official figure below which a predicted fall tapers (data v5, lb-lows).
+pub const TAPER: f64 = 0.5;
+
+/// The level from the previous official figure and the predicted change, in percent (data v5).
+/// A rise, or a fall to no less than `TAPER` of the previous figure, adds as before. A larger fall
+/// tapers hyperbolically below `f = TAPER * y_prev`, as `f² / (2f − raw)` (continuous, same slope at
+/// the joint, always above 0), so a place is never estimated at exactly 0 %: in the PSA rounds 2006-2023 no LGU fell below 12 % of its previous
+/// figure and the lowest published figure is 0.28 %. Mirrored by `level` in pipeline/lgu/train.py.
+pub fn level(y_prev: f64, change: f64) -> f64 {
+    let raw = y_prev + change;
+    let floor = TAPER * y_prev;
+    let v = if y_prev > 0.0 && raw < floor {
+        floor * floor / (2.0 * floor - raw)
+    } else {
+        raw
+    };
+    v.clamp(0.0, 100.0)
+}
+
 /// Conformal calibration: absolute-residual quantiles per bin of the previous official estimate,
 /// from forward-chaining out-of-fold residuals (MODELING-PLAN §6).
 #[derive(Debug, Clone, Deserialize)]
@@ -118,7 +137,7 @@ impl Model {
     /// Point estimate and intervals from a feature row.
     pub fn estimate_from_row(&self, x: &[f64; N_FEATURES], prev_year: i32, widen: f64) -> Estimate {
         let y_prev = x[0];
-        let value = (y_prev + self.delta(x)).clamp(0.0, 100.0);
+        let value = level(y_prev, self.delta(x));
         let b = self.calibration.bin(y_prev);
         let (h50, h90) = (
             self.calibration.q50[b] * widen,
@@ -189,5 +208,18 @@ mod tests {
     fn a_model_without_linear_terms_still_loads_and_unknown_features_are_rejected() {
         assert!(Model::from_json(&json(r#"["d_l_bm"]"#, "")).is_ok());
         assert!(Model::from_json(&json(r#"["no_such_feature"]"#, "")).is_err());
+    }
+
+    #[test]
+    fn a_large_fall_tapers_above_zero_and_the_rest_adds() {
+        assert_eq!(level(20.0, 3.0), 23.0);
+        assert_eq!(level(20.0, -10.0), 10.0); // exactly half: the joint
+        assert!((level(20.0, -9.0) - 11.0).abs() < 1e-12);
+        let v = level(2.0, -4.0); // additive would be -2 %
+        assert!(v > 0.0 && v < 1.0, "{v}");
+        assert!((v - 0.25).abs() < 1e-12); // f = 1: 1 / (2 + 2)
+        assert!(level(2.0, -40.0) > 0.0);
+        assert!(level(2.0, -4.0) < level(2.0, -3.0)); // still monotone
+        assert_eq!(level(99.0, 5.0), 100.0);
     }
 }

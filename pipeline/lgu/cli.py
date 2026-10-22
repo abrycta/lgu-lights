@@ -26,7 +26,7 @@ from .paths import CROSSWALK_OVERRIDES, DATA, INTERIM, RAW, REPO_ROOT
 BUILD = DATA / "build"
 COMMITTED = Path(__file__).resolve().parents[1] / "inputs"
 FILE_SOURCES = ["psa-sae-2018-2021", "psa-sae-2023", "cod-ab-phl-tables", "cod-ab-phl-gdb",
-                "psa-fies-prov-2006-2015", "psa-fies-prov-2018-2023", "psa-fies-prov-nohuc"]
+                "psa-fies-prov-2006-2015", "psa-fies-prov-2018-2023", "psa-fies-prov-nohuc", "psa-psgc"]
 DEFAULT_YEARS = "2012-2025"
 
 
@@ -97,11 +97,13 @@ def run(cmd: str, argv: list[str]) -> int:
         from . import labels
         adm3 = pd.read_excel(RAW / "boundaries" / "phl_admin_boundaries.xlsx", sheet_name="phl_admin3")
         shas = {}
-        for sid, f in (("psa-sae-2018-2021", "psa-sae-2018-2021.xlsx"), ("psa-sae-2023", "psa-sae-2023.xlsx")):
+        for sid, f in (("psa-sae-2018-2021", "psa-sae-2018-2021.xlsx"), ("psa-sae-2023", "psa-sae-2023.xlsx"),
+                       ("psa-psgc", "psa-psgc.xlsx")):
             prov = json.loads((RAW / "psa" / f"{f}.provenance.json").read_text())
             shas[sid] = prov["sha256"]
         df, rep = labels.build_labels(RAW / "psa" / "psa-sae-2018-2021.xlsx", RAW / "psa" / "psa-sae-2023.xlsx",
-                                      adm3, labels.load_overrides(CROSSWALK_OVERRIDES), shas)
+                                      adm3, labels.load_overrides(CROSSWALK_OVERRIDES), shas,
+                                      psgc=RAW / "psa" / "psa-psgc.xlsx")
         df.to_parquet(BUILD / "labels.parquet", index=False)
         labels.write_report(rep, BUILD / "crosswalk-report.json")
         # Committed copy (pipeline/inputs/): CI without ARCHIVE_READ_TOKEN uses it (lgu/direct.py).

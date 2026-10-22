@@ -38,3 +38,10 @@ def test_linear_terms_drift_and_provincial_gap():
     assert coef["prov_fies_gap"] == 0.5  # +-1 pp around the transition mean per +-2 of gap
     x = pd.DataFrame({"gap": [2.0], "prov_fies_gap": [np.nan]})
     assert train.linear(x, coef).tolist() == [-3.0]  # a missing FIES figure contributes 0, as in the core
+
+
+def test_level_tapers_a_large_fall_like_the_core():
+    y = np.array([20.0, 20.0, 2.0, 2.0])
+    v = train.level(y, np.array([3.0, -10.0, -4.0, -40.0]))
+    assert v[0] == 23.0 and v[1] == 10.0
+    assert abs(v[2] - 0.25) < 1e-12 and 0 < v[3] < v[2]

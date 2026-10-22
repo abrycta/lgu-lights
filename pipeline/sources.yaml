@@ -98,6 +98,40 @@ sources:
       member_format: xml
     archived: { enabled: true, retention: all }
 
+  # ------------------------------------------------------------------ codes and population (data v5)
+  - id: psa-psgc
+    description: >-
+      PSA Philippine Standard Geographic Code, 1st quarter 2025 publication datafile: every region,
+      province, city, municipality, sub-municipality and barangay with its 10-digit PSGC, the pre-2021
+      correspondence code and its 2020 Census population. The pipeline reads the 14 City of Manila
+      sub-municipalities (districts), whose populations weight the district SAE figures into one figure
+      for the city (lgu/labels.py, combine_districts).
+    kind: file
+    format: zip                            # an xlsx is a zip
+    filename: psa-psgc.xlsx
+    local_path: data/raw/psa/psa-psgc.xlsx
+    licence: "PSA terms of use (free use with attribution)"
+    attribution: "Philippine Statistics Authority, Philippine Standard Geographic Code (PSGC), 1st Quarter 2025; 2020 Census of Population and Housing"
+    cadence: quarterly (the 2020 populations do not change until the next census)
+    pin:
+      original_name: "PSGC-1Q-2025-Publication-Datafile.xlsx"
+      wayback_timestamp: "20250520193006"
+      intake: "Wayback capture of the PSA file, fetched 2026-10-23 (archive release psa-psgc-2026-10-23); adopted with pipeline/tools/adopt_manual.py"
+    links:
+      - id: psa
+        url: "https://psa.gov.ph/system/files/scd/PSGC-1Q-2025-Publication-Datafile.xlsx"
+        probe_html: true                   # Cloudflare challenge page to automated clients (spike S7)
+      - id: wayback
+        url: "https://web.archive.org/web/20250520193006id_/https://psa.gov.ph/system/files/scd/PSGC-1Q-2025-Publication-Datafile.xlsx"
+      - id: archive
+        archive: true
+    checks:
+      bytes: { min: 2000000, max: 6000000 }
+      sha256: 4ec8e492a6da1f6a155d71c90dbb693cd33c82438016ca6cb5842232a5f648d7
+      zip_member: "xl/workbook.xml"
+      member_format: xml
+    archived: { enabled: true, retention: all }
+
   # ------------------------------------------------------------------ provincial poverty (FIES; model v3)
   # PSA OpenSTAT (PXWeb) tables. PXWeb returns data only to a POST with a query, so an automated GET of
   # the link gets the table's metadata, fails validation and falls back to the archive snapshot; the
