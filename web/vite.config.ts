@@ -33,6 +33,8 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
     dedupe: ["react", "react-dom"],
   },
+  // scripts/deploy-web.sh builds from a staged copy of public/ (no local data/ dev links, fresh WASM).
+  publicDir: process.env.LIGHTS_PUBLIC_DIR ?? "public",
   worker: { format: "es" },
   // MapLibre 6 resolves its worker file relative to its own module; pre-bundling breaks that in dev.
   optimizeDeps: { exclude: ["maplibre-gl"] },
