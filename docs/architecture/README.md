@@ -58,7 +58,7 @@ never the reverse. Python never re-implements a feature: it trains on the design
 | train | `lgu train` | `build/model/{model.json, backtest-2018/2021/2023.json, metrics.json, expected.csv}` |
 | parity | `lgu parity --model … --expected expected.csv --column <model>` | fails the run if \|core − LightGBM\| > 1e-5 |
 | materialise | `lgu materialise …` | `dist/<version>/` (below) |
-| tiles | `tools/build_tiles.sh geometry …` once per boundary vintage; `… join …` per version | `dist/<version>/tiles/{z}/{x}/{y}.pbf`, `lgu.pmtiles` |
+| tiles | `tools/build_tiles.sh geometry …` once per boundary vintage; `… export …` per version (v1–v3: `… join …`) | `dist/<version>/tiles/{z}/{x}/{y}.pbf`, `lgu.pmtiles` |
 
 ## Read models (one immutable folder per data version)
 
@@ -70,7 +70,7 @@ never the reverse. Python never re-implements a feature: it trains on the design
 | `index.json` | LGUs (`p` pcode, `n` name, `pv` province, `r` region, `c` class, `x`/`y`), provinces (bbox for drill-down), regions |
 | `lgu/<pcode>.json` | per year: `official` (PSA estimate, SE, CV, 90 % CI, tier, estimator ELL/Census EB), `model` (estimate, 50/90 % intervals, CV, tier, `from` round, `kind` backtest/between/nowcast), `shown` (what the map draws and its source), `inputs` (radiance, lit fraction, NDVI, population) |
 | `metrics.json` | the validation leaderboard (folds F1–F3, baselines, ablation, calibration, tuning) |
-| `tiles/` | MVT z0–10, layer `lgu` with `v12…v25` (value), `t12…t25` (tier), `s12…s25` (0 official, 1 model) per S1; layer `prov` |
+| `tiles/` | MVT z0–10, layers `lgu` and `prov`, geometry with the feature id (pcode digits) and `pcode` only since v4; the app styles them from `tiles-attrs.csv` (`v12…v25` value, `t12…t25` tier, `s12…s25` 0 official / 1 model). v1–v3 tiles carry those columns as properties (S1) |
 | `whatif/` | `snapshot.bin` (panel, f32; version 2 since v3 adds the provincial FIES table, version 1 still readable) and `model.json` for the WASM what-if |
 | `estimates.csv` / `.parquet` | the long table (also published with the data release) |
 

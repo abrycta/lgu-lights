@@ -25,14 +25,14 @@ import { addHatchImages, choroplethLayers } from "@abrycta/akari/maps";
 import { useT } from "@abrycta/akari/react";
 import * as maplibregl from "maplibre-gl";
 import type { MapGeoJSONFeature, Map as MlMap } from "maplibre-gl";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { use, useEffect, useLayoutEffect, useRef } from "react";
 
-import { packedTile, tilesUrl } from "@/data/load";
+import { loadNational, packedTile, tilesUrl } from "@/data/load";
 import type { IndexProvince } from "@/data/types";
 import { sourceLabel, TIER_LABEL, type Lang } from "@/lib/honesty";
 import { pct } from "@/lib/format";
 
-import { featurePcode, fillColor, fillOpacity, hatchFilter, hatchPattern, PH_BOUNDS, type ThemeKey, tokenColor } from "./style";
+import { featurePcode, fillColor, fillOpacity, hatchFilter, hatchPattern, PH_BOUNDS, pcodeId, placeYear, type ThemeKey, tokenColor } from "./style";
 
 export interface MapViewProps {
   base: string;
@@ -53,7 +53,7 @@ export interface MapViewProps {
 const yy = (year: number) => String(year % 100).padStart(2, "0");
 
 function idOf(pcode: string | null): number {
-  return pcode ? Number.parseInt(pcode.slice(2), 10) : -1;
+  return pcode ? pcodeId(pcode) : -1;
 }
 
 export default function MapView({ base, year, breaks, theme, lang, province, lgu, names, onPick, frozen }: MapViewProps) {
@@ -61,12 +61,16 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
   const el = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const loaded = useRef(false);
+  // Every place's value, tier and source per year (tiles-attrs.csv): from data v4 on the tiles carry
+  // geometry and pcode only, so the paint expressions look the values up by feature id. Fetched with the
+  // page, so this rarely waits; null (no CSV) falls back to the tiles' own properties.
+  const national = use(loadNational());
   // Latest props for event handlers registered once.
-  const props = useRef({ year, lang, names, onPick, province });
+  const props = useRef({ year, lang, names, onPick, province, national });
   const frozenRef = useRef(frozen);
   const themeRef = useRef(theme);
   useLayoutEffect(() => {
-    props.current = { year, lang, names, onPick, province };
+    props.current = { year, lang, names, onPick, province, national };
     themeRef.current = theme;
   });
 
@@ -106,14 +110,14 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
         },
         layers: [
           { id: "background", type: "background", paint: { "background-color": tokenColor("color.bg", theme) } },
-          { ...(fill as object), paint: { "fill-color": fillColor(year, breaks, theme), "fill-opacity": fillOpacity(year) } } as maplibregl.FillLayerSpecification,
+          { ...(fill as object), paint: { "fill-color": fillColor(year, breaks, theme, national), "fill-opacity": fillOpacity(year, national) } } as maplibregl.FillLayerSpecification,
           {
             id: "lgu-hatch",
             type: "fill",
             source: "lgu",
             "source-layer": "lgu",
-            filter: hatchFilter(year) as maplibregl.FilterSpecification,
-            paint: { "fill-pattern": hatchPattern(year) as maplibregl.DataDrivenPropertyValueSpecification<string> },
+            filter: hatchFilter(year, national) as maplibregl.FilterSpecification,
+            paint: { "fill-pattern": hatchPattern(year, national) as maplibregl.DataDrivenPropertyValueSpecification<string> },
           },
           { ...(outline as object) } as maplibregl.LineLayerSpecification,
           {
@@ -184,22 +188,20 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
         hovered = f.id;
         if (hovered !== undefined) map.setFeatureState({ source: "lgu", sourceLayer: "lgu", id: hovered }, { hover: true });
       }
-      const { year: y, lang: l, names: n } = props.current;
+      const { year: y, lang: l, names: n, national: nat } = props.current;
       const pcode = featurePcode(f);
       const p = f.properties as Record<string, unknown>;
-      const v = p[`v${yy(y)}`];
-      const s = p[`s${yy(y)}`];
-      const tr = p[`t${yy(y)}`];
+      const { v, s, t: tr } = placeYear(pcode, p, y, nat);
       const name = (pcode && n.get(pcode)) ?? (typeof p.n === "string" ? p.n : "");
       const root = document.createElement("div");
       const title = document.createElement("strong");
       title.textContent = name;
       const line = document.createElement("div");
-      if (typeof v === "number") {
-        const label = sourceLabel(Number(s) === 0 ? "official" : "model", y, l);
-        const tier = TIER_LABEL[(Number(tr) as 0 | 1 | 2) ?? 2]?.[l] ?? "";
+      if (v != null) {
+        const label = sourceLabel(s === 0 ? "official" : "model", y, l);
+        const tier = tr == null ? "" : (TIER_LABEL[tr as 0 | 1 | 2]?.[l] ?? "");
         line.textContent = `${label}: ${pct(v, l)} · ${tier}`;
-        if (Number(s) !== 0) line.className = "lgu-popup-model";
+        if (s !== 0) line.className = "lgu-popup-model";
       } else {
         line.textContent = l === "ja" ? `${y}年：データなし` : `${y}: no data`;
       }
@@ -231,10 +233,10 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     const map = mapRef.current;
     if (!map) return;
     const apply = () => {
-      map.setPaintProperty("lgu-fill", "fill-color", fillColor(year, breaks, theme));
-      map.setPaintProperty("lgu-fill", "fill-opacity", fillOpacity(year));
-      map.setFilter("lgu-hatch", hatchFilter(year) as maplibregl.FilterSpecification);
-      map.setPaintProperty("lgu-hatch", "fill-pattern", hatchPattern(year));
+      map.setPaintProperty("lgu-fill", "fill-color", fillColor(year, breaks, theme, national));
+      map.setPaintProperty("lgu-fill", "fill-opacity", fillOpacity(year, national));
+      map.setFilter("lgu-hatch", hatchFilter(year, national) as maplibregl.FilterSpecification);
+      map.setPaintProperty("lgu-hatch", "fill-pattern", hatchPattern(year, national));
       map.setPaintProperty("background", "background-color", tokenColor("color.bg", theme));
       map.setPaintProperty("lgu-fill-outline", "line-color", tokenColor("color.bg", theme));
       map.setPaintProperty("prov-line", "line-color", tokenColor("color.text-muted", theme));
@@ -245,7 +247,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [year, breaks, theme]);
+  }, [year, breaks, theme, national]);
 
   // Selection outlines.
   useEffect(() => {

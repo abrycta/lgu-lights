@@ -39,8 +39,10 @@ publish a new data release, change the two defaults in the script and push, or r
 
 `/data/latest.json` → `{"version","base"}`; everything else is read from that immutable version folder:
 `manifest.json`, `index.json`, `metrics.json`, `tiles-attrs.csv` (every place's value, tier and source per year:
-the national and province comparisons; optional, they are left out without it), `lgu/<pcode>.json`, `tiles/{z}/{x}/{y}.pbf` (uncompressed
-MVT, layers `lgu` and `prov`, per-year `v/t/s` properties), `whatif/snapshot.bin` + `whatif/model.json`.
+the map's colours, stripes and popups, looked up by tile feature id, and the national and province comparisons),
+`lgu/<pcode>.json`, `tiles/{z}/{x}/{y}.pbf` (uncompressed MVT, layers `lgu` and `prov`; from data v4 geometry,
+feature id and `pcode` only; v1–v3 tiles also carry per-year `v/t/s` properties, which the map reads only when
+the CSV is missing), `whatif/snapshot.bin` + `whatif/model.json`.
 Missing tiles (open sea) come back from Pages as the SPA's `index.html`; the `lgutile://` protocol in
 `src/map/MapView.tsx` turns that (or a 404) into an empty tile.
 
