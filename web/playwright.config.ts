@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// E2E (the frozen /embed page) against the dev server: the embed reads only its packed file, so no
+// E2E (the /embed page) against the dev server: the embed reads only its packed file, so no
 // data version is needed. Run: npm run e2e (first: npm run e2e:install).
 const PORT = Number(process.env.E2E_PORT ?? 4327);
 
@@ -15,7 +15,6 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: "retain-on-failure",
-    launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } }],
   webServer: {

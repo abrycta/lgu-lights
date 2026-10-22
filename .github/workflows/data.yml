@@ -224,13 +224,15 @@ jobs:
         run: |
           cd data
           cp interim/zonal_*.parquet interim/provenance.json build/
+          gzip -9 -k -f build/outlines.geojsonl
           tag="features-$VERSION"
           gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$tag" --prerelease --target "$GITHUB_SHA" --title "$tag" \
             --notes "Feature store for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA)." \
             build/features.parquet build/lgus.parquet build/labels.parquet build/provinces_fies.parquet build/provinces.json \
-            build/crosswalk-report.json build/provenance.json build/zonal_*.parquet build/geom.pmtiles
-          du -h build/*.parquet build/geom.pmtiles | tee -a "$GITHUB_STEP_SUMMARY"
+            build/crosswalk-report.json build/provenance.json build/zonal_*.parquet build/geom.pmtiles \
+            build/outlines.geojsonl.gz
+          du -h build/*.parquet build/geom.pmtiles build/outlines.geojsonl.gz | tee -a "$GITHUB_STEP_SUMMARY"
 
   model:
     needs: [config, canary, features]

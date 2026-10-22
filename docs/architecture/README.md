@@ -49,7 +49,7 @@ never the reverse. Python never re-implements a feature: it trains on the design
 | Step | Command | Output (data/, gitignored) |
 |---|---|---|
 | inputs | `uv run python -m lgu inputs` (archivekit; needs `ARCHIVE_READ_TOKEN` in CI) or `inputs-direct` (B4) | `raw/psa/*.xlsx`, `raw/boundaries/*`, provenance sidecars, `interim/provenance.json` |
-| boundaries | `lgu boundaries` | `interim/adm3.parquet` (GeoParquet, full resolution), `lgus.parquet`, `provinces.json`, `tiles/*.geojsonl` |
+| boundaries | `lgu boundaries` | `interim/adm3.parquet` (GeoParquet, full resolution), `lgus.parquet`, `provinces.json`, `tiles/*.geojsonl`, `build/outlines.geojsonl` (also `lgu outlines`: one simplified coverage for the web's SVG `/embed`, `web/scripts/build-embed.mjs`; published in the features release) |
 | labels | `lgu labels` | `build/labels.parquet`, `crosswalk-report.json` (+ committed copy in `pipeline/inputs/`) |
 | fies | `lgu fies` (OpenSTAT tables fetched by `tools/fetch_openstat.py`, archived) | `build/provinces_fies.parquet` (+ committed copy in `pipeline/inputs/`) |
 | zonal | `lgu zonal-ee`, `lgu zonal-bm` (`zonal-vj` optional) | `interim/zonal_*.parquet` |
