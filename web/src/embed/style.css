@@ -66,7 +66,7 @@ body {
 .c4 { fill: var(--ak-seq-5); }
 .off { fill-opacity: var(--official); }
 .mod { fill-opacity: var(--model); }
-.nd { fill: var(--ak-surface-subtle); fill-opacity: 0.6; }
+.nd { fill: var(--ak-map-no-data); fill-opacity: 1; }
 .edges,
 .prov,
 .prov-sel,
@@ -77,8 +77,8 @@ body {
 }
 .edges { stroke: var(--ak-map-feature-line); stroke-width: 0.75px; }
 .prov { stroke: var(--ak-text-muted); stroke-width: 1.2px; }
-.prov-sel { stroke: var(--ak-text); stroke-width: 2.5px; }
-.lgu-sel { stroke: var(--ak-accent); stroke-width: 3px; }
+.prov-sel { stroke: var(--ak-map-hover); stroke-width: 2.5px; }
+.lgu-sel { stroke: var(--ak-map-selection); stroke-width: 3px; }
 .hatch-ink { fill: none; stroke: var(--ak-text); stroke-opacity: 0.75; stroke-width: 1px; }
 .hatch-ground { fill: none; stroke: var(--ak-bg); stroke-opacity: 0.7; stroke-width: 2.4px; }
 .chip .hatch-ink { stroke-width: 0.8px; }
