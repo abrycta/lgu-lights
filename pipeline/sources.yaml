@@ -128,6 +128,7 @@ sources:
       bytes: { min: 5000, max: 500000 }
       json_type: object
       contains: "Poverty Incidence among Population"
+      sha256: 4ca7dfe7ecd72804689b4c0843f12c914705409ecef796c0f1dda11bb7be8c2b   # the adopted POST result; a GET only returns table metadata (see tools/fetch_openstat.py)
     archived: { enabled: true, retention: all }
 
   - id: psa-fies-prov-2018-2023
@@ -154,6 +155,7 @@ sources:
       bytes: { min: 5000, max: 500000 }
       json_type: object
       contains: "Poverty Incidence among Population"
+      sha256: d83656571ffbe06dc44e396ac1a56693e68af79a0a6bb2f7ef7f0b11d5d5a4cb   # the adopted POST result; a GET only returns table metadata (see tools/fetch_openstat.py)
     archived: { enabled: true, retention: all }
 
   - id: psa-fies-prov-nohuc
@@ -180,6 +182,7 @@ sources:
       bytes: { min: 5000, max: 500000 }
       json_type: object
       contains: "Poverty Incidence among Population"
+      sha256: c2909e051fd3a5b0488bef82448fded568b68acf542282816669e83bc267714b   # the adopted POST result; a GET only returns table metadata (see tools/fetch_openstat.py)
     archived: { enabled: true, retention: all }
 
   # ------------------------------------------------------------------ codes and boundaries (S2)

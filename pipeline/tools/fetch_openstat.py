@@ -8,6 +8,10 @@ local_path, and the file is then adopted as the archive snapshot with tools/adop
     uv run python tools/fetch_openstat.py psa-fies-prov-2006-2015 psa-fies-prov-2018-2023 psa-fies-prov-nohuc
     GITHUB_TOKEN=$(gh auth token) uv run python tools/adopt_manual.py psa-fies-prov-nohuc \\
         data/raw/psa/psa-fies-prov-nohuc.json --date 2026-10-21
+
+Then set the source's checks.sha256 in sources.yaml to the adopted file's sha256: the pin makes the
+archive's snapshot job skip a source whose pinned file is already archived, instead of fetching the
+metadata and failing (or quarantining it).
 """
 from __future__ import annotations
 
