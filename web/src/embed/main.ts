@@ -11,7 +11,7 @@ import "./style.css";
 
 import { sparklineGeometry } from "@abrycta/akari/react/lib/akari-sparkline-geometry";
 
-import { pct } from "@/lib/format";
+import { belowOne, pct, pctInline, pctShown } from "@/lib/format";
 import { classLabels, classOf, type Lang } from "@/lib/honesty";
 
 import { PACK_URL } from "./pack.gen";
@@ -168,7 +168,10 @@ function drawCard(step: Step, pack: Pack, progress: HTMLElement): HTMLElement {
   const one = el("p", "c-line one");
   one.append(el("b", "", step.name), el("span", "muted", ` · ${step.province}`));
   const two = el("p", "c-line two");
-  if (step.value != null) {
+  // A model estimate of 0.0 reads "below 1 % (model estimate)", as everywhere in the app (lib/format.ts, #20).
+  const tiny = step.value != null && belowOne(step.value, model);
+  if (step.value != null && tiny) two.append(el("span", "mono model", pctShown(step.value, lang, model)), lang === "ja" ? `・${w.source}` : ` · ${w.source}`);
+  else if (step.value != null) {
     if (lang === "ja") two.append("貧困線未満 ");
     two.append(el("span", `mono${model ? " model" : ""}`, pct(step.value, lang)), lang === "ja" ? `・${w.source}` : ` below the poverty line · ${w.source}`);
   } else two.textContent = t(`No estimate for ${pack.year}.`, `${pack.year}年の推計はありません。`);
@@ -177,7 +180,10 @@ function drawCard(step: Step, pack: Pack, progress: HTMLElement): HTMLElement {
   const where = el("div", "where", `${step.province} · ${step.region}`);
   const figure = el("div", "figure");
   if (step.value != null)
-    figure.append(el("span", `value${model ? " model" : ""}`, pct(step.value, lang)), el("span", "below", t("below the poverty line", "貧困線未満")));
+    figure.append(
+      el("span", `value${model ? " model" : ""}`, pctInline(step.value, lang, model)),
+      el("span", "below", tiny ? t("below the poverty line (model estimate)", "貧困線未満（モデル推計）") : t("below the poverty line", "貧困線未満")),
+    );
   const chips = el("div", "chips");
   const source = el("span", "chip");
   source.append(swatch(step, pack.breaks), w.source);
