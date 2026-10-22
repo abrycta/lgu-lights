@@ -105,7 +105,35 @@ const my = (lat) => ((1 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)
 // scaled to about half (its ?pr= follows), so one unit stays at about a device pixel (2048: +28 % bytes).
 const KEEP = new Set(["pcode", `v${yy}`, `t${yy}`, `s${yy}`]);
 const EXTENT = 1024;
-function slim(buf, rects, extent = EXTENT) {
+// Douglas-Peucker on one quantised ring or line, in tile units (its ends stay; a closed ring stays closed).
+function simplify(pts, tol) {
+  if (!tol || pts.length < 3) return pts;
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [i, j] = stack.pop();
+    const a = pts[i];
+    const b = pts[j];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    let best = -1;
+    let at = -1;
+    for (let k = i + 1; k < j; k++) {
+      const p = pts[k];
+      // Distance to the segment's line, or to its start when the segment is a point (a closed ring's ends).
+      const d = len ? Math.abs(dy * (p.x - a.x) - dx * (p.y - a.y)) / len : Math.hypot(p.x - a.x, p.y - a.y);
+      if (d > best) [best, at] = [d, k];
+    }
+    if (best > tol) {
+      keep[at] = 1;
+      stack.push([i, at], [at, j]);
+    }
+  }
+  return pts.filter((_, k) => keep[k]);
+}
+function slim(buf, rects, extent = EXTENT, tol = 0) {
   const layers = {};
   for (const [name, l] of Object.entries(new VectorTile(new PbfReader(buf)).layers)) {
     const q = extent / l.extent;
@@ -125,6 +153,7 @@ function slim(buf, rects, extent = EXTENT) {
           const last = out[out.length - 1];
           if (!last || last.x !== x || last.y !== y) out.push({ x, y });
         }
+        out.splice(0, out.length, ...simplify(out, tol));
         // Polygons need 4 points (closed) to keep an area; lines need 2.
         if (out.length >= (f.type === 3 ? 4 : f.type === 2 ? 2 : 1)) geometry.push(out);
       }
@@ -139,8 +168,9 @@ function slim(buf, rects, extent = EXTENT) {
 
 const M = 24; // px of margin, against rounding
 /** The packed tiles for these map boxes ([w, h] in CSS px) and padding, each slimmed to the views that use it. */
-function tilesFor(views, pad, zooms, extent = EXTENT) {
+function tilesFor(views, pad, zooms, extent = EXTENT, tolPx = 0) {
   const need = new Map(); // "z/x/y" -> province -> its views' rectangle in that tile, as fractions of the tile
+  const widest = new Map(); // "z/x/y" -> the widest it is drawn, in CSS px
   for (const province of provinces) {
     const [w, s, e, n] = province.bbox;
     const zs = new Set();
@@ -157,6 +187,7 @@ function tilesFor(views, pad, zooms, extent = EXTENT) {
         for (let y = Math.floor(T); y <= Math.floor(B); y++) {
           const key = `${z}/${x}/${y}`;
           if (!need.has(key)) need.set(key, new Map());
+          widest.set(key, Math.max(widest.get(key) ?? 0, ts));
           // One rectangle per province and tile: the bounding box of its views there (thousands of near-identical views).
           const r = [L - x, T - y, R - x, B - y];
           const a = need.get(key).get(province.pcode);
@@ -168,7 +199,7 @@ function tilesFor(views, pad, zooms, extent = EXTENT) {
   const tiles = {};
   for (const [key, rects] of need) {
     const f = join(dir, "tiles", `${key}.pbf`);
-    if (existsSync(f)) tiles[key] = Buffer.from(slim(readFileSync(f), [...rects.values()], extent)).toString("base64");
+    if (existsSync(f)) tiles[key] = Buffer.from(slim(readFileSync(f), [...rects.values()], extent, (tolPx * extent) / widest.get(key))).toString("base64");
   }
   return tiles;
 }
@@ -194,7 +225,7 @@ const desktopZooms = [];
 const name = writePack("lights", tilesFor([[MAP_W, MAP_H]], PAD, desktopZooms), desktopZooms);
 // Phones draw the tiles at most about 600 CSS px wide: half the precision (512 units a tile) is still about a CSS px.
 const smallZooms = [];
-const smallName = writePack("lights-small", tilesFor(compactViews(300, SMALL_MAX_W), COMPACT_PAD, smallZooms, 512), smallZooms, compactIndex);
+const smallName = writePack("lights-small", tilesFor(compactViews(300, SMALL_MAX_W), COMPACT_PAD, smallZooms, 512, Number(process.env.TOL ?? 1.5)), smallZooms, compactIndex);
 const mediumZooms = [];
 const mediumName = writePack("lights-medium", tilesFor(compactViews(SMALL_MAX_W + 1, COMPACT_MAX_W), COMPACT_PAD, mediumZooms), mediumZooms, compactIndex);
 for (const f of readdirSync(outDir)) if (/^lights-((small|medium|compact)-)?[0-9a-f]+\.json$/.test(f) && !written.includes(f)) rmSync(join(outDir, f));
