@@ -26,7 +26,7 @@ maplibregl.addProtocol("lgutile", async (params, abort) => {
   return { data: isHtml(data) ? new ArrayBuffer(0) : data };
 });
 
-import { addHatchImages, choroplethLayers } from "@abrycta/akari/maps";
+import { addHatchImages, choroplethLayers, lineHalo } from "@abrycta/akari/maps";
 import { useT } from "@abrycta/akari/react";
 import * as maplibregl from "maplibre-gl";
 import type { MapGeoJSONFeature, Map as MlMap } from "maplibre-gl";
@@ -54,6 +54,51 @@ export interface MapViewProps {
 }
 
 const yy = (year: number) => String(year % 100).padStart(2, "0");
+
+/** The outline layers drawn over the choropleth (Akari map tokens). */
+function outlineLayers(theme: ThemeKey) {
+  return [
+    {
+      id: "prov-line",
+      type: "line",
+      source: "lgu",
+      "source-layer": "prov",
+      paint: { "line-color": tokenColor("color.text-muted", theme), "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.4, 9, 1.4] },
+    },
+    {
+      id: "prov-selected",
+      type: "line",
+      source: "lgu",
+      "source-layer": "prov",
+      filter: ["==", ["get", "pcode"], ""],
+      paint: { "line-color": tokenColor("map.hover", theme), "line-width": 2.5 },
+    },
+    {
+      id: "lgu-hover",
+      type: "line",
+      source: "lgu",
+      "source-layer": "lgu",
+      paint: { "line-color": tokenColor("map.hover", theme), "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 1.5, 0] },
+    },
+    {
+      id: "lgu-selected",
+      type: "line",
+      source: "lgu",
+      "source-layer": "lgu",
+      filter: ["==", ["id"], -1],
+      paint: { "line-color": tokenColor("map.selection", theme), "line-width": 3 },
+    },
+  ] as const;
+}
+
+/** Outlines that mark a selection or hover get a halo (directly below each); the province grid stays as it is. */
+const HALOED = new Set(["prov-selected", "lgu-hover", "lgu-selected"]);
+function withHalos(theme: ThemeKey): maplibregl.LayerSpecification[] {
+  return outlineLayers(theme).flatMap((l) => [
+    ...(HALOED.has(l.id) ? [lineHalo(l, { theme }) as unknown as maplibregl.LayerSpecification] : []),
+    l as unknown as maplibregl.LayerSpecification,
+  ]);
+}
 
 function idOf(pcode: string | null): number {
   return pcode ? pcodeId(pcode) : -1;
@@ -115,36 +160,8 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
             paint: { "fill-pattern": hatchPattern(year, national) as maplibregl.DataDrivenPropertyValueSpecification<string> },
           },
           { ...(outline as object) } as maplibregl.LineLayerSpecification,
-          {
-            id: "prov-line",
-            type: "line",
-            source: "lgu",
-            "source-layer": "prov",
-            paint: { "line-color": tokenColor("color.text-muted", theme), "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.4, 9, 1.4] },
-          },
-          {
-            id: "prov-selected",
-            type: "line",
-            source: "lgu",
-            "source-layer": "prov",
-            filter: ["==", ["get", "pcode"], ""],
-            paint: { "line-color": tokenColor("color.text", theme), "line-width": 2.5 },
-          },
-          {
-            id: "lgu-hover",
-            type: "line",
-            source: "lgu",
-            "source-layer": "lgu",
-            paint: { "line-color": tokenColor("color.text", theme), "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 1.5, 0] },
-          },
-          {
-            id: "lgu-selected",
-            type: "line",
-            source: "lgu",
-            "source-layer": "lgu",
-            filter: ["==", ["id"], -1],
-            paint: { "line-color": tokenColor("color.accent", theme), "line-width": 3 },
-          },
+          // Outlines over the choropleth, each in a map.halo casing (Akari lineHalo) so it reads on the darkest class.
+          ...withHalos(theme),
         ],
       },
     });
@@ -230,11 +247,11 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
       map.setFilter("lgu-hatch", hatchFilter(year, national) as maplibregl.FilterSpecification);
       map.setPaintProperty("lgu-hatch", "fill-pattern", hatchPattern(year, national));
       map.setPaintProperty("background", "background-color", tokenColor("color.bg", theme));
-      map.setPaintProperty("lgu-fill-outline", "line-color", tokenColor("color.bg", theme));
-      map.setPaintProperty("prov-line", "line-color", tokenColor("color.text-muted", theme));
-      map.setPaintProperty("prov-selected", "line-color", tokenColor("color.text", theme));
-      map.setPaintProperty("lgu-hover", "line-color", tokenColor("color.text", theme));
-      map.setPaintProperty("lgu-selected", "line-color", tokenColor("color.accent", theme));
+      map.setPaintProperty("lgu-fill-outline", "line-color", tokenColor("map.feature-line", theme));
+      for (const l of outlineLayers(theme)) {
+        map.setPaintProperty(l.id, "line-color", l.paint["line-color"]);
+        if (HALOED.has(l.id)) map.setPaintProperty(`${l.id}-halo`, "line-color", tokenColor("map.halo", theme));
+      }
       addHatchImages(map, theme); // recolours in place (updateImage) for the new theme
     };
     if (map.isStyleLoaded()) apply();
@@ -246,8 +263,8 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     const map = mapRef.current;
     if (!map) return;
     const apply = () => {
-      map.setFilter("prov-selected", ["==", ["get", "pcode"], province?.pcode ?? ""]);
-      map.setFilter("lgu-selected", ["==", ["id"], idOf(lgu)]);
+      for (const id of ["prov-selected", "prov-selected-halo"]) map.setFilter(id, ["==", ["get", "pcode"], province?.pcode ?? ""]);
+      for (const id of ["lgu-selected", "lgu-selected-halo"]) map.setFilter(id, ["==", ["id"], idOf(lgu)]);
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
