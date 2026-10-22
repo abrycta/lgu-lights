@@ -2,7 +2,8 @@ import { AkariProvider } from "@abrycta/akari/react";
 import { lazy, Suspense } from "react";
 
 import { ErrorBoundary } from "./ErrorBoundary";
-import { Shell, TEXT_COLUMN } from "./Shell";
+import { PageGlyph } from "./PageGlyph";
+import { Shell } from "./Shell";
 import { parseUrl, useUrlState } from "./url";
 
 /** Theme and contrast are shared with every *.krtmtthw.dev app (index.html loads the matching theme-init.js). */
@@ -22,7 +23,7 @@ function Pages() {
   const { page } = useUrlState();
   return (
     <ErrorBoundary>
-      <Suspense fallback={<div className={`py-8 text-sm text-muted-foreground ${page === "map" ? "px-8" : TEXT_COLUMN}`}>…</div>}>{page === "about" ? <AboutPage /> : page === "notfound" ? <NotFoundPage /> : <MapPage />}</Suspense>
+      <Suspense fallback={<PageGlyph />}>{page === "about" ? <AboutPage /> : page === "notfound" ? <NotFoundPage /> : <MapPage />}</Suspense>
     </ErrorBoundary>
   );
 }

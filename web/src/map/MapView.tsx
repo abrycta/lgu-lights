@@ -27,13 +27,14 @@ import { addHatchImages, choroplethLayers } from "@abrycta/akari/maps";
 import { useT } from "@abrycta/akari/react";
 import * as maplibregl from "maplibre-gl";
 import type { MapGeoJSONFeature, Map as MlMap } from "maplibre-gl";
-import { use, useEffect, useLayoutEffect, useRef } from "react";
+import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { loadNational, packedTile, tilesUrl } from "@/data/load";
 import type { IndexProvince } from "@/data/types";
 import { sourceLabel, TIER_LABEL, type Lang } from "@/lib/honesty";
 import { pctShown } from "@/lib/format";
 
+import { MapGlyph } from "./MapGlyph";
 import { isHtml } from "./tile";
 import { featurePcode, fillColor, fillOpacity, hatchFilter, hatchPattern, PH_BOUNDS, pcodeId, placeYear, type ThemeKey, tokenColor } from "./style";
 
@@ -62,6 +63,8 @@ function idOf(pcode: string | null): number {
 export default function MapView({ base, year, breaks, theme, lang, province, lgu, names, onPick, frozen }: MapViewProps) {
   const t = useT();
   const el = useRef<HTMLDivElement>(null);
+  // The glyph still covers the map until its first full frame with data (MapGlyph).
+  const [drawn, setDrawn] = useState(false);
   const mapRef = useRef<MlMap | null>(null);
   const loaded = useRef(false);
   // Every place's value, tier and source per year (tiles-attrs.csv): from data v4 on the tiles carry
@@ -166,7 +169,11 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     map.on("load", () => {
       loaded.current = true;
       addHatchImages(map, theme);
-      if (frozen) map.once("idle", () => frozenRef.current?.onReady());
+      // The first idle after load: the tiles and their data are drawn. The glyph still lifts, and the embed is ready.
+      map.once("idle", () => {
+        setDrawn(true);
+        if (frozen) frozenRef.current?.onReady();
+      });
     });
     // Frozen: the view is the province's fit for the final box (late web fonts can still change its height).
     if (frozen) map.on("resize", () => map.fitBounds(props.current.province?.bbox ?? PH_BOUNDS, { padding: frozen.padding ?? 32, maxZoom: 10, duration: 0 }));
@@ -306,6 +313,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
         )}
         data-testid="map"
       />
+      {drawn ? null : <MapGlyph />}
     </div>
   );
 }
