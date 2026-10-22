@@ -2,7 +2,7 @@ import { useLang, useT } from "@abrycta/akari/react";
 import { useState } from "react";
 
 import type { YearRecord } from "@/data/types";
-import { interval, pct } from "@/lib/format";
+import { interval, pct, pctShown } from "@/lib/format";
 import { sourceLabel } from "@/lib/honesty";
 import { clearChanges } from "@/lib/plain";
 
@@ -55,7 +55,7 @@ export function SeriesChart({ years, selected, onSelectYear }: { years: YearReco
     if (r.official) parts.push(`${sourceLabel("official", r.year, lang)}: ${pct(r.official.estimate, lang)} (${interval(r.official.lo90, r.official.hi90, lang).text})`);
     const c = clear.get(r.year);
     if (c) parts.push(c === "up" ? t("clear rise since the previous round", "前回調査から明らかに増加") : t("clear fall since the previous round", "前回調査から明らかに減少"));
-    if (r.model) parts.push(`${r.model.kind === "backtest" ? t("Model without this round", "この調査回なしのモデル") : sourceLabel("model", r.year, lang)}: ${pct(r.model.estimate, lang)} (${interval(r.model.lo90, r.model.hi90, lang).text})`);
+    if (r.model) parts.push(`${r.model.kind === "backtest" ? t("Model without this round", "この調査回なしのモデル") : sourceLabel("model", r.year, lang)}: ${pctShown(r.model.estimate, lang, true)} (${interval(r.model.lo90, r.model.hi90, lang).text})`);
     return parts.length ? parts : [t("No estimate", "推計なし")];
   };
 

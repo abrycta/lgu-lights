@@ -6,7 +6,7 @@
 #     --no-deploy   build and stage web/dist (with the data) and stop: nothing is uploaded
 #
 # Steps:
-#   1. the what-if WASM module (crates/lgu-wasm, cargo, wasm32) -> wasm/lgu_wasm.wasm
+#   1. the what-if WASM module (crates/lgu-wasm, cargo, wasm32) -> wasm/lgu_wasm.<sha256 prefix>.wasm (immutable cache)
 #   2. `npx vite build` in web/ with a staged public directory: web/public without data/ (so never the
 #      local v0 dev link) and with the fresh WASM
 #   3. the published data versions only: each read-models-<v>.tar.zst from the data-<v> GitHub release,
@@ -15,7 +15,7 @@
 #      <link rel=preload> tags in dist/index.html for LATEST's manifest.json, index.json and tiles-attrs.csv
 #   4. npx --yes wrangler@4 pages deploy dist --project-name lgu-lights --branch main
 #   5. live checks: /deploy.json is this commit, latest.json reports LATEST, the home page serves this build's script, /embed and the
-#      WASM answer 200 (retried for up to 2 minutes while the deploy propagates)
+#      WASM answer 200, a missing tile answers 404 (retried for up to 2 minutes while the deploy propagates)
 #
 # Env: DATA_VERSIONS (default "v1 v3 v4"), LATEST (default v4), LIVE_URL (default https://lights.krtmtthw.dev),
 #      CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (locally: Keychain cloudflare-api-token and the
@@ -68,10 +68,15 @@ for f in "$web/public"/* "$web/public"/.[!.]*; do
   case "$(basename "$f")" in data|wasm) continue ;; esac
   cp -R "$f" "$stage/public/"
 done
-cp "$wasm" "$stage/public/wasm/lgu_wasm.wasm"
-(cd "$web" && rm -rf dist && LIGHTS_PUBLIC_DIR="$stage/public" ${nice_cmd[@]+"${nice_cmd[@]}"} npx vite build)
+# Named after its content so _headers can cache it as immutable; the app learns the name at build time.
+wasm_file="lgu_wasm.$(shasum -a 256 "$wasm" | cut -c1-16).wasm"
+cp "$wasm" "$stage/public/wasm/$wasm_file"
+(cd "$web" && rm -rf dist && LIGHTS_PUBLIC_DIR="$stage/public" VITE_WASM_FILE="$wasm_file" ${nice_cmd[@]+"${nice_cmd[@]}"} npx vite build)
+grep -rqF "$wasm_file" "$web/dist/assets" || die "no built chunk names $wasm_file"
 [ -f "$web/dist/index.html" ] && [ -f "$web/dist/embed.html" ] || die "the build has no index.html or embed.html"
 [ ! -e "$web/dist/data" ] || die "dist/data exists after the build (public/data leaked in)"
+# Source maps are not published (vite.config.ts builds them "hidden", for local debugging only).
+find "$web/dist" -name '*.map' -type f -delete
 
 step "Data versions: $DATA_VERSIONS (latest $LATEST)"
 mkdir -p "$cache" "$web/dist/data"
@@ -99,6 +104,10 @@ for v in $DATA_VERSIONS; do
   done
 done
 printf '{"version":"%s","base":"%s/"}\n' "$LATEST" "$LATEST" > "$web/dist/data/latest.json"
+# Missing data paths (empty ocean tiles are simply absent) get a real 404: Pages serves the closest 404.html,
+# and without one under data/ it would answer with the SPA's index.html and status 200 (labelled protobuf by
+# _headers for tiles), which MapLibre then fails to parse. The app's own routes keep the SPA fallback.
+printf 'Not found\n' > "$web/dist/data/404.html"
 # The app reads latest.json first and only then the version's files; the home page already knows LATEST, so it
 # preloads them too (same URLs and request mode as src/data/load.ts; latest.json stays the runtime truth).
 marker='<!-- data-preload: scripts/deploy-web.sh puts the current version'"'"'s manifest, index and tiles-attrs.csv here -->'
@@ -141,7 +150,7 @@ step "Live checks ($LIVE_URL)"
 # The home page's hashed entry module (Vite names it after the rollup input, e.g. /assets/main-<hash>.js).
 script=$(grep -oE '<script type="module"[^>]* src="/assets/[^"]+\.js"' "$web/dist/index.html" | grep -oE '/assets/[^"]+\.js' | head -1)
 [ -n "$script" ] || die "no hashed module script in dist/index.html"
-wasm_size=$(wc -c < "$web/dist/wasm/lgu_wasm.wasm" | tr -d ' ')
+wasm_size=$(wc -c < "$web/dist/wasm/$wasm_file" | tr -d ' ')
 check() {
   local bust latest home manifest
   bust="t=$(date +%s)"
@@ -151,14 +160,15 @@ check() {
   grep -q "$script" <<<"$home" || { echo "home page does not load $script yet"; return 1; }
   grep -qF "/data/$LATEST/manifest.json" <<<"$home" || { echo "home page does not preload data/$LATEST yet"; return 1; }
   curl -fsS -o /dev/null "$LIVE_URL/embed?$bust" || return 1
-  [ "$(curl -fsS "$LIVE_URL/wasm/lgu_wasm.wasm?$bust" | wc -c | tr -d ' ')" = "$wasm_size" ] || { echo "wasm size differs"; return 1; }
+  [ "$(curl -sS -o /dev/null -w '%{http_code}' "$LIVE_URL/data/$LATEST/tiles/0/0/missing.pbf?$bust")" = 404 ] || { echo "a missing tile is not a 404"; return 1; }
+  [ "$(curl -fsS "$LIVE_URL/wasm/$wasm_file?$bust" | wc -c | tr -d ' ')" = "$wasm_size" ] || { echo "wasm size differs"; return 1; }
   [ "$(curl -fsS "$LIVE_URL/deploy.json?$bust" | node -p 'JSON.parse(require("fs").readFileSync(0)).sha')" = "$sha" ] || { echo "deploy.json is not $sha yet"; return 1; }
   manifest=$(curl -fsS "$LIVE_URL/data/$LATEST/manifest.json?$bust") || return 1
   [ "$(node -p 'JSON.parse(process.argv[1]).version' "$manifest")" = "$LATEST" ] || { echo "manifest is not $LATEST"; return 1; }
 }
 for i in $(seq 1 12); do
   if check; then
-    echo "live: deploy.json is ${sha:0:7}; latest.json is $LATEST; / serves $script; /embed, /wasm/lgu_wasm.wasm and data/$LATEST/manifest.json OK"
+    echo "live: deploy.json is ${sha:0:7}; latest.json is $LATEST; / serves $script; /embed, /wasm/$wasm_file and data/$LATEST/manifest.json OK; missing tiles 404"
     exit 0
   fi
   echo "not live yet (try $i/12), waiting 10 s"

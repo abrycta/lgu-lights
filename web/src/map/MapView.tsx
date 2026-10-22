@@ -10,15 +10,17 @@ import { setWorkerUrl } from "maplibre-gl";
 
 setWorkerUrl(workerUrl);
 
-// Tiles are a sparse z/x/y directory: empty (ocean) tiles do not exist, and Cloudflare Pages (like the
-// dev server) answers a missing file with the SPA's index.html and status 200. This protocol turns a
-// 404 or an HTML answer into an empty tile instead of a parse error.
+// Tiles are a sparse z/x/y directory: empty (ocean) tiles do not exist. The deploy puts a 404.html in
+// data/ so Pages answers 404 there, but the dev server (and Pages without it) answers with the SPA's
+// index.html and status 200, which _headers labels application/x-protobuf. This protocol turns a 404 or
+// an HTML body (sniffed: an MVT never starts with "<") into an empty tile instead of a parse error.
 maplibregl.addProtocol("lgutile", async (params, abort) => {
   const packed = packedTile(params.url.slice("lgutile://".length));
   if (packed) return { data: packed };
   const r = await fetch(params.url.slice("lgutile://".length), { signal: abort.signal });
   if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return { data: new ArrayBuffer(0) };
-  return { data: await r.arrayBuffer() };
+  const data = await r.arrayBuffer();
+  return { data: isHtml(data) ? new ArrayBuffer(0) : data };
 });
 
 import { addHatchImages, choroplethLayers } from "@abrycta/akari/maps";
@@ -30,9 +32,10 @@ import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { loadNational, packedTile, tilesUrl } from "@/data/load";
 import type { IndexProvince } from "@/data/types";
 import { sourceLabel, TIER_LABEL, type Lang } from "@/lib/honesty";
-import { pct } from "@/lib/format";
+import { pctShown } from "@/lib/format";
 
 import { MapGlyph } from "./MapGlyph";
+import { isHtml } from "./tile";
 import { featurePcode, fillColor, fillOpacity, hatchFilter, hatchPattern, PH_BOUNDS, pcodeId, placeYear, type ThemeKey, tokenColor } from "./style";
 
 export interface MapViewProps {
@@ -207,7 +210,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
       if (v != null) {
         const label = sourceLabel(s === 0 ? "official" : "model", y, l);
         const tier = tr == null ? "" : (TIER_LABEL[tr as 0 | 1 | 2]?.[l] ?? "");
-        line.textContent = `${label}: ${pct(v, l)} · ${tier}`;
+        line.textContent = `${label}: ${pctShown(v, l, s !== 0)} · ${tier}`;
         if (s !== 0) line.className = "lgu-popup-model";
       } else {
         line.textContent = l === "ja" ? `${y}年：データなし` : `${y}: no data`;

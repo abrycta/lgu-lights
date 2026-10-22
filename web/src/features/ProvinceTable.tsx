@@ -3,7 +3,7 @@ import { use, useMemo, useState } from "react";
 
 import { loadNational, loadProvinceLgus } from "@/data/load";
 import type { Index, IndexProvince } from "@/data/types";
-import { cvText, interval, num } from "@/lib/format";
+import { cvText, interval, numShown } from "@/lib/format";
 import { sourceLabel, TIER_LABEL } from "@/lib/honesty";
 import { median, provinceSummary, valuesOf } from "@/lib/plain";
 
@@ -90,7 +90,7 @@ export function ProvinceTable({ index, province, year, onSelect }: { index: Inde
                 {l.name}
               </button>
             </TableCell>
-            <TableCell className={`font-mono tabular ${shown?.source === "model" ? "italic text-muted-foreground" : ""}`}>{shown ? num(shown.value) : "—"}</TableCell>
+            <TableCell className={`font-mono tabular ${shown?.source === "model" ? "italic text-muted-foreground" : ""}`}>{shown ? numShown(shown.value, shown.source === "model") : "—"}</TableCell>
             <TableCell className="font-mono text-xs tabular">{lo != null && hi != null ? interval(lo, hi, lang).text : "—"}</TableCell>
             <TableCell className="text-xs">
               {shown ? (

@@ -44,7 +44,8 @@ export default defineConfig({
   build: {
     outDir: "dist",
     assetsDir: "assets",
-    sourcemap: true,
+    // Maps for local debugging only: no sourceMappingURL comment, and scripts/deploy-web.sh leaves them out.
+    sourcemap: "hidden",
     target: "es2023",
     chunkSizeWarningLimit: 1100, // maplibre-gl is one ~1 MB chunk, loaded only with the map
     // Two pages, one build: /embed (the frozen view krtmtthw.dev frames) shares the app's hashed chunks.

@@ -48,7 +48,8 @@ function ensureReady(): Promise<unknown> {
     ready = dataBase().then((base) =>
       send({
         type: "init",
-        wasmUrl: new URL(`${import.meta.env.BASE_URL}wasm/lgu_wasm.wasm`, location.href).href,
+        // The deploy names the module after its content (scripts/deploy-web.sh, cached as immutable); dev uses the plain name.
+        wasmUrl: new URL(`${import.meta.env.BASE_URL}wasm/${import.meta.env.VITE_WASM_FILE ?? "lgu_wasm.wasm"}`, location.href).href,
         snapshotUrl: `${base}whatif/snapshot.bin`,
         modelUrl: `${base}whatif/model.json`,
       }),
