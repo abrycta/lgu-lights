@@ -1,10 +1,9 @@
 // Vite plugin: preload the map's lazy chunks and the MapLibre worker from the HTML.
 //
-// Every page that index.html serves in practice shows the map, but the map code is two lazy
+// Every page that index.html and embed.html serve in practice shows the map, but the map code is two lazy
 // imports deep (App -> MapPage -> MapView) and the worker starts only when MapView runs. Vite writes
 // <link rel=modulepreload> only for static imports, so without this the browser finds those files two or
 // three round trips late. This adds them to <head> at build time (the hashed names exist only then).
-// embed.html is left alone: /embed draws its own SVG map and never loads MapLibre.
 import type { HtmlTagDescriptor, Plugin, Rollup } from "vite";
 
 type OutputBundle = Rollup.OutputBundle;
@@ -37,7 +36,7 @@ export function preloadMap(): Plugin {
       order: "post",
       handler(html, ctx) {
         const bundle = ctx.bundle;
-        if (!bundle || !ctx.path.endsWith("/index.html")) return html;
+        if (!bundle) return html;
         const chunks = Object.values(bundle).filter(
           (c): c is OutputChunk => c.type === "chunk" && !!c.facadeModuleId && LAZY_MAP_MODULES.some((re) => re.test(c.facadeModuleId!)),
         );

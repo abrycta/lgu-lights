@@ -1,130 +1,123 @@
 #!/usr/bin/env node
-// Packs the /embed tour (src/embed, drawn as SVG) into ONE immutable file from a materialised data version:
-//   node scripts/build-embed.mjs [data-dir] [outlines]
-// data-dir: a data version root (default public/data, following its latest.json).
-// outlines: the pipeline's simplified boundaries (`lgu outlines`: one coverage, so neighbours share their edges;
-//   default ../data/build/outlines.geojsonl; a data run publishes it in the features-<version> release as
-//   outlines.geojsonl.gz).
-// The tour is chosen from the data by src/embed/tour-select.ts (its header states the rule). Each step carries its
-// province's view pre-projected (Web Mercator, quantised to Q units across the province), every place within
-// reach of any frame shape with the frozen year's value, tier and source, the province lines, and the caption:
-// the app's own sentences (src/lib/plain.ts, src/lib/honesty.ts) in English and Japanese, and the place's series.
-// Shared edges are simplified once (topology-aware), so neighbours never open a gap between them.
-// Writes public/embed-data/lights-<hash>.json, src/embed/pack.gen.ts (its URL) and the preload in embed.html.
-// All three are committed; re-run after a data release.
+// Packs the /embed tour (src/embed) into ONE immutable file from a materialised data version:
+//   node scripts/build-embed.mjs [data-dir]      (default: public/data, following its latest.json)
+// Writes public/embed-data/lights-<hash>.json (manifest, index, each tour province's LGU files, the
+// year's national values and the vector tiles under each province's view), src/embed/pack.gen.ts (its
+// URL and the tour) and the preload link in embed.html. All three are committed; re-run after a data release.
+// There is no basemap image: Lights draws no basemap (its ground is the theme's background colour).
 import { createHash } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runnerImport } from "vite";
+import { VectorTile } from "@mapbox/vector-tile";
+import { fromVectorTileJs } from "@maplibre/vt-pbf";
+import { PbfReader } from "pbf";
 
 import { chooseTour } from "../src/embed/tour-select.ts";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const YEAR = 2023;
-/** Units across the province's longer side (one unit is about 0.6 CSS px in the 1280×800 desktop frame). */
-const Q = 1000;
-/** Douglas–Peucker tolerance in units, inside the province's box and (coarser) around it. */
-const TOL = 0.8;
-const TOL_AROUND = 3;
-/** The frame shapes the pack must fill (map box width / height): a portrait phone (0.45) to the phone slot's strip (2.6). */
-const ASPECT_MAX = 2.6;
-const ASPECT_MIN = 0.45;
-/** Margin around the reach, as a share of it (the fit's padding and the tour's settle). */
-const MARGIN = 0.06;
+// The map box of /embed at the portfolio's fixed 1280×800 frame (measured: 1280 − the 460 px panel,
+// 800 − the controls and the national sentence). Tiles get a small margin (M).
+const MAP_W = 820;
+const MAP_H = 609;
+const PAD = 32; // MapView's province fitBounds padding
+// The compact layout (phones and tablets, src/embed/layout.ts): the frame is the portfolio's picture slot at
+// its real size (16:10, about 356×222 on a phone up to 958×598), the map above a CAPTION_H caption strip,
+// fitted with COMPACT_PAD. Phones and tablets each get their own pack (the tiles differ by zoom), so a phone
+// never downloads a larger view's tiles.
+const COMPACT_MAX_W = 1100; // = COMPACT_QUERY's max-width in src/embed/layout.ts
+const SMALL_MAX_W = 600; // = SMALL_QUERY's max-width there: phones get a smaller pack than tablets
+const CAPTION_H = 53; // the caption strip (52 px) and its top border
+const COMPACT_PAD = 12;
+function compactViews(from, to) {
+  const views = [];
+  for (let w = from; w <= to; w += 4) {
+    const h = Math.round((w + 2) * 0.625) - 2 - CAPTION_H; // the slot is 16:10; the frame sits 1 px inside its border
+    for (const dh of [-16, 0, 16]) views.push([w, Math.max(80, h + dh)]);
+  }
+  return views;
+}
+const MAX_ZOOM = 10;
+const SOURCE_MAXZOOM = 10;
 
 const root = resolve(process.argv[2] ?? join(web, "public/data"));
 const latest = JSON.parse(readFileSync(join(root, "latest.json"), "utf8"));
 const dir = join(root, latest.base);
 const json = (p) => JSON.parse(readFileSync(join(dir, p), "utf8"));
-const outlinesPath = resolve(process.argv[3] ?? join(web, "../data/build/outlines.geojsonl"));
-const outlines = readFileSync(outlinesPath, "utf8")
-  .trim()
-  .split("\n")
-  .map((l) => JSON.parse(l));
-const adm3 = outlines.filter((f) => f.properties.level === 3);
-const adm2 = outlines.filter((f) => f.properties.level === 2);
 
 const manifest = json("manifest.json");
 const index = json("index.json");
-
-// The app's own sentences and labels, loaded through Vite (they use the app's "@/" imports).
-const load = async (p) =>
-  (await runnerImport(join(web, p), { configFile: false, logLevel: "silent", resolve: { alias: { "@": join(web, "src") } } })).module;
-const plain = await load("src/lib/plain.ts");
-const honesty = await load("src/lib/honesty.ts");
-
-// The tour (rule 27): the richest moments, chosen from the data; step 0 is the still.
-const chosen = chooseTour(index, (p) => json(`lgu/${p}.json`).years.find((y) => y.year === YEAR));
+// The tour: one place per step, each shown zoomed to its province with its panel open (the real app's
+// selection), chosen from this data version by src/embed/tour-select.ts (its header states the rule).
+// Step 0 is the densest province: the first paint and the reduced-motion still.
+const fileOf = (p) => json(`lgu/${p}.json`);
+const chosen = chooseTour(index, (p) => fileOf(p).years.find((y) => y.year === YEAR));
+const TOUR = chosen.tour;
+const VIEW = { year: YEAR, lgu: chosen.still };
 for (const [i, c] of chosen.picks.entries())
   console.log(`tour ${i}: ${c.pcode} ${c.name}, ${c.province}: ${c.official} % official; ${c.places} places, ${c.low}–${c.highest} %, ${c.solid} solid`);
-
-// The frozen year's value, tier and source for every place (tiles-attrs.csv), and the national values for the comparisons.
-const csvText = readFileSync(join(dir, "tiles-attrs.csv"), "utf8");
-const nat = plain.parseAttrsCsv(csvText);
-const yi = nat.years.indexOf(YEAR);
-if (yi < 0) throw new Error(`tiles-attrs.csv has no ${YEAR} columns`);
-const attrOf = (pcode) => {
-  const r = nat.rows.get(pcode);
-  const v = r?.v[yi];
-  if (v == null || Number.isNaN(v)) return { v: -1, t: 0, s: 0 };
-  return { v, t: (nat.tiers ? r.t[yi] : 0) ?? 0, s: r.s[yi] ?? 0 };
-};
-
-// ------------------------------------------------------------------------------------------------ geometry
-
-const mx = (lon) => (lon + 180) / 360;
-const my = (lat) => (1 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) / Math.PI) / 2;
-const polys = (g) => (g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : []);
-for (const f of outlines) {
-  let [a, b, c, d] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const p of polys(f.geometry)) for (const [x, y] of p[0]) [a, b, c, d] = [Math.min(a, x), Math.min(b, y), Math.max(c, x), Math.max(d, y)];
-  f.bbox = [a, b, c, d];
-}
-
-/** Sutherland–Hodgman: a ring clipped to [x0, y0, x1, y1] (the cut edges lie outside every view). */
-function clip(ring, [x0, y0, x1, y1]) {
-  let out = ring;
-  const edges = [
-    [(p) => p[0] >= x0, (a, b) => [x0, a[1] + ((b[1] - a[1]) * (x0 - a[0])) / (b[0] - a[0])]],
-    [(p) => p[0] <= x1, (a, b) => [x1, a[1] + ((b[1] - a[1]) * (x1 - a[0])) / (b[0] - a[0])]],
-    [(p) => p[1] >= y0, (a, b) => [a[0] + ((b[0] - a[0]) * (y0 - a[1])) / (b[1] - a[1]), y0]],
-    [(p) => p[1] <= y1, (a, b) => [a[0] + ((b[0] - a[0]) * (y1 - a[1])) / (b[1] - a[1]), y1]],
-  ];
-  for (const [inside, cut] of edges) {
-    const src = out;
-    out = [];
-    for (let i = 0; i < src.length; i++) {
-      const a = src[i];
-      const b = src[(i + 1) % src.length];
-      if (inside(a)) {
-        out.push(a);
-        if (!inside(b)) out.push(cut(a, b));
-      } else if (inside(b)) out.push(cut(a, b));
-    }
-    if (!out.length) return out;
+const provinces = [...new Set(TOUR.map((p) => p.slice(0, 7)))].map((pc) => {
+  const province = index.provinces.find((p) => p.pcode === pc);
+  if (!province) throw new Error(`no province ${pc}`);
+  return province;
+});
+// The tour's places keep their whole file (the panel's figure, words and chart); their province-mates
+// only feed the province average, so they keep just the frozen year's shown value and population.
+const lgus = {};
+for (const { pcode: pc } of provinces)
+  for (const l of index.lgus.filter((x) => x.pv === pc)) {
+    const d = json(`lgu/${l.p}.json`);
+    lgus[l.p] = TOUR.includes(l.p)
+      ? d
+      : { ...d, years: d.years.filter((y) => y.year === YEAR).map((y) => ({ year: y.year, shown: y.shown, inputs: { pop: y.inputs?.pop ?? null }, model: null, official: null })) };
   }
-  return out;
+for (const p of TOUR) if (!lgus[p]) throw new Error(`no LGU ${p}`);
+
+// tiles-attrs.csv, only the frozen year's value and source (what the comparisons read).
+const yy = String(YEAR % 100).padStart(2, "0");
+const csv = readFileSync(join(dir, "tiles-attrs.csv"), "utf8").trim().split(/\r?\n/);
+const head = csv[0].split(",");
+const vi = head.indexOf(`v${yy}`) - 2;
+const si = head.indexOf(`s${yy}`) - 2;
+const attrs = [`pcode,n,v${yy},s${yy}`];
+for (const line of csv.slice(1)) {
+  const m = /^([^,]+),("(?:[^"]|"")*"|[^,]*),(.*)$/.exec(line);
+  if (!m) continue;
+  const cells = m[3].split(",");
+  attrs.push(`${m[1]},,${cells[vi]},${cells[si]}`);
 }
 
-/** Douglas–Peucker on an open run (both ends kept). */
+// Which tiles each view needs: MapLibre's fitBounds (512 px tiles), then the covering tiles at floor(zoom).
+// The map's settle ease (src/map/MapView.tsx) starts zoomed in within the same tile zoom, so it needs no more.
+const mx = (lon) => ((lon + 180) / 360) * 512;
+const my = (lat) => ((1 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) / Math.PI) / 2) * 512;
+// Each tile keeps only the features that reach into a view (plus margin), with only the frozen year's
+// properties (v/t/s<yy>) and the pcode, its geometry quantised from 4096 to 1024 units per tile, without
+// repeated points. A tile is drawn at most 1024 CSS px wide, and the portfolio shows the 1280 px frame
+// scaled to about half (its ?pr= follows), so one unit stays at about a device pixel (2048: +28 % bytes).
+const KEEP = new Set(["pcode", `v${yy}`, `t${yy}`, `s${yy}`]);
+const EXTENT = 1024;
+// Douglas-Peucker on one quantised ring or line, in tile units (its ends stay; a closed ring stays closed).
 function simplify(pts, tol) {
-  if (pts.length < 3) return pts;
+  if (!tol || pts.length < 3) return pts;
   const keep = new Uint8Array(pts.length);
   keep[0] = keep[pts.length - 1] = 1;
   const stack = [[0, pts.length - 1]];
   while (stack.length) {
     const [i, j] = stack.pop();
-    const [ax, ay] = pts[i];
-    const [bx, by] = pts[j];
-    const dx = bx - ax;
-    const dy = by - ay;
+    const a = pts[i];
+    const b = pts[j];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
     const len = Math.hypot(dx, dy);
     let best = -1;
     let at = -1;
     for (let k = i + 1; k < j; k++) {
-      const d = len ? Math.abs((pts[k][0] - ax) * dy - (pts[k][1] - ay) * dx) / len : Math.hypot(pts[k][0] - ax, pts[k][1] - ay);
+      const p = pts[k];
+      // Distance to the segment's line, or to its start when the segment is a point (a closed ring's ends).
+      const d = len ? Math.abs(dy * (p.x - a.x) - dx * (p.y - a.y)) / len : Math.hypot(p.x - a.x, p.y - a.y);
       if (d > best) [best, at] = [d, k];
     }
     if (best > tol) {
@@ -134,216 +127,119 @@ function simplify(pts, tol) {
   }
   return pts.filter((_, k) => keep[k]);
 }
-
-const key = (p) => p[0] * 1e6 + p[1];
-const less = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
-
-/**
- * Topology-aware simplification of every ring in a step (integer units). A point where the set of rings
- * through it changes is a junction and is kept; each run between junctions is simplified once, in a canonical
- * direction, so the two rings sharing an edge get exactly the same points. `tolOf(run)` picks the tolerance.
- */
-function simplifyRings(rings, tolOf) {
-  const owners = new Map();
-  rings.forEach((ring, r) => {
-    for (const p of ring) {
-      const k = key(p);
-      const o = owners.get(k);
-      if (!o) owners.set(k, [r]);
-      else if (o[o.length - 1] !== r) o.push(r);
-    }
-  });
-  const sig = (p) => owners.get(key(p)).join(",");
-  return rings.map((ring) => {
-    const n = ring.length;
-    const fixed = [];
-    for (let i = 0; i < n; i++) {
-      const s = sig(ring[i]);
-      if (s !== sig(ring[(i + n - 1) % n]) || s !== sig(ring[(i + 1) % n])) fixed.push(i);
-    }
-    if (!fixed.length) {
-      // A ring shared whole (or by nobody): start at its smallest point and split at the farthest from it.
-      let lo = 0;
-      for (let i = 1; i < n; i++) if (less(ring[i], ring[lo])) lo = i;
-      let far = lo;
-      const d = (i) => Math.hypot(ring[i][0] - ring[lo][0], ring[i][1] - ring[lo][1]);
-      for (let i = 0; i < n; i++) if (d(i) > d(far) || (d(i) === d(far) && less(ring[i], ring[far]))) far = i;
-      fixed.push(...[lo, far].sort((a, b) => a - b));
-    }
-    const out = [];
-    for (let f = 0; f < fixed.length; f++) {
-      const i = fixed[f];
-      const j = fixed[(f + 1) % fixed.length];
-      const run = [];
-      for (let k = i; ; k = (k + 1) % n) {
-        run.push(ring[k]);
-        if (k === j && run.length > 1) break;
-      }
-      // Canonical direction: from the smaller end (or, for a closed run, the smaller second point).
-      const [a, b] = run.length > 2 && key(run[0]) === key(run[run.length - 1]) ? [run[1], run[run.length - 2]] : [run[0], run[run.length - 1]];
-      const flip = less(b, a);
-      const s = simplify(flip ? [...run].reverse() : run, tolOf(run));
-      if (flip) s.reverse();
-      out.push(...s.slice(0, -1));
-    }
-    return out;
-  });
-}
-
-/** One SVG path ("M x y l dx dy …z" per ring, relative, integer units). */
-function pathOf(rings) {
-  let out = "";
-  for (const s of rings) {
-    if (s.length < 3) continue;
-    let d = `M${s[0][0]} ${s[0][1]}l`;
-    for (let i = 1; i < s.length; i++) {
-      const dx = s[i][0] - s[i - 1][0];
-      const dy = s[i][1] - s[i - 1][1];
-      d += `${i > 1 && dx >= 0 ? " " : ""}${dx}${dy >= 0 ? " " : ""}${dy}`;
-    }
-    out += `${d}z`;
-  }
-  return out;
-}
-
-// ------------------------------------------------------------------------------------------------ the steps
-
-const r1 = (v) => Math.round(v * 10) / 10;
-const steps = [];
-for (const pcode of chosen.tour) {
-  const lgu = json(`lgu/${pcode}.json`);
-  const province = index.provinces.find((p) => p.pcode === lgu.province.pcode);
-  const [w, s, e, n] = province.bbox;
-  const pw = mx(e) - mx(w);
-  const ph = my(s) - my(n);
-  const k = Q / Math.max(pw, ph);
-  const x0 = mx(w);
-  const y0 = my(n);
-  // Everything a view of the province can show, from a tall box (ASPECT_MIN) to a wide one (ASPECT_MAX).
-  const rw = Math.max(pw, ph * ASPECT_MAX) * (1 + MARGIN);
-  const rh = Math.max(ph, pw / ASPECT_MIN) * (1 + MARGIN);
-  const [cx, cy] = [(mx(w) + mx(e)) / 2, (my(n) + my(s)) / 2];
-  const region = [cx - rw / 2, cy - rh / 2, cx + rw / 2, cy + rh / 2];
-  const box = [(region[0] - x0) * k, (region[1] - y0) * k, (region[2] - x0) * k, (region[3] - y0) * k];
-  const inner = [0, 0, pw * k, ph * k];
-  const inRegion = (b) => mx(b[2]) >= region[0] && mx(b[0]) <= region[2] && my(b[1]) >= region[1] && my(b[3]) <= region[3];
-
-  // Every ring in reach, projected, clipped and quantised; then simplified together.
-  const rings = [];
-  const ringsOf = (f) => {
-    const ids = [];
-    for (const poly of polys(f.geometry))
-      for (const ring of poly) {
-        const q = [];
-        for (const [px, py] of clip(ring.slice(0, -1).map(([lon, lat]) => [(mx(lon) - x0) * k, (my(lat) - y0) * k]), box)) {
-          const p = [Math.round(px), Math.round(py)];
-          const l = q[q.length - 1];
-          if (!l || l[0] !== p[0] || l[1] !== p[1]) q.push(p);
+function slim(buf, rects, extent = EXTENT, tol = 0) {
+  const layers = {};
+  for (const [name, l] of Object.entries(new VectorTile(new PbfReader(buf)).layers)) {
+    const q = extent / l.extent;
+    const feats = [];
+    for (let i = 0; i < l.length; i++) {
+      const f = l.feature(i);
+      const raw = f.loadGeometry();
+      const [x0, y0, x1, y1] = f.bbox();
+      const r = (v) => v / l.extent; // tile units -> fraction of the tile
+      if (!rects.some(([a, b, c, d]) => r(x1) >= a && r(x0) <= c && r(y1) >= b && r(y0) <= d)) continue;
+      const geometry = [];
+      for (const ring of raw) {
+        const out = [];
+        for (const pt of ring) {
+          const x = Math.round(pt.x * q);
+          const y = Math.round(pt.y * q);
+          const last = out[out.length - 1];
+          if (!last || last.x !== x || last.y !== y) out.push({ x, y });
         }
-        while (q.length > 1 && q[0][0] === q[q.length - 1][0] && q[0][1] === q[q.length - 1][1]) q.pop();
-        if (q.length >= 3) ids.push(rings.push(q) - 1);
+        out.splice(0, out.length, ...simplify(out, tol));
+        // Polygons need 4 points (closed) to keep an area; lines need 2.
+        if (out.length >= (f.type === 3 ? 4 : f.type === 2 ? 2 : 1)) geometry.push(out);
       }
-    return ids;
-  };
-  const places = adm3.filter((f) => inRegion(f.bbox)).map((f) => ({ pcode: f.properties.pcode, ids: ringsOf(f) }));
-  const provs = adm2.filter((f) => inRegion(f.bbox)).map((f) => ({ pcode: f.properties.pcode, ids: ringsOf(f) }));
-  const inside = (run) => run.some(([x, y]) => x >= inner[0] && x <= inner[2] && y >= inner[1] && y <= inner[3]);
-  const simple = simplifyRings(rings, (run) => (inside(run) ? TOL : TOL_AROUND));
-  const area = (r) => {
-    let a = 0;
-    for (let i = 0; i < r.length; i++) a += r[i][0] * r[(i + 1) % r.length][1] - r[(i + 1) % r.length][0] * r[i][1];
-    return Math.abs(a) / 2;
-  };
-  // Islets under about 2×2 units are invisible: dropped, unless an edge is shared (a neighbour would show a hole).
-  const shared = new Set();
-  {
-    const seen = new Map();
-    simple.forEach((r, i) => r.forEach((p) => (seen.has(key(p)) && seen.get(key(p)) !== i ? (shared.add(i), shared.add(seen.get(key(p)))) : seen.set(key(p), i))));
+      if (!geometry.length) continue;
+      const properties = Object.fromEntries(Object.entries(f.properties).filter(([key]) => KEEP.has(key)));
+      feats.push({ id: f.id, type: f.type, properties, geometry, loadGeometry: () => geometry });
+    }
+    layers[name] = { version: 2, name, extent, length: feats.length, feature: (i) => feats[i] };
   }
-  const keep = (i) => simple[i].length >= 3 && (area(simple[i]) >= 2 || shared.has(i));
-
-  // Features: [path, value (-1: none), tier, source (0 official, 1 model)].
-  const features = [];
-  let selected = -1;
-  for (const p of places) {
-    const d = pathOf(p.ids.filter(keep).map((i) => simple[i]));
-    if (!d) continue;
-    const a = attrOf(p.pcode);
-    if (p.pcode === pcode) selected = features.length;
-    features.push([d, a.v, a.t, a.s]);
-  }
-  if (selected < 0) throw new Error(`${pcode} drew no shape`);
-  let provLines = "";
-  let provSelected = "";
-  for (const p of provs) {
-    const d = pathOf(p.ids.filter(keep).map((i) => simple[i]));
-    provLines += d;
-    if (p.pcode === province.pcode) provSelected = d;
-  }
-
-  // The caption: the app's own sentences, the place's series, its figure.
-  const rec = lgu.years.find((y) => y.year === YEAR);
-  const f = plain.shownFigure(rec);
-  const provLgus = index.lgus.filter((l) => l.pv === province.pcode).map((l) => json(`lgu/${l.p}.json`));
-  const avg = f ? plain.provinceAverage(provLgus, YEAR, f.source) : null;
-  const others = f ? [...plain.valuesOf(nat, YEAR, f.source)].filter(([p]) => p !== pcode).map(([, v]) => v) : [];
-  const words = {};
-  for (const lang of ["en", "ja"])
-    words[lang] = {
-      source: f ? honesty.sourceLabel(f.source, YEAR, lang) : "",
-      tier: f ? honesty.TIER_LABEL[f.tier][lang] : "",
-      compare: f
-        ? plain.comparisonSentence(
-            { value: f.est, lo: f.lo, hi: f.hi, source: f.source, year: YEAR, others, province: avg ? { name: province.name, mean: avg.mean, n: avg.n } : null },
-            lang,
-          )
-        : null,
-      headline: plain.headline(rec, YEAR, lgu.name, lang),
-    };
-  steps.push({
-    pcode,
-    name: lgu.name,
-    province: province.name,
-    region: lgu.region?.name ?? "",
-    // The shown figure as the app's caption shows it (src/lib/format.ts rounds it the same way at display).
-    value: rec?.shown?.value ?? null,
-    source: rec?.shown?.source ?? null,
-    tier: f?.tier ?? null,
-    // The series for the sparkline: [year, value, 0 official / 1 model, lo90, hi90].
-    series: lgu.years
-      .filter((y) => y.shown)
-      .map((y) => {
-        const g = plain.shownFigure(y);
-        return [y.year, r1(y.shown.value), y.shown.source === "official" ? 0 : 1, g ? r1(Math.max(0, g.lo)) : null, g ? r1(g.hi) : null];
-      }),
-    words,
-    view: [0, 0, Math.round(pw * k), Math.round(ph * k)], // the province's box in units: the renderer fits it
-    features,
-    selected,
-    provLines,
-    provSelected,
-  });
+  return fromVectorTileJs({ layers });
 }
 
-const pack = { version: manifest.version, year: YEAR, breaks: manifest.breaks, opacity: { official: honesty.OFFICIAL_OPACITY, model: honesty.MODEL_OPACITY }, steps };
-const body = JSON.stringify(pack);
-const name = `lights-${createHash("sha256").update(body).digest("hex").slice(0, 12)}.json`;
+const M = 24; // px of margin, against rounding
+/** The packed tiles for these map boxes ([w, h] in CSS px) and padding, each slimmed to the views that use it. */
+function tilesFor(views, pad, zooms, extent = EXTENT, tolPx = 0) {
+  const need = new Map(); // "z/x/y" -> province -> its views' rectangle in that tile, as fractions of the tile
+  const widest = new Map(); // "z/x/y" -> the widest it is drawn, in CSS px
+  for (const province of provinces) {
+    const [w, s, e, n] = province.bbox;
+    const zs = new Set();
+    for (const [W, H] of views) {
+      const zoom = Math.min(MAX_ZOOM, Math.log2(Math.min((W - 2 * pad) / (mx(e) - mx(w)), (H - 2 * pad) / (my(s) - my(n)))));
+      const z = Math.min(SOURCE_MAXZOOM, Math.floor(zoom));
+      zs.add(z);
+      const k = 2 ** zoom;
+      const cx = ((mx(w) + mx(e)) / 2) * k;
+      const cy = ((my(n) + my(s)) / 2) * k;
+      const ts = (512 / 2 ** z) * k; // one tile in frame px
+      const [L, T, R, B] = [cx - W / 2 - M, cy - H / 2 - M, cx + W / 2 + M, cy + H / 2 + M].map((v) => v / ts);
+      for (let x = Math.floor(L); x <= Math.floor(R); x++)
+        for (let y = Math.floor(T); y <= Math.floor(B); y++) {
+          const key = `${z}/${x}/${y}`;
+          if (!need.has(key)) need.set(key, new Map());
+          widest.set(key, Math.max(widest.get(key) ?? 0, ts));
+          // One rectangle per province and tile: the bounding box of its views there (thousands of near-identical views).
+          const r = [L - x, T - y, R - x, B - y];
+          const a = need.get(key).get(province.pcode);
+          need.get(key).set(province.pcode, a ? [Math.min(a[0], r[0]), Math.min(a[1], r[1]), Math.max(a[2], r[2]), Math.max(a[3], r[3])] : r);
+        }
+    }
+    zooms.push(`${province.name} z${[...zs].sort((a, b) => a - b).join("-")}`);
+  }
+  const tiles = {};
+  for (const [key, rects] of need) {
+    const f = join(dir, "tiles", `${key}.pbf`);
+    if (existsSync(f)) tiles[key] = Buffer.from(slim(readFileSync(f), [...rects.values()], extent, (tolPx * extent) / widest.get(key))).toString("base64");
+  }
+  return tiles;
+}
+
+// The index without the label points (x, y): nothing in the frozen view reads them.
+const slimIndex = { ...index, lgus: index.lgus.map(({ x: _x, y: _y, ...l }) => l) };
 const outDir = join(web, "public/embed-data");
 mkdirSync(outDir, { recursive: true });
-for (const f of readdirSync(outDir)) if (/^lights-.*\.json$/.test(f) && f !== name) rmSync(join(outDir, f));
-writeFileSync(join(outDir, name), body);
+const written = [];
+// The compact layout has no search, province list or national line: its index keeps only the packed provinces' LGUs.
+const packed = new Set(provinces.map((p) => p.pcode));
+const compactIndex = { ...slimIndex, lgus: slimIndex.lgus.filter((l) => packed.has(l.pv)) };
+function writePack(prefix, tiles, zooms, idx = slimIndex) {
+  const pack = { version: manifest.version, view: VIEW, tour: TOUR, manifest, index: idx, lgus, attrs: attrs.join("\n") + "\n", tiles };
+  const body = JSON.stringify(pack);
+  const name = `${prefix}-${createHash("sha256").update(body).digest("hex").slice(0, 12)}.json`;
+  writeFileSync(join(outDir, name), body);
+  written.push(name);
+  console.log(`${name}: ${(body.length / 1024).toFixed(0)} kB, ${Object.keys(tiles).length} tiles (${zooms.join(", ")}), ${Object.keys(lgus).length} LGU files, data ${manifest.version}`);
+  return name;
+}
+const desktopZooms = [];
+const name = writePack("lights", tilesFor([[MAP_W, MAP_H]], PAD, desktopZooms), desktopZooms);
+// Phones draw the tiles at most about 600 CSS px wide: half the precision (512 units a tile) is still about a CSS px.
+const smallZooms = [];
+const smallName = writePack("lights-small", tilesFor(compactViews(300, SMALL_MAX_W), COMPACT_PAD, smallZooms, 512, Number(process.env.TOL ?? 1.5)), smallZooms, compactIndex);
+const mediumZooms = [];
+const mediumName = writePack("lights-medium", tilesFor(compactViews(SMALL_MAX_W + 1, COMPACT_MAX_W), COMPACT_PAD, mediumZooms), mediumZooms, compactIndex);
+for (const f of readdirSync(outDir)) if (/^lights-((small|medium|compact)-)?[0-9a-f]+\.json$/.test(f) && !written.includes(f)) rmSync(join(outDir, f));
+
 writeFileSync(
   join(web, "src/embed/pack.gen.ts"),
-  `// Written by scripts/build-embed.mjs from data ${manifest.version}; do not edit.\nexport const PACK_URL = "/embed-data/${name}";\n` +
-    `/** The tour (tour-select.ts), for the tests: the pack's steps are these places in this order; step 0 is the still. */\n` +
-    `export const TOUR = ${JSON.stringify(chosen.tour)} as const;\n`,
+  `// Written by scripts/build-embed.mjs from data ${manifest.version}; do not edit.\nexport const PACK_URL = "/embed-data/${name}";\nexport const PACK_URL_SMALL = "/embed-data/${smallName}";\nexport const PACK_URL_MEDIUM = "/embed-data/${mediumName}";\nexport const VIEW = ${JSON.stringify(VIEW)} as const;\nexport const TOUR = ${JSON.stringify(TOUR)} as const;\nexport const STILL = ${JSON.stringify(chosen.still)};\n`,
 );
 const html = join(web, "embed.html");
+// Each layout preloads only its own pack (the media queries are src/embed/layout.ts's).
+const preload = (href, media) => `<link rel="preload" href="/embed-data/${href}" as="fetch" crossorigin="anonymous" media="${media}" />`;
 writeFileSync(
   html,
   readFileSync(html, "utf8").replace(
-    /(<!-- embed-pack[^>]*-->\n)[\s\S]*?(\s*<!-- \/embed-pack -->)/,
-    `$1    <link rel="preload" href="/embed-data/${name}" as="fetch" crossorigin="anonymous" />$2`,
+    /(<!-- embed-pack[^>]*-->)[\s\S]*?(\s*<!-- \/embed-pack -->)/,
+    [
+      "$1",
+      preload(name, `(min-width: ${COMPACT_MAX_W + 1}px)`),
+      preload(mediumName, `(min-width: ${SMALL_MAX_W + 1}px) and (max-width: ${COMPACT_MAX_W}px)`),
+      preload(smallName, `(max-width: ${SMALL_MAX_W}px)`),
+    ].join("\n    ") + "$2",
   ),
 );
-console.log(`${name}: ${(body.length / 1024).toFixed(0)} kB, ${steps.length} steps (${steps.map((s) => `${s.name} ${s.features.length}`).join(", ")}), data ${manifest.version}`);

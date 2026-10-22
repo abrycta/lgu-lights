@@ -2,13 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- The embed krtmtthw.dev frames: a short 2023 tour of places chosen from the data (src/embed/tour-select.ts), drawn as SVG (src/embed/main.ts). -->
+    <!-- The embed krtmtthw.dev frames: a short 2023 tour of places chosen from the data (src/embed/tour-select.ts). -->
     <script src="/theme-init.js" data-shared-cookie-domain="krtmtthw.dev"></script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex" />
     <!-- embed-pack (written by scripts/build-embed.mjs) -->
-    <link rel="preload" href="/embed-data/lights-92e845adf3c3.json" as="fetch" crossorigin="anonymous" />
+    <link rel="preload" href="/embed-data/lights-f71f5742954d.json" as="fetch" crossorigin="anonymous" media="(min-width: 1101px)" />
+    <link rel="preload" href="/embed-data/lights-medium-4cf2457b441a.json" as="fetch" crossorigin="anonymous" media="(min-width: 601px) and (max-width: 1100px)" />
+    <link rel="preload" href="/embed-data/lights-small-e33bcbb6e219.json" as="fetch" crossorigin="anonymous" media="(max-width: 600px)" />
     <!-- /embed-pack -->
     <!-- Pre-load still: the project's kanji glyph, the same quiet tile as krtmtthw.dev's embed slots (Akari muted tokens),
       until the view is ready. Over the page until the first full frame is drawn (html[data-embed-ready]). -->
@@ -19,9 +21,9 @@
         z-index: 2147483647;
         display: grid;
         place-items: center;
-        background: var(--ak-surface-subtle);
-        color: var(--ak-text-muted);
-        font-family: var(--ak-font-display);
+        background: var(--muted);
+        color: var(--muted-foreground);
+        font-family: var(--font-heading);
         font-size: clamp(48px, 9vw, 80px);
         font-weight: 700;
         line-height: 1;
@@ -35,7 +37,7 @@
   </head>
   <body>
     <div class="glyph-seal" aria-hidden="true" lang="ja">光</div>
-    <div id="app" inert data-testid="embed-frame"></div>
-    <script type="module" src="/src/embed/main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/embed/main.tsx"></script>
   </body>
 </html>
