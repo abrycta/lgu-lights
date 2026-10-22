@@ -11,7 +11,8 @@
 #      local v0 dev link) and with the fresh WASM
 #   3. the published data versions only: each read-models-<v>.tar.zst from the data-<v> GitHub release,
 #      its sha256 checked against the digest GitHub publishes for that asset, unpacked, its manifest's
-#      version checked, and only the files the app reads copied to dist/data/<v>/; then dist/data/latest.json
+#      version checked, and only the files the app reads copied to dist/data/<v>/; then dist/data/latest.json, and
+#      <link rel=preload> tags in dist/index.html for LATEST's manifest.json, index.json and tiles-attrs.csv
 #   4. npx --yes wrangler@4 pages deploy dist --project-name lgu-lights --branch main
 #   5. live checks: /deploy.json is this commit, latest.json reports LATEST, the home page serves this build's script, /embed and the
 #      WASM answer 200 (retried for up to 2 minutes while the deploy propagates)
@@ -34,7 +35,7 @@ deploy=1
 for a in "$@"; do
   case "$a" in
     --no-deploy) deploy=0 ;;
-    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
@@ -98,6 +99,18 @@ for v in $DATA_VERSIONS; do
   done
 done
 printf '{"version":"%s","base":"%s/"}\n' "$LATEST" "$LATEST" > "$web/dist/data/latest.json"
+# The app reads latest.json first and only then the version's files; the home page already knows LATEST, so it
+# preloads them too (same URLs and request mode as src/data/load.ts; latest.json stays the runtime truth).
+marker='<!-- data-preload: scripts/deploy-web.sh puts the current version'"'"'s manifest, index and tiles-attrs.csv here -->'
+grep -qF "$marker" "$web/dist/index.html" || die "dist/index.html has no data-preload marker"
+links=""
+for f in manifest.json index.json tiles-attrs.csv; do
+  links+="<link rel=\"preload\" href=\"/data/$LATEST/$f\" as=\"fetch\" crossorigin=\"anonymous\" />"
+done
+MARKER="$marker" LINKS="$links" node -e '
+  const fs = require("fs"); const f = process.argv[1];
+  fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(process.env.MARKER, process.env.LINKS));
+' "$web/dist/index.html"
 files=$(find "$web/dist" -type f | wc -l | tr -d ' ')
 echo "dist: $files files, $(du -sh "$web/dist" | cut -f1)"
 [ "$files" -lt 20000 ] || die "Cloudflare Pages allows 20,000 files per deploy; dist has $files"
@@ -136,6 +149,7 @@ check() {
   [ "$(node -p 'JSON.parse(process.argv[1]).version' "$latest")" = "$LATEST" ] || { echo "latest.json: $latest"; return 1; }
   home=$(curl -fsS "$LIVE_URL/?$bust") || return 1
   grep -q "$script" <<<"$home" || { echo "home page does not load $script yet"; return 1; }
+  grep -qF "/data/$LATEST/manifest.json" <<<"$home" || { echo "home page does not preload data/$LATEST yet"; return 1; }
   curl -fsS -o /dev/null "$LIVE_URL/embed?$bust" || return 1
   [ "$(curl -fsS "$LIVE_URL/wasm/lgu_wasm.wasm?$bust" | wc -c | tr -d ' ')" = "$wasm_size" ] || { echo "wasm size differs"; return 1; }
   [ "$(curl -fsS "$LIVE_URL/deploy.json?$bust" | node -p 'JSON.parse(require("fs").readFileSync(0)).sha')" = "$sha" ] || { echo "deploy.json is not $sha yet"; return 1; }
