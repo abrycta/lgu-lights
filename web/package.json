@@ -22,7 +22,7 @@
     "e2e:install": "playwright install ${CI:+--with-deps} chromium"
   },
   "dependencies": {
-    "@abrycta/akari": "^0.15.0",
+    "@abrycta/akari": "^0.16.0",
     "@fontsource/dm-mono": "^5.3.0",
     "@fontsource/zen-kaku-gothic-new": "^5.3.1",
     "lucide-react": "^1.60.0",
