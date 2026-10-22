@@ -1,7 +1,7 @@
 # Web app: install (private @abrycta/akari from GitHub Packages), typecheck, unit tests, build, size report.
 # The WASM module and the data are runtime assets (built by rust.yml / data.yml), not part of the checks.
 #
-# Deploy (portfolio rules 17 and 23): on main, after `check` passes, the deploy job asks
+# Deploy (portfolio rules 17 and 24): on main, after `check` passes, the deploy job asks
 # .github/scripts/deploy-gate.sh for main's NEWEST commit touching what the app ships (.github/deploy-target):
 # green check -> deploy that commit (so a run for an older commit catches it up); its check still running -> its
 # own run deploys it; red -> this job fails. Rust CI must pass too when that commit has a Rust run. Then
