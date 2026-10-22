@@ -12,8 +12,9 @@ its correlation with the province's previous level, trend or lights flips from r
 fitted on the raw change (v1) learned each training round's provincial shifts and applied them to the
 next round, which failed across the ELL -> Census EB change. The v2 model learns only how an LGU moves
 relative to its province (mean reversion towards the province, persistence of the previous trend), which
-is stable across rounds, and otherwise carries the province's level forward. The estimate is still
-`clamp(official_r + prediction, 0, 100)`, so the Rust core is unchanged.
+is stable across rounds, and otherwise carries the province's level forward. The estimate was
+`clamp(official_r + prediction, 0, 100)`; since data v5 a predicted fall below half the previous figure
+tapers instead of reaching 0 % (`level`, mirrored in lgu-core).
 
 Model v3 (DECISIONS "v3 enhancement"): the 2006 and 2009 SAE rounds add the transitions 2006->2009 and
 2009->2012 (no satellite inputs before 2012: NaN, LightGBM's missing-value handling) and give every
@@ -155,6 +156,23 @@ def tune(lab: pd.DataFrame, rounds: list[int]) -> tuple[dict, list[dict]]:
 LINEAR_OPTIONS: list[tuple[str, ...]] = [(), ("gap",), ("prov_fies_gap",), ("gap", "prov_fies_gap")]
 
 
+TAPER = 0.5  # mirrors lgu-core model::TAPER
+
+
+def level(y_prev: pd.Series | np.ndarray, change: np.ndarray | pd.Series) -> np.ndarray:
+    """The level from the previous official figure and the predicted change, as the Rust core computes it
+    (lgu-core `model::level`, data v5): a rise, or a fall to no less than TAPER of the previous figure,
+    adds; a larger fall tapers hyperbolically below f = TAPER * y_prev (f^2 / (2f - raw)), so no estimate is
+    exactly 0 %. The
+    baselines (carry forward, drift) stay additive so they remain comparable across versions."""
+    y = np.asarray(y_prev, dtype=np.float64)
+    raw = y + np.asarray(change, dtype=np.float64)
+    floor = TAPER * y
+    with np.errstate(divide="ignore", invalid="ignore"):
+        tapered = floor * floor / (2 * floor - raw)
+    return np.clip(np.where((y > 0) & (raw < floor), tapered, raw), 0, 100)
+
+
 def fit_linear(train: pd.DataFrame, terms: tuple[str, ...]) -> dict[str, float]:
     coef: dict[str, float] = {}
     if "gap" in terms:
@@ -192,7 +210,7 @@ def select_linear(runs: list) -> tuple[tuple[str, ...], list[dict]]:
     for terms in LINEAR_OPTIONS:
         maes = []
         for train, test, fp in runs:
-            est = (test.y_prev.to_numpy() + fp + linear(test, fit_linear(train, terms))).clip(0, 100)
+            est = level(test.y_prev, fp + linear(test, fit_linear(train, terms)))
             maes.append(float(np.mean(np.abs(est - test.y.to_numpy()))))
         scores.append({"terms": list(terms), "inner_mae": float(np.mean(maes)), "per_fold": maes})
     best = min(scores, key=lambda r: (round(r["inner_mae"], 6), len(r["terms"])))
@@ -206,7 +224,7 @@ def calibration_residuals(lab: pd.DataFrame, rounds: list[int], cfg: dict, runs:
     runs = inner_runs(lab, rounds, cfg) if runs is None else runs
     if runs:
         for train, test, fp in runs:
-            est = (test.y_prev + fp + linear(test, fit_linear(train, terms))).clip(0, 100)
+            est = level(test.y_prev, fp + linear(test, fit_linear(train, terms)))
             res.append(pd.DataFrame({"y_prev": test.y_prev, "r": est - test.y}))
     else:
         d = lab[lab.year.isin(rounds)]
@@ -217,7 +235,7 @@ def calibration_residuals(lab: pd.DataFrame, rounds: list[int], cfg: dict, runs:
         for i in range(5):
             f = fit(d[k != i], cfg)
             test = d[k == i]
-            res.append(pd.DataFrame({"y_prev": test.y_prev, "r": (test.y_prev + f.predict(test)).clip(0, 100) - test.y}))
+            res.append(pd.DataFrame({"y_prev": test.y_prev, "r": level(test.y_prev, f.predict(test)) - test.y}))
     return pd.concat(res).to_numpy()
 
 
@@ -383,13 +401,13 @@ def run(design_path: Path, out: Path) -> dict:
         terms, lin_scores = select_linear(runs)
         coef = fit_linear(train, terms)
         cal = conformal(calibration_residuals(lab, tr_rounds, cfg, runs, terms))
-        est = (test.y_prev + f.predict(test) + linear(test, coef)).clip(0, 100).to_numpy()
+        est = level(test.y_prev, f.predict(test) + linear(test, coef))
         iv = apply_calibration(cal, test.y_prev.to_numpy(), est)
         row = {"fold": f"F{k}", "train_rounds": tr_rounds, "test_round": te, "config": cfg, "tuning_top5": top,
                "linear": coef, "linear_selection": lin_scores, "calibration": cal,
                "model": metrics(test, est, iv) | province_metrics(test, est, fies)}
         # the forest alone (the v2 method on this data), to show what the linear terms add
-        row["ablation_forest_only"] = metrics(test, (test.y_prev + f.predict(test)).clip(0, 100).to_numpy(), None)
+        row["ablation_forest_only"] = metrics(test, level(test.y_prev, f.predict(test)), None)
         # baselines on the same rows
         carry = test.y_prev.to_numpy()
         row["carry_forward"] = metrics(test, carry, None) | province_metrics(test, carry, fies)
@@ -404,7 +422,7 @@ def run(design_path: Path, out: Path) -> dict:
         no_sat = [c for c in FEATURES if c not in SATELLITE]
         f_ns = fit(train, cfg, no_sat)
         row["ablation_no_satellite"] = metrics(
-            test, (test.y_prev + f_ns.predict(test) + linear(test, coef)).clip(0, 100).to_numpy(), None)
+            test, level(test.y_prev, f_ns.predict(test) + linear(test, coef)), None)
         report["folds"].append(row)
         name = f"lightgbm-backtest-{te}"
         (out / f"backtest-{te}.json").write_text(json.dumps(export(f, cal, name, cfg, tr_rounds, coef)))

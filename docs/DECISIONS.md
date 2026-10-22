@@ -223,3 +223,11 @@ Plainly:
 | Same-year provincial FIES | correlates 0.5–0.9 with the provincial shift, but it does not exist for the years the map estimates; it would be leakage relative to the nowcast | no, by rule |
 | Provincial GDP (PSA PRGDP) | starts in 2018, so at most one lagged value per fold; not added | no |
 | DMSP-OLS harmonised lights for 2006–2011 | not computed (see V3) | no |
+
+## Data v5 (City of Manila; no exact-zero model estimates), 2026-10-23
+
+Two data fixes from the 2026-10-22 bug audit (items 6 and 3); features reused from features-v1, geometry unchanged (the City of Manila is already one ADM3 polygon, PH1303901, in the v4 geometry tiles).
+
+- **City of Manila.** PSA publishes the capital only as its 14 districts, which have no polygons of their own, so v1–v4 left the city blank. Since v5 its figure for each round (2006–2023) is the population-weighted mean of the 14 district figures, weighted by each district's 2020 Census population from the PSGC (new source `psa-psgc`, 1Q 2025 publication datafile, Wayback-pinned and archived as `psa-psgc-2026-10-23`). Its SE is the weighted sum of the district SEs, the upper bound for correlated district errors. It enters training and the map like any official figure (e.g. 2023: 1.89 %, 90 % CI 1.56–2.23).
+- **No exact 0 %.** The model adds a predicted change to the last official figure; for low-poverty places with long gaps (mostly the NCR and other highly urbanised cities that have no 2018–2023 figure) that went below zero and was clamped to 0.0 % with an infinite CV (139 model estimates in v4). Since v5 a predicted fall to less than half of the previous official figure tapers hyperbolically (`f²/(2f − raw)`, `f` = half the previous figure; same value and slope at the joint), in the Rust core (`model::level`, also the what-if) and in validation (`train.level`). In the PSA rounds no LGU fell below 12 % of its previous figure.
+- **Effect (local canary against v4):** validation MAE 6.76 / 8.06 / 5.55 (v4 6.76 / 8.07 / 5.55); parity max |Δ| 3.9e-14. Model estimates at 0.0 %: 136 shown → 4; null model CVs 139 → 0. Retraining with the Manila rows moves other model estimates by a median 0.28 pp (90th percentile 0.88, max 4.0); official figures are unchanged.

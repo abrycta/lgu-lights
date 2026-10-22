@@ -12,6 +12,12 @@ dropped). The crosswalk to the HDX pcode ("PH" + region 2 + province 3 + municip
 agree, (3) a unique name match inside the same province, (4) a unique name match nationally. Rows that
 stay unmatched (the 14 City of Manila districts, which have no ADM3 polygon of their own) are reported
 in crosswalk_report.json and left out of the labels.
+
+The City of Manila (one ADM3 unit, PH1303901) is published by PSA only as its 14 districts. Since data v5
+the city's figure for a round is their population-weighted mean (`combine_districts`), with weights from
+the 2020 Census population of each district in the PSGC (source psa-psgc). Its standard error is the
+weighted sum of the district SEs, the upper bound for correlated district errors, so the city's interval
+is never narrower than the districts' own precision supports.
 """
 from __future__ import annotations
 
@@ -99,6 +105,53 @@ def parse_annex_2023(wb: openpyxl.Workbook, source_id: str) -> list[SaeRow]:
             rows.append(SaeRow(code, prov, name, year, est, _num(r[6 + k]), _num(r[9 + k]),
                                _num(r[12 + 2 * k]), _num(r[13 + 2 * k]), source_id))
     return rows
+
+
+# ------------------------------------------------------------------ City of Manila (districts combined)
+
+MANILA = {"pcode": "PH1303901", "code6": "133900", "name": "City of Manila", "district_prefix": "1339"}
+
+
+def psgc_district_population(path: Path, prefix: str = MANILA["district_prefix"]) -> dict[str, int]:
+    """PSA code6 -> 2020 Census population of each sub-municipality (district) of a city, from the PSGC
+    publication datafile (sheet "PSGC": 10-digit PSGC, name, correspondence code, geographic level, ...,
+    2020 population). The correspondence code is the pre-2021 9-digit code whose first six digits are
+    the SAE's code6."""
+    wb = openpyxl.load_workbook(io.BytesIO(path.read_bytes()), read_only=True, data_only=True)
+    ws = wb["PSGC"]
+    head = [str(c or "").strip() for c in next(ws.iter_rows(max_row=1, values_only=True))]
+    i_corr, i_level = head.index("Correspondence Code"), head.index("Geographic Level")
+    i_pop = head.index("2020 Population")
+    out: dict[str, int] = {}
+    for r in ws.iter_rows(min_row=2, values_only=True):
+        corr = f"{int(r[i_corr]):09d}" if isinstance(r[i_corr], (int, float)) else str(r[i_corr] or "")
+        if r[i_level] == "SubMun" and corr.startswith(prefix):
+            out[corr[:6]] = int(r[i_pop])
+    return out
+
+
+def combine_districts(rows: list[SaeRow], weights: dict[str, int], city: dict = MANILA) -> list[SaeRow]:
+    """One row per round for the city: the population-weighted mean of its district rows, only in rounds
+    where PSA published every district. SE: the weighted sum of the district SEs (errors of districts of
+    one city share the same survey and model, so they are not independent; this is the upper bound)."""
+    total = sum(weights.values())
+    by_year: dict[int, dict[str, SaeRow]] = {}
+    for r in rows:
+        if r.code6 in weights:
+            by_year.setdefault(r.year, {})[r.code6] = r
+    out = []
+    for year, ds in sorted(by_year.items()):
+        if set(ds) != set(weights):
+            continue
+        est = sum(weights[c] * d.estimate for c, d in ds.items()) / total
+        ses = [d.se if d.se is not None else (d.cv * d.estimate / 100 if d.cv is not None else None)
+               for d in ds.values()]
+        se = (sum(weights[c] * s for c, s in zip(ds, ses)) / total) if all(s is not None for s in ses) else None
+        cv = 100 * se / est if se is not None and est > 0 else None
+        lo, hi = (est - Z90 * se, est + Z90 * se) if se is not None else (None, None)
+        src = next(iter(ds.values())).source_id
+        out.append(SaeRow(city["code6"], next(iter(ds.values())).province, city["name"], year, est, cv, se, lo, hi, src))
+    return out
 
 
 # ------------------------------------------------------------------ crosswalk
@@ -196,7 +249,7 @@ def _rematch(name: str, pcode: str, adm3: pd.DataFrame) -> str | None:
 
 
 def build_labels(sae_2018_2021: Path, sae_2023: Path, adm3: pd.DataFrame, overrides: dict[str, str],
-                 shas: dict[str, str]) -> tuple[pd.DataFrame, dict]:
+                 shas: dict[str, str], psgc: Path | None = None) -> tuple[pd.DataFrame, dict]:
     def open_wb(p: Path) -> openpyxl.Workbook:
         return openpyxl.load_workbook(io.BytesIO(p.read_bytes()), read_only=True, data_only=True)
 
@@ -204,7 +257,18 @@ def build_labels(sae_2018_2021: Path, sae_2023: Path, adm3: pd.DataFrame, overri
     rows = [r for y in (2006, 2009, 2012, 2015) for r in parse_round_sheet(wb1, y, "psa-sae-2018-2021")]
     new_after = {y: created_later(wb1, y) for y in (2006, 2009, 2012, 2015)}
     rows += parse_annex_2023(wb2, "psa-sae-2023")
+    combined: list[SaeRow] = []
+    if psgc is not None:
+        weights = psgc_district_population(psgc)
+        if len(weights) != 14:
+            raise ValueError(f"PSGC: expected the 14 City of Manila districts, found {len(weights)}")
+        combined = combine_districts(rows, weights)
+        rows += combined
     mapping, report = crosswalk(rows, adm3, overrides)
+    if combined:
+        report["combined_districts"] = {
+            MANILA["pcode"]: {"rounds": [r.year for r in combined], "districts": len(weights),
+                              "weights": "PSGC 2020 Census population (psa-psgc)", "se": "weighted sum (upper bound)"}}
     adm3_names = dict(zip(adm3.adm3_pcode, adm3.adm3_name))
     name_mismatch: list[dict] = []
     rematched: list[dict] = []

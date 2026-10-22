@@ -1,7 +1,8 @@
 # Manual crosswalk overrides: PSA SAE 6-digit code -> HDX COD-AB v03 adm3_pcode ('' = no ADM3 unit).
 # Every row needs a reason. Checked by hand against phl_admin_boundaries.xlsx (admin3 sheet), 2026-10-21.
 code6,pcode,reason
-133901,,City of Manila district (Tondo); HDX has one ADM3 for the whole city; districts are not aggregated (no population weights)
+133900,PH1303901,City of Manila: not a PSA row; the 14 district rows combined by 2020 Census population (labels.combine_districts; PSGC weights)
+133901,,City of Manila district (Tondo); HDX has one ADM3 for the whole city; combined into 133900 rather than matched
 133902,,City of Manila district (Binondo)
 133903,,City of Manila district (Quiapo)
 133904,,City of Manila district (San Nicolas)

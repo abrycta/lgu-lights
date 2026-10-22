@@ -48,11 +48,24 @@
       "archive_tag": "psa-sae-2023-2026-10-21",
       "last_modified": null,
       "archivekit_version": "1.1.0"
+    },
+    "psa-psgc": {
+      "link_id": "wayback",
+      "served_by": "fallback",
+      "url": "https://web.archive.org/web/20250520193006id_/https://psa.gov.ph/system/files/scd/PSGC-1Q-2025-Publication-Datafile.xlsx",
+      "sha256": "4ec8e492a6da1f6a155d71c90dbb693cd33c82438016ca6cb5842232a5f648d7",
+      "rows": 0,
+      "data_as_of": "2026-10-23",
+      "snapshot_date": "2026-10-23",
+      "archive_tag": "psa-psgc-2026-10-23",
+      "last_modified": null,
+      "archivekit_version": "1.1.0"
     }
   },
   "fallbacks_used": [
     "psa-sae-2018-2021",
-    "psa-sae-2023"
+    "psa-sae-2023",
+    "psa-psgc"
   ],
   "archive_used": true,
   "data_as_of": "2026-10-21",
