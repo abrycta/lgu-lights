@@ -47,9 +47,10 @@ https://lgu-lights.pages.dev/*
 /data/latest.json
   Cache-Control: public, max-age=60, must-revalidate
 
-# The what-if module has a stable name: short TTL.
+# The what-if module is named after its content (lgu_wasm.<sha256 prefix>.wasm, scripts/deploy-web.sh), so it never
+# changes in place.
 /wasm/*
-  Cache-Control: public, max-age=300
+  Cache-Control: public, max-age=31536000, immutable
   Content-Type: application/wasm
 
 # Akari's pre-paint theme script (stable name, render-blocking): short TTL so upgrades land quickly.
