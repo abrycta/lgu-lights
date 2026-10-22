@@ -1,0 +1,253 @@
+/* SPIKE (lt-embed-spike): the SVG /embed's styles. Akari's tokens only (colours, sizes, fonts); no Tailwind, no React. */
+@import "@abrycta/akari/css/tokens.css";
+@import "@fontsource/zen-kaku-gothic-new/latin-400.css";
+@import "@fontsource/zen-kaku-gothic-new/latin-700.css";
+@import "@fontsource/dm-mono/latin-400.css";
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ak-bg);
+  color: var(--ak-text);
+  font-family: var(--ak-font-body);
+  -webkit-text-size-adjust: 100%;
+}
+* {
+  box-sizing: border-box;
+}
+
+/* Desktop: the portfolio frames a fixed 1280×800 page scaled to its slot (about ×0.48, sent as --embed-scale).
+   Type is set in Akari's steps divided by that scale, so it reaches the reader at the step's real size. */
+#app {
+  --s: var(--embed-scale, 0.48);
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr 460px;
+  grid-template-rows: 1fr;
+}
+.map {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+.map svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  will-change: opacity, transform;
+}
+.attr {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 0 calc(4px / var(--s));
+  font-size: calc(var(--ak-font-size-2xs) / var(--s) / 2);
+  color: var(--ak-text-muted);
+  background: color-mix(in srgb, var(--ak-bg) 80%, transparent);
+  white-space: nowrap;
+}
+
+/* The fills: Akari's sequential scale; official figures opaque, model estimates lighter (lib/honesty.ts). */
+.c0 { fill: var(--ak-seq-1); }
+.c1 { fill: var(--ak-seq-2); }
+.c2 { fill: var(--ak-seq-3); }
+.c3 { fill: var(--ak-seq-4); }
+.c4 { fill: var(--ak-seq-5); }
+.off { fill-opacity: 0.92; }
+.mod { fill-opacity: 0.55; }
+.nd { fill: var(--ak-surface-subtle); fill-opacity: 0.6; }
+.edges { fill: none; stroke: var(--ak-map-feature-line); stroke-width: 0.75px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.prov { fill: none; stroke: var(--ak-text-muted); stroke-width: 1.1px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.prov-sel { fill: none; stroke: var(--ak-text); stroke-width: 2.5px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.lgu-sel { fill: none; stroke: var(--ak-accent); stroke-width: 3px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.hatch-ink { stroke: var(--ak-text); stroke-opacity: 0.75; }
+.hatch-ground { stroke: var(--ak-bg); stroke-opacity: 0.7; }
+
+/* The caption panel (desktop), its layers stacked for the cross-fade. */
+.panel {
+  position: relative;
+  border-left: 1px solid var(--ak-border);
+  background: var(--ak-surface);
+  overflow: hidden;
+}
+.card {
+  position: absolute;
+  inset: 0;
+  padding: calc(16px / var(--s)) calc(16px / var(--s));
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px / var(--s));
+  will-change: opacity;
+}
+.eyebrow {
+  font-size: calc(var(--ak-font-size-2xs) / var(--s));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ak-text-muted);
+}
+.name {
+  font-size: calc(var(--ak-font-size-lg) / var(--s));
+  font-weight: 700;
+  line-height: var(--ak-leading-tight);
+  margin: 0;
+}
+.where {
+  font-size: calc(var(--ak-font-size-2xs) / var(--s));
+  color: var(--ak-text-muted);
+}
+.figure {
+  display: flex;
+  align-items: baseline;
+  gap: calc(6px / var(--s));
+  flex-wrap: wrap;
+}
+.value {
+  font-family: var(--ak-font-mono);
+  font-size: calc(var(--ak-font-size-2xl) / var(--s));
+  line-height: 1;
+}
+.value.model {
+  font-style: italic;
+}
+.below {
+  font-size: calc(var(--ak-font-size-2xs) / var(--s));
+  color: var(--ak-text-muted);
+}
+.chips {
+  display: flex;
+  gap: calc(6px / var(--s));
+  flex-wrap: wrap;
+  font-size: calc(var(--ak-font-size-2xs) / var(--s));
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(4px / var(--s));
+  border: 1px solid var(--ak-border);
+  border-radius: 999px;
+  padding: 0 calc(6px / var(--s));
+}
+.chip svg {
+  width: calc(10px / var(--s));
+  height: calc(10px / var(--s));
+}
+.spark {
+  width: 100%;
+  height: calc(40px / var(--s));
+  overflow: visible;
+}
+.spark .band { fill: var(--ak-seq-2); fill-opacity: 0.5; }
+.spark .line { fill: none; stroke: var(--ak-text-muted); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.spark .dot-off { fill: var(--ak-seq-5); }
+.spark .dot-mod { fill: var(--ak-surface); stroke: var(--ak-seq-4); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.spark .now { fill: none; stroke: var(--ak-accent); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.spark-years {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--ak-font-mono);
+  font-size: calc(var(--ak-font-size-2xs) / var(--s));
+  color: var(--ak-text-muted);
+}
+.sentence {
+  font-size: calc(var(--ak-font-size-xs) / var(--s));
+  line-height: var(--ak-leading-snug);
+  margin: 0;
+}
+.legend {
+  margin-top: auto;
+  display: grid;
+  gap: calc(4px / var(--s));
+  font-size: calc(var(--ak-font-size-2xs) / var(--s));
+  color: var(--ak-text-muted);
+}
+.ramp {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+}
+.ramp span {
+  height: calc(8px / var(--s));
+}
+.ramp-labels {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  font-family: var(--ak-font-mono);
+}
+.progress {
+  height: calc(2px / var(--s));
+  background: var(--ak-border);
+  position: relative;
+  overflow: hidden;
+}
+.progress i {
+  position: absolute;
+  inset: 0;
+  background: var(--ak-accent);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  will-change: transform;
+}
+
+/* Compact (phones, tablets: the frame is the slot at its real size): the map above a two-line caption. */
+@media (max-width: 1100px) {
+  #app {
+    --s: 1;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 53px;
+  }
+  .panel {
+    border-left: 0;
+    border-top: 1px solid var(--ak-border);
+    background: var(--ak-bg);
+  }
+  .card {
+    padding: 6px 12px 0;
+    gap: 2px;
+    justify-content: center;
+  }
+  .card > :not(.c-line, .progress) {
+    display: none;
+  }
+  .attr {
+    font-size: 9px;
+  }
+}
+.c-line {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .c-line {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: var(--ak-leading-snug);
+    margin: 0;
+  }
+  .c-line.one {
+    font-size: var(--ak-font-size-sm);
+  }
+  .c-line.two {
+    font-size: var(--ak-font-size-xs);
+    color: var(--ak-text-muted);
+  }
+  .c-line b {
+    font-weight: 700;
+  }
+  .c-line .mono {
+    font-family: var(--ak-font-mono);
+    color: var(--ak-text);
+  }
+  .progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+  }
+}
