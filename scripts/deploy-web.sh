@@ -72,6 +72,8 @@ cp "$wasm" "$stage/public/wasm/lgu_wasm.wasm"
 (cd "$web" && rm -rf dist && LIGHTS_PUBLIC_DIR="$stage/public" ${nice_cmd[@]+"${nice_cmd[@]}"} npx vite build)
 [ -f "$web/dist/index.html" ] && [ -f "$web/dist/embed.html" ] || die "the build has no index.html or embed.html"
 [ ! -e "$web/dist/data" ] || die "dist/data exists after the build (public/data leaked in)"
+# Source maps are not published (vite.config.ts builds them "hidden", for local debugging only).
+find "$web/dist" -name '*.map' -type f -delete
 
 step "Data versions: $DATA_VERSIONS (latest $LATEST)"
 mkdir -p "$cache" "$web/dist/data"
