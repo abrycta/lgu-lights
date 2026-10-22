@@ -11,7 +11,7 @@ import "./style.css";
 
 import { sparklineGeometry } from "@abrycta/akari/react/lib/akari-sparkline-geometry";
 
-import { belowOne, pct, pctInline, pctShown } from "@/lib/format";
+import { belowOne, pct, pctInline } from "@/lib/format";
 import { classLabels, classOf, type Lang } from "@/lib/honesty";
 
 import { PACK_URL } from "./pack.gen";
@@ -168,9 +168,10 @@ function drawCard(step: Step, pack: Pack, progress: HTMLElement): HTMLElement {
   const one = el("p", "c-line one");
   one.append(el("b", "", step.name), el("span", "muted", ` · ${step.province}`));
   const two = el("p", "c-line two");
-  // A model estimate of 0.0 reads "below 1 % (model estimate)", as everywhere in the app (lib/format.ts, #20).
+  // A model estimate of 0.0 reads "below 1 %" (lib/format.ts, #20); the source beside it already says "Model
+  // estimate", so no "(model estimate)" again (as the app's panel headline, #28).
   const tiny = step.value != null && belowOne(step.value, model);
-  if (step.value != null && tiny) two.append(el("span", "mono model", pctShown(step.value, lang, model)), lang === "ja" ? `・${w.source}` : ` · ${w.source}`);
+  if (step.value != null && tiny) two.append(el("span", "mono model", pctInline(step.value, lang, model)), lang === "ja" ? `・${w.source}` : ` · ${w.source}`);
   else if (step.value != null) {
     if (lang === "ja") two.append("貧困線未満 ");
     two.append(el("span", `mono${model ? " model" : ""}`, pct(step.value, lang)), lang === "ja" ? `・${w.source}` : ` below the poverty line · ${w.source}`);
@@ -182,7 +183,7 @@ function drawCard(step: Step, pack: Pack, progress: HTMLElement): HTMLElement {
   if (step.value != null)
     figure.append(
       el("span", `value${model ? " model" : ""}`, pctInline(step.value, lang, model)),
-      el("span", "below", tiny ? t("below the poverty line (model estimate)", "貧困線未満（モデル推計）") : t("below the poverty line", "貧困線未満")),
+      el("span", "below", t("below the poverty line", "貧困線未満")),
     );
   const chips = el("div", "chips");
   const source = el("span", "chip");
