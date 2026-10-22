@@ -13,7 +13,7 @@
 #      its sha256 checked against the digest GitHub publishes for that asset, unpacked, its manifest's
 #      version checked, and only the files the app reads copied to dist/data/<v>/; then dist/data/latest.json
 #   4. npx --yes wrangler@4 pages deploy dist --project-name lgu-lights --branch main
-#   5. live checks: latest.json reports LATEST, the home page serves this build's script, /embed and the
+#   5. live checks: /deploy.json is this commit, latest.json reports LATEST, the home page serves this build's script, /embed and the
 #      WASM answer 200 (retried for up to 2 minutes while the deploy propagates)
 #
 # Env: DATA_VERSIONS (default "v1 v3"), LATEST (default v3), LIVE_URL (default https://lights.krtmtthw.dev),
@@ -118,7 +118,9 @@ if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ] && [ -f "$root/../typhoon-replay/.env.dep
 fi
 [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || die "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required"
 export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID WRANGLER_SEND_METRICS=false
-sha="${GITHUB_SHA:-$(git -C "$root" rev-parse HEAD)}"
+sha="$(git -C "$root" rev-parse HEAD)"   # the checked-out commit (CI checks out the gate's commit)
+# The deployed commit, for live-check.yml and the check below ("Merged means deployed").
+printf '{"sha":"%s","run":"%s"}\n' "$sha" "${GITHUB_SERVER_URL:-}/${GITHUB_REPOSITORY:-local}/actions/runs/${GITHUB_RUN_ID:-local}" > "$web/dist/deploy.json"
 (cd "$web" && npx --yes wrangler@4 pages deploy dist --project-name "$PROJECT" --branch main \
   --commit-hash "$sha" --commit-dirty=true)
 
@@ -136,12 +138,13 @@ check() {
   grep -q "$script" <<<"$home" || { echo "home page does not load $script yet"; return 1; }
   curl -fsS -o /dev/null "$LIVE_URL/embed?$bust" || return 1
   [ "$(curl -fsS "$LIVE_URL/wasm/lgu_wasm.wasm?$bust" | wc -c | tr -d ' ')" = "$wasm_size" ] || { echo "wasm size differs"; return 1; }
+  [ "$(curl -fsS "$LIVE_URL/deploy.json?$bust" | node -p 'JSON.parse(require("fs").readFileSync(0)).sha')" = "$sha" ] || { echo "deploy.json is not $sha yet"; return 1; }
   manifest=$(curl -fsS "$LIVE_URL/data/$LATEST/manifest.json?$bust") || return 1
   [ "$(node -p 'JSON.parse(process.argv[1]).version' "$manifest")" = "$LATEST" ] || { echo "manifest is not $LATEST"; return 1; }
 }
 for i in $(seq 1 12); do
   if check; then
-    echo "live: latest.json is $LATEST; / serves $script; /embed, /wasm/lgu_wasm.wasm and data/$LATEST/manifest.json OK"
+    echo "live: deploy.json is ${sha:0:7}; latest.json is $LATEST; / serves $script; /embed, /wasm/lgu_wasm.wasm and data/$LATEST/manifest.json OK"
     exit 0
   fi
   echo "not live yet (try $i/12), waiting 10 s"
