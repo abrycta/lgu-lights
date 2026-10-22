@@ -53,7 +53,7 @@ export function preloadMap(): Plugin {
         // Their CSS (MapLibre's), fetched early but applied only when the chunk loads, as Vite does.
         for (const css of new Set(closure.flatMap((c) => [...(c.viteMetadata?.importedCss ?? [])]))) {
           if (html.includes(`${base}${css}"`)) continue;
-          tags.push({ tag: "link", attrs: { rel: "preload", as: "style", href: `${base}${css}` }, injectTo: "head" });
+          tags.push({ tag: "link", attrs: { rel: "preload", as: "style", crossorigin: true, href: `${base}${css}` }, injectTo: "head" });
         }
         // MapLibre starts it as a module worker (same-origin, credentials same-origin). A worker has its own
         // module map, so this only warms the HTTP cache (/assets/* is immutable), which the worker then reads.
