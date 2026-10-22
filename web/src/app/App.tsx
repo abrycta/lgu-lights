@@ -2,7 +2,6 @@ import { AkariProvider } from "@abrycta/akari/react";
 import { lazy, Suspense } from "react";
 
 import { ErrorBoundary } from "./ErrorBoundary";
-import { PageGlyph } from "./PageGlyph";
 import { Shell } from "./Shell";
 import { parseUrl, useUrlState } from "./url";
 
@@ -19,11 +18,17 @@ function initialLang(): "en" | "ja" {
   return navigator.language?.toLowerCase().startsWith("ja") ? "ja" : "en";
 }
 
+/** While a page's code loads: the shell (Header, footer) shows at once and this keeps the page's room, so the footer
+ * does not jump; no loading screen (Kurt, 2026-10-23). */
+function PageSpace() {
+  return <div className="min-h-[calc(100dvh-81px)]" />;
+}
+
 function Pages() {
   const { page } = useUrlState();
   return (
     <ErrorBoundary>
-      <Suspense fallback={<PageGlyph />}>{page === "about" ? <AboutPage /> : page === "notfound" ? <NotFoundPage /> : <MapPage />}</Suspense>
+      <Suspense fallback={<PageSpace />}>{page === "about" ? <AboutPage /> : page === "notfound" ? <NotFoundPage /> : <MapPage />}</Suspense>
     </ErrorBoundary>
   );
 }
