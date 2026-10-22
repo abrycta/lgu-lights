@@ -7,6 +7,7 @@ import { Badge, Button, T, useLang, useT } from "@abrycta/akari/react";
 import { useEffect, useId, useState } from "react";
 
 import type { YearRecord } from "@/data/types";
+import { GlyphLoading } from "@/features/GlyphLoading";
 import { belowOne, interval, pctInline } from "@/lib/format";
 import { TIER_LABEL, tierOf } from "@/lib/honesty";
 import { whatIfExplanation } from "@/lib/plain";
@@ -160,7 +161,9 @@ export function WhatIf({ pcode, name, rec, widen }: { pcode: string; name: strin
             <T en="No scenario estimate for this place and year." ja="この地域と年の仮定推計はありません。" />
           </p>
         ) : (
-          <p className="text-muted-foreground">…</p>
+          <p className="text-muted-foreground">
+            <GlyphLoading />
+          </p>
         )}
         {loading ? (
           // Overlaid on the dimmed published figure, so the panel keeps its height while the model loads.
