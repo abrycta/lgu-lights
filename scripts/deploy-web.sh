@@ -12,7 +12,7 @@
 #   3. the published data versions only: each read-models-<v>.tar.zst from the data-<v> GitHub release,
 #      its sha256 checked against the digest GitHub publishes for that asset, unpacked, its manifest's
 #      version checked, and only the files the app reads copied to dist/data/<v>/; then dist/data/latest.json, and
-#      <link rel=preload> tags in dist/index.html for LATEST's manifest.json, index.json and tiles-attrs.csv
+#      <link rel=preload> tags in dist/index.html for LATEST's manifest.json, index.json, tiles-attrs.csv and tiles.json (the list of existing tiles)
 #   4. npx --yes wrangler@4 pages deploy dist --project-name lgu-lights --branch main
 #   5. live checks: /deploy.json is this commit, latest.json reports LATEST, the home page serves this build's script, /embed and the
 #      WASM answer 200, a missing tile answers 404 (retried for up to 2 minutes while the deploy propagates)
@@ -102,6 +102,11 @@ for v in $DATA_VERSIONS; do
     [ -e "$stage/data/$v/$f" ] || die "$asset has no $v/$f"
     cp -R "$stage/data/$v/$f" "$web/dist/data/$v/"
   done
+  # The tiles that exist, as "z/x/y": the app skips the absent (ocean) ones instead of requesting a 404.
+  (cd "$web/dist/data/$v/tiles" && find . -name '*.pbf' -type f | sed -e 's|^\./||' -e 's|\.pbf$||' | sort) \
+    | node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(0, "utf8").split("\n").filter(Boolean)))' \
+    > "$web/dist/data/$v/tiles.json"
+  echo "$v/tiles.json: $(node -p 'require(process.argv[1]).length' "$web/dist/data/$v/tiles.json") tiles"
 done
 printf '{"version":"%s","base":"%s/"}\n' "$LATEST" "$LATEST" > "$web/dist/data/latest.json"
 # Missing data paths (empty ocean tiles are simply absent) get a real 404: Pages serves the closest 404.html,
@@ -113,7 +118,7 @@ printf 'Not found\n' > "$web/dist/data/404.html"
 marker='<!-- data-preload: scripts/deploy-web.sh puts the current version'"'"'s manifest, index and tiles-attrs.csv here -->'
 grep -qF "$marker" "$web/dist/index.html" || die "dist/index.html has no data-preload marker"
 links=""
-for f in manifest.json index.json tiles-attrs.csv; do
+for f in manifest.json index.json tiles-attrs.csv tiles.json; do
   links+="<link rel=\"preload\" href=\"/data/$LATEST/$f\" as=\"fetch\" crossorigin=\"anonymous\" />"
 done
 MARKER="$marker" LINKS="$links" node -e '

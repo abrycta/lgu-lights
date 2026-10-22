@@ -16,3 +16,11 @@ describe("isHtml", () => {
     expect(isHtml(new ArrayBuffer(0))).toBe(false);
   });
 });
+
+describe("tileKey", () => {
+  it("reads z/x/y from a tile URL", async () => {
+    const { tileKey } = await import("@/data/load");
+    expect(tileKey("https://lights.krtmtthw.dev/data/v4/tiles/4/12/7.pbf")).toBe("4/12/7");
+    expect(tileKey("https://lights.krtmtthw.dev/data/v4/tiles.json")).toBeNull();
+  });
+});
