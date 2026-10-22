@@ -11,6 +11,7 @@ import { LguSearch } from "@/features/LguSearch";
 import { ProvincePicker } from "@/features/ProvincePicker";
 import { Guide } from "@/features/Guide";
 import { ProvinceView } from "@/features/ProvinceTable";
+import { GlyphLoading } from "@/features/GlyphLoading";
 import { Glossary } from "@/features/Term";
 import { YearControl } from "@/features/YearControl";
 import { MapGlyph } from "@/map/MapGlyph";
@@ -22,7 +23,11 @@ import { LguPanel } from "@/panel/LguPanel";
 const MapView = lazy(() => import("@/map/MapView"));
 
 function Loading() {
-  return <p className="px-ak-gutter py-4 text-sm text-muted-foreground">…</p>;
+  return (
+    <p className="px-ak-gutter py-4 text-sm text-muted-foreground">
+      <GlyphLoading />
+    </p>
+  );
 }
 
 function SyntheticBanner({ version }: { version: string }) {
