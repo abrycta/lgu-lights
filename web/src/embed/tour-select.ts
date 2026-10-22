@@ -14,8 +14,10 @@
 // 4. One province per region: its densest (ties: the higher featured figure, then the pcode).
 // 5. The high end (the knob: HIGH_VALUE, HIGH_STEPS): first up to HIGH_STEPS regions whose featured figure is
 //    at least HIGH_VALUE, the densest first; then the densest other regions fill the tour up to `steps`.
-// 6. The tour is ordered by density and interleaved across Luzon, Visayas and Mindanao in the order each group
-//    first appears, so step 0 is always the densest province: the reduced-motion still.
+// 6. The still (step 0: the first view and the reduced-motion still) is the high-end step whose province has
+//    the most solid figures (ties: density, then the pcode); with no high-end step, the densest. The rest
+//    follow by density, interleaved across Luzon, Visayas and Mindanao in the order each group first appears
+//    (the still's group first).
 
 /** The fields of one year of a place's file (public/data/<v>/lgu/<pcode>.json) the rule reads. */
 export type TourYear = {
@@ -121,7 +123,12 @@ export function chooseTour(
   const top = perRegion.filter((c) => c.official >= high.value).slice(0, Math.min(high.steps, steps));
   for (const c of perRegion) if (top.length < steps && !top.includes(c)) top.push(c);
   if (!top.length) throw new Error("no province qualifies for the embed tour");
-  top.sort(dense); // rule 6
+  // Rule 6: the still first, then by density.
+  top.sort(dense);
+  const highs = top.filter((c) => c.official >= high.value);
+  const still = (highs.length ? [...highs].sort((a, b) => b.solid - a.solid || dense(a, b)) : top)[0]!;
+  top.splice(top.indexOf(still), 1);
+  top.unshift(still);
 
   // Interleave the island groups (each group keeps its density order).
   const groups = new Map<string, TourPick[]>();

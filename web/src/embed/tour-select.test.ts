@@ -81,6 +81,9 @@ describe("chooseTour", () => {
     });
     const t = chooseTour(index, yearOf, 3, { value: 50, steps: 2 });
     expect(t.picks.map((p) => p.official).sort()).toEqual([40, 55, 62]);
+    // The still is a high-end step: the one with the most solid figures (tie: density 2 × 32 beats 2 × 25).
+    expect(t.still).toBe("PH0900102");
+    expect(t.tour[0]).toBe(t.still);
   });
 
   it("is deterministic and fails loudly when nothing qualifies", () => {
