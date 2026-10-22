@@ -123,8 +123,9 @@ sha="${GITHUB_SHA:-$(git -C "$root" rev-parse HEAD)}"
   --commit-hash "$sha" --commit-dirty=true)
 
 step "Live checks ($LIVE_URL)"
-script=$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' "$web/dist/index.html" | head -1)
-[ -n "$script" ] || die "no /assets/index-*.js in dist/index.html"
+# The home page's hashed entry module (Vite names it after the rollup input, e.g. /assets/main-<hash>.js).
+script=$(grep -oE '<script type="module"[^>]* src="/assets/[^"]+\.js"' "$web/dist/index.html" | grep -oE '/assets/[^"]+\.js' | head -1)
+[ -n "$script" ] || die "no hashed module script in dist/index.html"
 wasm_size=$(wc -c < "$web/dist/wasm/lgu_wasm.wasm" | tr -d ' ')
 check() {
   local bust latest home manifest
