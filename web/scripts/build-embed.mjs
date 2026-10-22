@@ -75,18 +75,20 @@ for (const { pcode: pc } of provinces)
   }
 for (const p of TOUR) if (!lgus[p]) throw new Error(`no LGU ${p}`);
 
-// tiles-attrs.csv, only the frozen year's value and source (what the comparisons read).
+// tiles-attrs.csv, only the frozen year's value, tier and source (what the map and the comparisons read; from data
+// v4 on the tiles carry geometry and pcode only, so the tier, which draws the hatching, comes from here too).
 const yy = String(YEAR % 100).padStart(2, "0");
 const csv = readFileSync(join(dir, "tiles-attrs.csv"), "utf8").trim().split(/\r?\n/);
 const head = csv[0].split(",");
 const vi = head.indexOf(`v${yy}`) - 2;
+const ti = head.indexOf(`t${yy}`) - 2;
 const si = head.indexOf(`s${yy}`) - 2;
-const attrs = [`pcode,n,v${yy},s${yy}`];
+const attrs = [ti >= 0 ? `pcode,n,v${yy},t${yy},s${yy}` : `pcode,n,v${yy},s${yy}`];
 for (const line of csv.slice(1)) {
   const m = /^([^,]+),("(?:[^"]|"")*"|[^,]*),(.*)$/.exec(line);
   if (!m) continue;
   const cells = m[3].split(",");
-  attrs.push(`${m[1]},,${cells[vi]},${cells[si]}`);
+  attrs.push(ti >= 0 ? `${m[1]},,${cells[vi]},${cells[ti]},${cells[si]}` : `${m[1]},,${cells[vi]},${cells[si]}`);
 }
 
 // Which tiles each view needs: MapLibre's fitBounds (512 px tiles), then the covering tiles at floor(zoom).
