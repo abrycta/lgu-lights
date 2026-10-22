@@ -3,6 +3,12 @@
 # Outputs are GitHub release assets of this repo: `features-<version>` and `data-<version>`; the data
 # release is created as a draft and published only after every gate passed (atomic data versions).
 # Heavy satellite work runs here, never on the laptop. Minutes: see docs/architecture/README.md.
+#
+# Long-job rules (portfolio rule 18): with the feature store rebuilt, a canary job first runs the whole
+# satellite path (inputs, boundaries, Earth Engine + Black Marble zonal statistics, the feature-store gates)
+# for one year, the last of `years` (about 7 % of the zonal work), and the full run starts only if it passes.
+# Earth Engine and Black Marble run in parallel and the first to fail stops the other
+# (pipeline/tools/zonal_parallel.sh); every job has a timeout; the run summary names what failed.
 name: Data
 
 on:
@@ -30,6 +36,10 @@ on:
         description: Also compute NOAA-20 VJ113A1 NDVI (continuity series, 2018 onwards; adds about 15 min)
         type: boolean
         default: false
+      canary:
+        description: With features on, first run the satellite path for one year (the last of years) with every gate
+        type: boolean
+        default: true
 
 permissions:
   contents: write   # release assets of this repo
@@ -51,6 +61,7 @@ jobs:
       features_from: ${{ steps.c.outputs.features_from }}
       years: ${{ steps.c.outputs.years }}
       vj113a1: ${{ steps.c.outputs.vj113a1 }}
+      canary: ${{ steps.c.outputs.canary }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { sparse-checkout: .github }
@@ -62,6 +73,7 @@ jobs:
           I_FROM: ${{ inputs.features_from }}
           I_YEARS: ${{ inputs.years }}
           I_VJ: ${{ inputs.vj113a1 }}
+          I_CANARY: ${{ inputs.canary }}
         run: |
           if [ "$EVENT" = push ]; then
             python3 - <<'PY' >> "$GITHUB_OUTPUT"
@@ -72,16 +84,69 @@ jobs:
           print(f"features_from={c.get('features_from') or c.get('version', 'v1')}")
           print(f"years={c.get('years', '2012-2025')}")
           print(f"vj113a1={str(c.get('vj113a1', False)).lower()}")
+          print(f"canary={str(c.get('canary', True)).lower()}")
           PY
           else
             { echo "version=$I_VERSION"; echo "features=$I_FEATURES"; echo "features_from=${I_FROM:-$I_VERSION}"
-              echo "years=$I_YEARS"; echo "vj113a1=$I_VJ"; } >> "$GITHUB_OUTPUT"
+              echo "years=$I_YEARS"; echo "vj113a1=$I_VJ"; echo "canary=$I_CANARY"; } >> "$GITHUB_OUTPUT"
           fi
           cat "$GITHUB_OUTPUT"
 
-  features:
+  canary:
     needs: config
-    if: needs.config.outputs.features == 'true'
+    if: needs.config.outputs.features == 'true' && needs.config.outputs.canary == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with: { enable-cache: true, cache-dependency-glob: pipeline/uv.lock }
+      - name: Sync and fetch inputs (as the features job)
+        working-directory: pipeline
+        env: { ARCHIVE_READ_TOKEN: "${{ secrets.ARCHIVE_READ_TOKEN }}" }
+        run: |
+          if [ -n "$ARCHIVE_READ_TOKEN" ]; then
+            git config --global url."https://x-access-token:${ARCHIVE_READ_TOKEN}@github.com/abrycta/data-archive-kit".insteadOf "https://github.com/abrycta/data-archive-kit"
+            uv sync --locked --group sources --group zonal
+            uv run python -m lgu inputs
+          else
+            uv sync --locked --group zonal
+            uv run python -m lgu inputs-direct
+          fi
+      - name: Boundaries
+        working-directory: pipeline
+        run: uv run python -m lgu boundaries
+      - name: Zonal statistics for one year (fail fast)
+        working-directory: pipeline
+        env:
+          EE_SERVICE_ACCOUNT_KEY: ${{ secrets.EE_SERVICE_ACCOUNT_KEY }}
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+          YEARS: ${{ needs.config.outputs.years }}
+        run: |
+          year="${YEARS##*-}"
+          echo "### Canary: year $year of $YEARS" >> "$GITHUB_STEP_SUMMARY"
+          tools/zonal_parallel.sh "$year"
+      - name: VJ113A1 NDVI for one year (optional)
+        if: needs.config.outputs.vj113a1 == 'true'
+        working-directory: pipeline
+        env:
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+          YEARS: ${{ needs.config.outputs.years }}
+        run: uv run python -m lgu zonal-vj --years "${YEARS##*-}"
+      - name: Feature-store gates on the canary year
+        working-directory: pipeline
+        run: uv run python -m lgu features | tee -a "$GITHUB_STEP_SUMMARY"
+
+  features:
+    needs: [config, canary]
+    # Only after the canary passed (or when it was turned off).
+    if: >-
+      !cancelled() && needs.config.outputs.features == 'true' &&
+      (needs.canary.result == 'success' || (needs.canary.result == 'skipped' && needs.config.outputs.canary != 'true'))
     env:
       VERSION: ${{ needs.config.outputs.version }}
     runs-on: ubuntu-24.04
@@ -116,13 +181,7 @@ jobs:
           EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
           EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
           YEARS: ${{ needs.config.outputs.years }}
-        run: |
-          start=$(date +%s)
-          uv run python -m lgu zonal-ee --years "$YEARS" > ../ee.log 2>&1 & ee=$!
-          uv run python -m lgu zonal-bm --years "$YEARS"
-          wait $ee || { cat ../ee.log; exit 1; }
-          tail -n 3 ../ee.log
-          echo "zonal statistics: $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+        run: tools/zonal_parallel.sh "$YEARS"
       - name: VJ113A1 NDVI (optional)
         if: needs.config.outputs.vj113a1 == 'true'
         working-directory: pipeline
@@ -170,8 +229,12 @@ jobs:
           du -h build/*.parquet build/geom.pmtiles | tee -a "$GITHUB_STEP_SUMMARY"
 
   model:
-    needs: [config, features]
-    if: ${{ !cancelled() && needs.config.result == 'success' && (needs.features.result == 'success' || needs.features.result == 'skipped') }}
+    needs: [config, canary, features]
+    # features is skipped when the store is reused, never because the canary failed
+    if: >-
+      !cancelled() && needs.config.result == 'success' &&
+      (needs.canary.result == 'success' || needs.canary.result == 'skipped') &&
+      (needs.features.result == 'success' || (needs.features.result == 'skipped' && needs.config.outputs.features != 'true'))
     env:
       VERSION: ${{ needs.config.outputs.version }}
       # the feature store is this version's own when it was rebuilt, otherwise the one named in features_from
@@ -255,4 +318,32 @@ jobs:
             du -sh "$VERSION" "$VERSION/tiles" "$VERSION/lgu" "read-models-$VERSION.tar.zst" lgu.pmtiles
             echo "tiles: $(find "$VERSION/tiles" -name '*.pbf' | wc -l) files"
             python3 -c "import json;h=json.load(open('metrics.json'))['headline'];print(json.dumps(h,indent=1))"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The run summary says which job failed, so nobody has to open every job.
+  report:
+    needs: [config, canary, features, model]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      actions: read
+    steps:
+      - name: Which job failed
+        env:
+          CANARY: ${{ needs.canary.result }}
+          FEATURES: ${{ needs.features.result }}
+          MODEL: ${{ needs.model.result }}
+        run: |
+          failed=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | "- [\(.name)](\(.html_url)) (\(.conclusion))"')
+          {
+            echo "### Data run: canary $CANARY, features $FEATURES, model $MODEL"
+            if [ -n "$failed" ]; then
+              echo "**Failed:**"
+              echo "$failed"
+              if [ "$CANARY" = failure ]; then echo "The canary failed, so the full run did not start."; fi
+            else
+              echo "No job failed."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
