@@ -84,6 +84,30 @@ export function loadNational(): Promise<NationalValues | null> {
 /** z/x/y tile template for MapLibre (absolute, as MapLibre requires). */
 export const tilesUrl = (b: string) => `${b}tiles/{z}/{x}/{y}.pbf`;
 
+/**
+ * The tiles that exist ("z/x/y"): `tiles.json`, written by scripts/deploy-web.sh (~2 kB compressed, preloaded
+ * with the data). Empty (ocean) tiles are absent from the sparse directory, so the map skips them instead of
+ * requesting a 404. Null when a build has no list (dev, older deploys): every tile is then requested.
+ */
+let tileList: Promise<Set<string> | null> | null = null;
+export function loadTileList(): Promise<Set<string> | null> {
+  if (!tileList) {
+    tileList = dataBase()
+      .then((b) => fetch(`${b}tiles.json`))
+      .then(async (r) => {
+        const v: unknown = r.ok ? await r.json() : null;
+        return Array.isArray(v) ? new Set(v.filter((k): k is string => typeof k === "string")) : null;
+      })
+      .catch(() => null);
+  }
+  return tileList;
+}
+
+/** "z/x/y" of a tile URL, or null. */
+export function tileKey(url: string): string | null {
+  return /\/tiles\/(\d+\/\d+\/\d+)\.pbf$/.exec(url)?.[1] ?? null;
+}
+
 // The frozen /embed view reads everything from one pre-packed file (scripts/build-embed.mjs): seeding
 // fills the caches above, so the shared components never fetch, and the tiles come from the pack.
 export interface EmbedPack {

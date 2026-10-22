@@ -17,7 +17,12 @@ setWorkerUrl(workerUrl);
 maplibregl.addProtocol("lgutile", async (params, abort) => {
   const packed = packedTile(params.url.slice("lgutile://".length));
   if (packed) return { data: packed };
-  const r = await fetch(params.url.slice("lgutile://".length), { signal: abort.signal });
+  const url = params.url.slice("lgutile://".length);
+  // Not on the deploy's list of existing tiles: an empty (ocean) tile, so no request (and no 404 in the console).
+  const list = await loadTileList();
+  const key = tileKey(url);
+  if (list && key && !list.has(key)) return { data: new ArrayBuffer(0) };
+  const r = await fetch(url, { signal: abort.signal });
   if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return { data: new ArrayBuffer(0) };
   const data = await r.arrayBuffer();
   return { data: isHtml(data) ? new ArrayBuffer(0) : data };
@@ -29,7 +34,7 @@ import * as maplibregl from "maplibre-gl";
 import type { MapGeoJSONFeature, Map as MlMap } from "maplibre-gl";
 import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { loadNational, packedTile, tilesUrl } from "@/data/load";
+import { loadNational, loadTileList, packedTile, tileKey, tilesUrl } from "@/data/load";
 import type { IndexProvince } from "@/data/types";
 import { sourceLabel, TIER_LABEL, type Lang } from "@/lib/honesty";
 import { pctShown } from "@/lib/format";
