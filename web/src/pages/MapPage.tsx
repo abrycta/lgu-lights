@@ -13,6 +13,7 @@ import { Guide } from "@/features/Guide";
 import { ProvinceView } from "@/features/ProvinceTable";
 import { Glossary } from "@/features/Term";
 import { YearControl } from "@/features/YearControl";
+import { MapGlyph } from "@/map/MapGlyph";
 import type { MapViewProps } from "@/map/MapView";
 import { themeKey } from "@/map/style";
 import { EmbedCaption } from "@/panel/EmbedCaption";
@@ -128,7 +129,7 @@ export default function MapPage({ embed }: { embed?: MapViewProps["frozen"] } = 
       <div className="flex h-dvh flex-col" data-layout="compact">
         <div className="relative min-h-0 flex-1">
           <ErrorBoundary>
-            <Suspense fallback={null}>
+            <Suspense fallback={<MapGlyph />}>
               <MapView base={base} year={year} breaks={manifest.breaks} theme={themeKey(resolvedTheme, hc)} lang={lang} province={province} lgu={url.lgu} names={names} onPick={onPick} frozen={embed} />
             </Suspense>
           </ErrorBoundary>
@@ -157,7 +158,7 @@ export default function MapPage({ embed }: { embed?: MapViewProps["frozen"] } = 
           </Suspense>
           <div className="relative min-h-[55vh] flex-1">
             <ErrorBoundary>
-              <Suspense fallback={<Loading />}>
+              <Suspense fallback={<MapGlyph />}>
                 <MapView base={base} year={year} breaks={manifest.breaks} theme={themeKey(resolvedTheme, hc)} lang={lang} province={province} lgu={url.lgu} names={names} onPick={onPick} frozen={embed} />
               </Suspense>
             </ErrorBoundary>
