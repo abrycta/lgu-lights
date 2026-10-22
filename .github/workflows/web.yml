@@ -1,7 +1,10 @@
 # Web app: install (private @abrycta/akari from GitHub Packages), typecheck, unit tests, build, size report.
 # The WASM module and the data are runtime assets (built by rust.yml / data.yml), not part of the checks.
 #
-# Deploy (portfolio rule 17): on main, after `check` passes (and Rust CI, when the commit has a Rust run),
+# Deploy (portfolio rules 17 and 23): on main, after `check` passes, the deploy job asks
+# .github/scripts/deploy-gate.sh for main's NEWEST commit touching what the app ships (.github/deploy-target):
+# green check -> deploy that commit (so a run for an older commit catches it up); its check still running -> its
+# own run deploys it; red -> this job fails. Rust CI must pass too when that commit has a Rust run. Then
 # scripts/deploy-web.sh builds the app with the WASM module, adds the published data versions from their
 # GitHub releases (checksums verified), deploys to Cloudflare Pages and checks the live site. To publish a
 # new data release, set DATA_VERSIONS / LATEST in the script and push, or run this workflow on main.
@@ -18,10 +21,11 @@ permissions:
   contents: read
   packages: read   # @abrycta/akari; the package must grant this repository read access (Package settings)
 
-# Branches: a newer push cancels the older run. main: never cancelled (a deploy is never cut off midway);
-# while one runs, only the newest pending run is kept, so stacked pushes deploy just the newest commit.
+# Branches and PRs: a newer push cancels the older run. main: never cancelled or replaced (each run has its own
+# group), so every merged commit gets a finished check, and the deploy job (one at a time, below) always ships
+# main's newest covered commit once its check is green ("Merged means deployed").
 concurrency:
-  group: web-${{ github.ref }}
+  group: web-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -60,18 +64,32 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    concurrency:
+      group: lights-deploy   # one deploy at a time, never cancelled midway
+      cancel-in-progress: false
     permissions:
       contents: read   # data-<v> release assets
-      actions: read    # Rust CI's result for this commit
+      actions: read    # CI results for main's newest commit
       packages: read   # @abrycta/akari
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Rust CI passed for this commit (when it ran)
+        with: { sparse-checkout: .github }
+      - name: Which commit to deploy (main's newest covered commit, check green)
+        id: gate
         env:
           GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/deploy-gate.sh web.yml check
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.gate.outputs.deploy == 'true'
+        with: { ref: "${{ steps.gate.outputs.sha }}" }
+      - name: Rust CI passed for that commit (when it ran)
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.gate.outputs.sha }}
         run: |
           for i in $(seq 1 60); do
-            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/rust.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=1" \
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/rust.yml/runs?head_sha=$SHA&event=push&per_page=1" \
               --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion) \(.html_url)"')
             if [ -z "$run" ]; then echo "No Rust CI run for this commit (no Rust change)."; exit 0; fi
             read -r status conclusion url <<<"$run"
@@ -83,8 +101,10 @@ jobs:
           done
           echo "::error::Rust CI did not finish in 20 minutes"; exit 1
       - uses: ./.github/actions/setup-rust
+        if: steps.gate.outputs.deploy == 'true'
         with: { key: wasm }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.gate.outputs.deploy == 'true'
         with:
           node-version: 24
           cache: npm
@@ -92,17 +112,22 @@ jobs:
           registry-url: https://npm.pkg.github.com
           scope: "@abrycta"
       - run: npm ci
+        if: steps.gate.outputs.deploy == 'true'
         working-directory: web
         env: { NODE_AUTH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Build, add the data, deploy, check live
+        if: steps.gate.outputs.deploy == 'true'
         run: scripts/deploy-web.sh
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           GH_TOKEN: ${{ github.token }}
       - name: Summary
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          SHA: ${{ steps.gate.outputs.sha }}
         run: |
           {
-            echo "### Deployed \`${GITHUB_SHA:0:7}\` to https://lights.krtmtthw.dev"
+            echo "### Deployed \`${SHA:0:7}\` to https://lights.krtmtthw.dev"
             echo "latest.json: $(curl -fsS "https://lights.krtmtthw.dev/data/latest.json?t=$(date +%s)")"
           } >> "$GITHUB_STEP_SUMMARY"

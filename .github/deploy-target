@@ -1,0 +1,3 @@
+url=https://lights.krtmtthw.dev
+workflow=web.yml
+paths=web scripts/deploy-web.sh .github/workflows/web.yml crates Cargo.toml Cargo.lock rust-toolchain.toml
