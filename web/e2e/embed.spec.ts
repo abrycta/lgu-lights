@@ -53,7 +53,8 @@ test("embed: first place, own origin only, ready message", async ({ page, baseUR
     Object.defineProperty(window, "parent", { value: { postMessage: (msg: unknown, target: string) => posted.push({ msg, target }) } });
   });
 
-  await page.goto("/embed?year=2023&lgu=PH1705101&lang=en");
+  // Start still (?paused=1, as the parent does), so the tour cannot move past the first place on a slow runner.
+  await page.goto("/embed?year=2023&lgu=PH1705101&lang=en&paused=1");
   await expect(page.locator("html[data-embed-ready]")).toBeAttached();
   const posted = await page.evaluate(() => (window as unknown as { __posted: unknown[] }).__posted);
   expect(posted).toEqual([{ msg: { type: "akari:embed-ready", app: "lights" }, target: "https://krtmtthw.dev" }]);
