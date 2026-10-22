@@ -68,12 +68,12 @@ https://lgu-lights.pages.dev/*
 /index.html
   Cache-Control: public, max-age=0, must-revalidate
 
-# The frozen embed (embed.html, served at /embed) that krtmtthw.dev frames: the global framing rules are
-# detached and the CSP set again with frame-ancestors https://krtmtthw.dev (and no WASM: no what-if there).
+# The embed (embed.html, served at /embed) that krtmtthw.dev frames: the global framing rules are detached and
+# the CSP set again with frame-ancestors https://krtmtthw.dev (SVG only: no WASM, no workers).
 /embed
   ! X-Frame-Options
   ! Content-Security-Policy
-  Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors https://krtmtthw.dev; base-uri 'self'; object-src 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors https://krtmtthw.dev; base-uri 'self'; object-src 'none'
   Cache-Control: public, max-age=0, must-revalidate
 
 # The embed's packed view (scripts/build-embed.mjs): content-hashed names, never changed in place.

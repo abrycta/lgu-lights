@@ -25,7 +25,7 @@ export default defineConfig({
     tailwindcss(),
     // Akari's pre-paint theme script (shared krtmtthw.dev theme cookie), served from our own origin.
     akariThemeInit(),
-    // <link rel=modulepreload> for the lazy MapPage/MapView chunks and the MapLibre worker (every page shows the map).
+    // <link rel=modulepreload> for the lazy MapPage/MapView chunks and the MapLibre worker (the app's page; not /embed).
     preloadMap(),
   ],
   define: {
@@ -48,7 +48,7 @@ export default defineConfig({
     sourcemap: "hidden",
     target: "es2023",
     chunkSizeWarningLimit: 1100, // maplibre-gl is one ~1 MB chunk, loaded only with the map
-    // Two pages, one build: /embed (the frozen view krtmtthw.dev frames) shares the app's hashed chunks.
+    // Two pages, one build: /embed (the SVG view krtmtthw.dev frames, src/embed) and the app.
     rollupOptions: { input: { main: "index.html", embed: "embed.html" } },
   },
   test: {

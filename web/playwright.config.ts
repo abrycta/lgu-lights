@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// E2E (the frozen /embed page) against the dev server: the embed reads only its packed file, so no
+// E2E (the /embed page) against the dev server: the embed reads only its packed file, so no
 // data version is needed. Run: npm run e2e (first: npm run e2e:install).
 const PORT = Number(process.env.E2E_PORT ?? 4327);
 

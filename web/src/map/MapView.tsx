@@ -15,8 +15,6 @@ setWorkerUrl(workerUrl);
 // index.html and status 200, which _headers labels application/x-protobuf. This protocol turns a 404 or
 // an HTML body (sniffed: an MVT never starts with "<") into an empty tile instead of a parse error.
 maplibregl.addProtocol("lgutile", async (params, abort) => {
-  const packed = packedTile(params.url.slice("lgutile://".length));
-  if (packed) return { data: packed };
   const url = params.url.slice("lgutile://".length);
   // Not on the deploy's list of existing tiles: an empty (ocean) tile, so no request (and no 404 in the console).
   const list = await loadTileList();
@@ -34,7 +32,7 @@ import * as maplibregl from "maplibre-gl";
 import type { MapGeoJSONFeature, Map as MlMap } from "maplibre-gl";
 import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { loadNational, loadTileList, packedTile, tileKey, tilesUrl } from "@/data/load";
+import { loadNational, loadTileList, tileKey, tilesUrl } from "@/data/load";
 import type { IndexProvince } from "@/data/types";
 import { sourceLabel, TIER_LABEL, type Lang } from "@/lib/honesty";
 import { pctShown } from "@/lib/format";
@@ -53,10 +51,6 @@ export interface MapViewProps {
   lgu: string | null;
   names: Map<string, string>;
   onPick: (pcode: string) => void;
-  /** The frozen /embed view: no interaction or controls, a set pixel ratio, and a callback once the first full frame is drawn.
-   * `settleMs`: later province changes ease in from slightly closer (the embed tour); 0 or absent: they jump.
-   * `compact`: the phone and tablet layout (MapPage); `padding`: the province fit's padding (default 32). */
-  frozen?: { pixelRatio: number; onReady: () => void; settleMs?: number; compact?: boolean; padding?: number };
 }
 
 const yy = (year: number) => String(year % 100).padStart(2, "0");
@@ -65,7 +59,7 @@ function idOf(pcode: string | null): number {
   return pcode ? pcodeId(pcode) : -1;
 }
 
-export default function MapView({ base, year, breaks, theme, lang, province, lgu, names, onPick, frozen }: MapViewProps) {
+export default function MapView({ base, year, breaks, theme, lang, province, lgu, names, onPick }: MapViewProps) {
   const t = useT();
   const el = useRef<HTMLDivElement>(null);
   // The glyph still covers the map until its first full frame with data (MapGlyph).
@@ -78,7 +72,6 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
   const national = use(loadNational());
   // Latest props for event handlers registered once.
   const props = useRef({ year, lang, names, onPick, province, national });
-  const frozenRef = useRef(frozen);
   const themeRef = useRef(theme);
   useLayoutEffect(() => {
     props.current = { year, lang, names, onPick, province, national };
@@ -89,9 +82,6 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
   useEffect(() => {
     if (!el.current) return;
     const [fill, outline] = choroplethLayers({ id: "lgu-fill", source: "lgu", sourceLayer: "lgu", property: `v${yy(year)}`, breaks, theme: theme.startsWith("dark") ? "dark" : "light" });
-    // The compact embed (phones, tablets): one worker is plenty for its few packed tiles, and each one costs memory
-    // (Safari otherwise starts up to three). Only before the first map; later maps share the pool.
-    if (frozen?.compact) maplibregl.setWorkerCount(1);
     const map = new maplibregl.Map({
       container: el.current,
       bounds: PH_BOUNDS,
@@ -101,22 +91,16 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
       maxZoom: 13,
       dragRotate: false,
       pitchWithRotate: false,
-      // The compact embed can't open a collapsed (i) button (it is inert) and has no room for the long credit:
-      // the short credit, always shown, in small type (the wrapper's class below).
-      attributionControl: { compact: !frozen?.compact },
-      ...(frozen ? { interactive: false, pixelRatio: frozen.pixelRatio } : {}),
+      attributionControl: { compact: true },
       style: {
         version: 8,
-        ...(frozen ? { transition: { duration: 0, delay: 0 } } : {}),
         sources: {
           lgu: {
             type: "vector",
             tiles: [`lgutile://${tilesUrl(base)}`],
             minzoom: 0,
             maxzoom: 10,
-            attribution: frozen?.compact
-              ? "Boundaries: OCHA/NAMRIA/PSA (CC BY-IGO) · PSA SAE; Lights"
-              : "Boundaries: OCHA/NAMRIA/PSA COD-AB (CC BY-IGO), indicative · Estimates: PSA SAE; model: Lights",
+            attribution: "Boundaries: OCHA/NAMRIA/PSA COD-AB (CC BY-IGO), indicative · Estimates: PSA SAE; model: Lights",
           },
         },
         layers: [
@@ -166,22 +150,15 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     });
     mapRef.current = map;
     if (import.meta.env.DEV) (window as unknown as { __map?: MlMap }).__map = map;
-    if (!frozen) {
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-      map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
-    }
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 
     map.on("load", () => {
       loaded.current = true;
       addHatchImages(map, theme);
-      // The first idle after load: the tiles and their data are drawn. The glyph still lifts, and the embed is ready.
-      map.once("idle", () => {
-        setDrawn(true);
-        if (frozen) frozenRef.current?.onReady();
-      });
+      // The first idle after load: the tiles and their data are drawn. The glyph lifts.
+      map.once("idle", () => setDrawn(true));
     });
-    // Frozen: the view is the province's fit for the final box (late web fonts can still change its height).
-    if (frozen) map.on("resize", () => map.fitBounds(props.current.province?.bbox ?? PH_BOUNDS, { padding: frozen.padding ?? 32, maxZoom: 10, duration: 0 }));
     // Akari's hatch images on demand: tiles can be parsed before "load", and setStyle() drops added images.
     map.setMissingStyleImageResolver(async (id) => {
       if (id.startsWith("hatch-")) addHatchImages(map, themeRef.current);
@@ -281,14 +258,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     const map = mapRef.current;
     if (!map) return;
     const b = province?.bbox ?? PH_BOUNDS;
-    const settle = frozenRef.current?.settleMs ?? 0;
-    const padding = frozenRef.current?.padding ?? 32;
-    const cam = settle && map.loaded() ? map.cameraForBounds(b, { padding, maxZoom: 10 }) : undefined;
-    if (cam?.zoom != null) {
-      // The embed tour: start a little closer, within the same tile zoom (only the view's tiles are packed).
-      map.jumpTo({ ...cam, zoom: Math.min(cam.zoom + 0.35, Math.floor(cam.zoom) + 0.99) });
-      map.easeTo({ ...cam, duration: settle });
-    } else map.fitBounds(b, { padding, maxZoom: 10, duration: frozenRef.current ? 0 : 800 });
+    map.fitBounds(b, { padding: 32, maxZoom: 10, duration: 800 });
   }, [province]);
 
   // Localise MapLibre's control labels (its locale option is read only at construction).
@@ -307,7 +277,7 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
 
   // MapLibre sets position: relative on its container, so the absolute frame is a separate wrapper.
   return (
-    <div className={`absolute inset-0 ${frozen?.compact ? "[&_.maplibregl-ctrl-attrib]:text-[10px] [&_.maplibregl-ctrl-attrib]:leading-tight" : ""}`}>
+    <div className="absolute inset-0">
       <div
         ref={el}
         className="h-full w-full"
