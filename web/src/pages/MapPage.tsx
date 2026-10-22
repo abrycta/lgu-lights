@@ -15,7 +15,9 @@ import { GlyphLoading } from "@/features/GlyphLoading";
 import { Glossary } from "@/features/Term";
 import { YearControl } from "@/features/YearControl";
 import { MapGlyph } from "@/map/MapGlyph";
+import type { MapViewProps } from "@/map/MapView";
 import { themeKey } from "@/map/style";
+import { EmbedCaption } from "@/panel/EmbedCaption";
 import { LguPanel } from "@/panel/LguPanel";
 
 const MapView = lazy(() => import("@/map/MapView"));
@@ -82,7 +84,8 @@ function Intro() {
   );
 }
 
-export default function MapPage() {
+/** `embed`: the frozen /embed view (src/embed): the full viewport, no first-visit guide, a frozen map. */
+export default function MapPage({ embed }: { embed?: MapViewProps["frozen"] } = {}) {
   const t = useT();
   const { lang } = useLang();
   const { resolvedTheme } = useTheme();
@@ -124,10 +127,31 @@ export default function MapPage() {
   );
   const setYear = useCallback((y: number) => navigate({ year: y }, { replace: true }), []);
 
+  // The compact /embed (phones and tablets: the frame is the portfolio's picture slot at its real size): the map
+  // above a two-line caption, no controls or side panel. Never the desktop view scaled down.
+  if (embed?.compact)
+    return (
+      <div className="flex h-dvh flex-col" data-layout="compact">
+        <div className="relative min-h-0 flex-1">
+          <ErrorBoundary>
+            <Suspense fallback={<MapGlyph />}>
+              <MapView base={base} year={year} breaks={manifest.breaks} theme={themeKey(resolvedTheme, hc)} lang={lang} province={province} lgu={url.lgu} names={names} onPick={onPick} frozen={embed} />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+        {/* Fixed height (scripts/build-embed.mjs packs the tiles for the map box above it). */}
+        <aside className="h-[52px] shrink-0 overflow-hidden border-t border-border px-3 py-1.5" aria-label={t("Details", "詳細")}>
+          <ErrorBoundary>
+            <Suspense fallback={null}>{url.lgu ? <EmbedCaption pcode={url.lgu} year={year} /> : null}</Suspense>
+          </ErrorBoundary>
+        </aside>
+      </div>
+    );
+
   return (
     <>
       <SyntheticBanner version={manifest.version} />
-      <div className="flex flex-col lg:flex-row lg:h-[calc(100dvh-81px)]">
+      <div className={`flex flex-col lg:flex-row ${embed ? "h-dvh" : "lg:h-[calc(100dvh-81px)]"}`}>
         <section className="flex min-w-0 flex-1 flex-col" aria-label={t("Map and controls", "地図と操作")}>
           <div className="grid gap-3 border-b border-border px-ak-gutter py-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
             <YearControl years={manifest.years} rounds={manifest.rounds} year={year} onChange={setYear} />
@@ -140,15 +164,17 @@ export default function MapPage() {
           <div className="relative min-h-[55vh] flex-1">
             <ErrorBoundary>
               <Suspense fallback={<MapGlyph />}>
-                <MapView base={base} year={year} breaks={manifest.breaks} theme={themeKey(resolvedTheme, hc)} lang={lang} province={province} lgu={url.lgu} names={names} onPick={onPick} />
+                <MapView base={base} year={year} breaks={manifest.breaks} theme={themeKey(resolvedTheme, hc)} lang={lang} province={province} lgu={url.lgu} names={names} onPick={onPick} frozen={embed} />
               </Suspense>
             </ErrorBoundary>
             <div className="pointer-events-none absolute bottom-8 left-ak-gutter hidden max-w-[70%] md:block [&>*]:pointer-events-auto">
               <Legend breaks={manifest.breaks} year={year} isRound={manifest.rounds.includes(year)} />
             </div>
-            <div className="absolute top-2 right-2 z-10">
-              <Guide />
-            </div>
+            {embed ? null : (
+              <div className="absolute top-2 right-2 z-10">
+                <Guide />
+              </div>
+            )}
             {province ? (
               <div className="absolute top-2 left-ak-gutter">
                 <Button variant="outline" size="sm" className="bg-background" onClick={() => selectProvince(null)}>

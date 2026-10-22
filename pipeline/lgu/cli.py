@@ -2,8 +2,7 @@
 
     inputs       fetch every file source through archivekit (primary -> mirrors -> private archive)
     inputs-direct  CI without ARCHIVE_READ_TOKEN: sha256-pinned public sources only (lgu/direct.py)
-    boundaries   HDX COD-AB geodatabase -> data/interim/adm3.parquet, lgus.parquet, tile GeoJSONL, outlines
-    outlines     data/interim/adm3.parquet -> data/build/outlines.geojsonl (the web /embed's simplified boundaries)
+    boundaries   HDX COD-AB geodatabase -> data/interim/adm3.parquet, lgus.parquet, tile GeoJSONL
     labels       PSA SAE workbooks -> data/build/labels.parquet (+ crosswalk report)
     fies         PSA OpenSTAT provincial poverty (FIES) -> data/build/provinces_fies.parquet (lgu/fies.py)
     zonal-ee     Earth Engine: MODIS NDVI/EVI, WorldPop, SRTM -> data/interim/zonal_ee.parquet
@@ -83,12 +82,6 @@ def run(cmd: str, argv: list[str]) -> int:
         print(json.dumps(rep))
         shutil.copy2(INTERIM / "lgus.parquet", BUILD / "lgus.parquet")
         shutil.copy2(INTERIM / "provinces.json", BUILD / "provinces.json")
-        cmd = "outlines"
-
-    if cmd == "outlines":
-        from . import outlines
-        BUILD.mkdir(parents=True, exist_ok=True)
-        print(json.dumps(outlines.build(INTERIM / "adm3.parquet", BUILD / "outlines.geojsonl")))
         return 0
 
     if cmd == "labels":
