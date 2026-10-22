@@ -93,6 +93,9 @@ export function LightsHeader({ url }: { url: UrlState }) {
   );
 }
 
+/** The centred column of the text pages (About, not found): the same 1120px column and 16px gutter as Akari's Page and Replay's content pages. The map page stays full width. */
+export const TEXT_COLUMN = "mx-auto max-w-[1120px] px-4";
+
 export function Shell({ children }: { children: ReactNode }) {
   const t = useT();
   const url = useUrlState();
@@ -102,7 +105,7 @@ export function Shell({ children }: { children: ReactNode }) {
       header={<LightsHeader url={url} />}
       footer={
         <footer className="border-t border-border">
-          <div className="grid gap-2 px-ak-gutter py-6 text-xs text-muted-foreground">
+          <div className={`grid gap-2 py-6 text-xs text-muted-foreground ${url.page === "map" ? "px-ak-gutter" : TEXT_COLUMN}`}>
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               <Suspense fallback={null}>
                 <FooterData />
