@@ -14,25 +14,10 @@ import { VectorTile } from "@mapbox/vector-tile";
 import { fromVectorTileJs } from "@maplibre/vt-pbf";
 import { PbfReader } from "pbf";
 
+import { chooseTour } from "../src/embed/tour-select.ts";
+
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const YEAR = 2023;
-// The tour: one place per step, each shown zoomed to its province with its panel open (the real app's
-// selection). Chosen from the 2023 data (v3) to show contrast across the islands; re-check after a data release.
-const TOUR = [
-  // Occidental Mindoro (Mimaropa, Luzon): the portfolio screenshot's view, so the first paint matches the poster.
-  "PH1705101", // Abra de Ilog: 37.8 %, official, solid
-  // Zamboanga del Norte (Mindanao): the highest official 2023 figure in the country.
-  "PH0907215", // Siayan: 67.8 %, official, solid
-  // Negros Occidental (Western Visayas): a striped "use with care" official figure (CV over 10 %).
-  "PH0604532", // Salvador Benedicto: 41.7 %, official, use with care
-  // Pampanga (Central Luzon): one of the lowest official 2023 figures.
-  "PH0305416", // City of San Fernando: 4.0 %, official, solid
-  // Leyte (Eastern Visayas): PSA published no 2023 figure, so the map shows Lights' model estimate.
-  "PH0803747", // Tacloban City: 15.6 %, model estimate, rough guess
-  // Davao del Norte (Davao Region, Mindanao): the lowest official 2023 figure in Mindanao.
-  "PH1102319", // City of Tagum: 8.5 %, official, solid
-];
-const VIEW = { year: YEAR, lgu: TOUR[0] };
 // The map box of /embed at the portfolio's fixed 1280×800 frame (measured: 1280 − the 460 px panel,
 // 800 − the controls and the national sentence). Tiles get a small margin (M).
 const MAP_W = 820;
@@ -64,6 +49,15 @@ const json = (p) => JSON.parse(readFileSync(join(dir, p), "utf8"));
 
 const manifest = json("manifest.json");
 const index = json("index.json");
+// The tour: one place per step, each shown zoomed to its province with its panel open (the real app's
+// selection), chosen from this data version by src/embed/tour-select.ts (its header states the rule).
+// Step 0 is the densest province: the first paint and the reduced-motion still.
+const fileOf = (p) => json(`lgu/${p}.json`);
+const chosen = chooseTour(index, (p) => fileOf(p).years.find((y) => y.year === YEAR));
+const TOUR = chosen.tour;
+const VIEW = { year: YEAR, lgu: chosen.still };
+for (const [i, c] of chosen.picks.entries())
+  console.log(`tour ${i}: ${c.pcode} ${c.name}, ${c.province}: ${c.official} % official (model without the round ${c.model} %), ${c.solid}/${c.places} solid`);
 const provinces = [...new Set(TOUR.map((p) => p.slice(0, 7)))].map((pc) => {
   const province = index.provinces.find((p) => p.pcode === pc);
   if (!province) throw new Error(`no province ${pc}`);
@@ -232,7 +226,7 @@ for (const f of readdirSync(outDir)) if (/^lights-((small|medium|compact)-)?[0-9
 
 writeFileSync(
   join(web, "src/embed/pack.gen.ts"),
-  `// Written by scripts/build-embed.mjs from data ${manifest.version}; do not edit.\nexport const PACK_URL = "/embed-data/${name}";\nexport const PACK_URL_SMALL = "/embed-data/${smallName}";\nexport const PACK_URL_MEDIUM = "/embed-data/${mediumName}";\nexport const VIEW = ${JSON.stringify(VIEW)} as const;\nexport const TOUR = ${JSON.stringify(TOUR)} as const;\n`,
+  `// Written by scripts/build-embed.mjs from data ${manifest.version}; do not edit.\nexport const PACK_URL = "/embed-data/${name}";\nexport const PACK_URL_SMALL = "/embed-data/${smallName}";\nexport const PACK_URL_MEDIUM = "/embed-data/${mediumName}";\nexport const VIEW = ${JSON.stringify(VIEW)} as const;\nexport const TOUR = ${JSON.stringify(TOUR)} as const;\nexport const STILL = ${JSON.stringify(chosen.still)};\n`,
 );
 const html = join(web, "embed.html");
 // Each layout preloads only its own pack (the media queries are src/embed/layout.ts's).
