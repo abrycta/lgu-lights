@@ -107,5 +107,6 @@ cd pipeline && uv sync --group sources --group train && uv run pytest -q
 gh release download data-v1 -R abrycta/lgu-lights -p 'read-models-v1.tar.zst'   # then web/scripts/link-data.sh
 ```
 
-The full data run happens in Actions only (`data.yml`). Until the workflow is on `main`, a run is
-requested by committing `.github/data-run.json`.
+The full data run happens in Actions only (`data.yml`). A run is started from the Actions tab
+(`workflow_dispatch`) or by merging a change to `.github/data-run.json` into `main`; pushes to other
+branches never start one, because the run replaces the `features-<v>` and `data-<v>` releases.

@@ -12,9 +12,11 @@
 name: Data
 
 on:
-  # workflow_dispatch only works once this file is on the default branch; until then a run is requested
-  # on a branch by committing .github/data-run.json ({"version": ..., "features": ..., "features_from": ..., "vj113a1": ...}).
+  # A run is requested from the Actions tab (workflow_dispatch), or by merging a change to .github/data-run.json
+  # ({"version": ..., "features": ..., "features_from": ..., "vj113a1": ...}) into main. Pushes to other branches
+  # never start a run: this workflow deletes and recreates the features-<v> and data-<v> releases the site deploys from.
   push:
+    branches: [main]
     paths: [.github/data-run.json]
   workflow_dispatch:
     inputs:
@@ -42,7 +44,7 @@ on:
         default: true
 
 permissions:
-  contents: write   # release assets of this repo
+  contents: read   # only the jobs that publish release assets (features, model) get contents: write
 
 concurrency:
   group: data
@@ -149,6 +151,8 @@ jobs:
       (needs.canary.result == 'success' || (needs.canary.result == 'skipped' && needs.config.outputs.canary != 'true'))
     env:
       VERSION: ${{ needs.config.outputs.version }}
+    permissions:
+      contents: write # creates the features-<version> release
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -239,6 +243,8 @@ jobs:
       VERSION: ${{ needs.config.outputs.version }}
       # the feature store is this version's own when it was rebuilt, otherwise the one named in features_from
       FEATURES_FROM: ${{ needs.config.outputs.features == 'true' && needs.config.outputs.version || needs.config.outputs.features_from }}
+    permissions:
+      contents: write # creates and publishes the data-<version> release
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
