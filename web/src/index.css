@@ -124,33 +124,87 @@ html:has([data-testid="embed-frame"]) body {
   overflow: hidden;
 }
 
-/* Darker always means poorer. Akari's dark-theme sequential scale runs dark to light, so in the dark themes the
-   poverty ramp (legend, guide swatches) uses it reversed, like the map fill (map/style.ts seqRamp). */
+/* Darker always means poorer. In the dark themes the poverty ramp (legend, guide, people grid, series chart) uses
+   the 藍 → 藤 steps of map/style.ts (DARK_RAMP, DARK_HC_RAMP; a test keeps them equal), not Akari's dark scale. */
 @layer components {
   :is([data-theme="dark"], .dark) .seq-ramp {
-    --chart-seq-1: var(--ak-seq-5);
-    --color-chart-seq-1: var(--ak-seq-5);
-    --chart-seq-2: var(--ak-seq-4);
-    --color-chart-seq-2: var(--ak-seq-4);
-    --chart-seq-3: var(--ak-seq-3);
-    --color-chart-seq-3: var(--ak-seq-3);
-    --chart-seq-4: var(--ak-seq-2);
-    --color-chart-seq-4: var(--ak-seq-2);
-    --chart-seq-5: var(--ak-seq-1);
-    --color-chart-seq-5: var(--ak-seq-1);
+    --chart-seq-1: #d0e0f7;
+    --color-chart-seq-1: #d0e0f7;
+    --chart-seq-2: #a6c1e8;
+    --color-chart-seq-2: #a6c1e8;
+    --chart-seq-3: #969adf;
+    --color-chart-seq-3: #969adf;
+    --chart-seq-4: #9970c4;
+    --color-chart-seq-4: #9970c4;
+    --chart-seq-5: #9853bc;
+    --color-chart-seq-5: #9853bc;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"], .light) .seq-ramp {
-      --chart-seq-1: var(--ak-seq-5);
-      --color-chart-seq-1: var(--ak-seq-5);
-      --chart-seq-2: var(--ak-seq-4);
-      --color-chart-seq-2: var(--ak-seq-4);
-      --chart-seq-3: var(--ak-seq-3);
-      --color-chart-seq-3: var(--ak-seq-3);
-      --chart-seq-4: var(--ak-seq-2);
-      --color-chart-seq-4: var(--ak-seq-2);
-      --chart-seq-5: var(--ak-seq-1);
-      --color-chart-seq-5: var(--ak-seq-1);
+      --chart-seq-1: #d0e0f7;
+      --color-chart-seq-1: #d0e0f7;
+      --chart-seq-2: #a6c1e8;
+      --color-chart-seq-2: #a6c1e8;
+      --chart-seq-3: #969adf;
+      --color-chart-seq-3: #969adf;
+      --chart-seq-4: #9970c4;
+      --color-chart-seq-4: #9970c4;
+      --chart-seq-5: #9853bc;
+      --color-chart-seq-5: #9853bc;
+    }
+  }
+  :is([data-theme="dark"], .dark)[data-contrast="more"] .seq-ramp {
+    --chart-seq-1: #d0e0f7;
+    --color-chart-seq-1: #d0e0f7;
+    --chart-seq-2: #9dbbe6;
+    --color-chart-seq-2: #9dbbe6;
+    --chart-seq-3: #9397dc;
+    --color-chart-seq-3: #9397dc;
+    --chart-seq-4: #9970c4;
+    --color-chart-seq-4: #9970c4;
+    --chart-seq-5: #8f4ab3;
+    --color-chart-seq-5: #8f4ab3;
+  }
+  @media (prefers-contrast: more) {
+    :is([data-theme="dark"], .dark):not([data-contrast="normal"]) .seq-ramp {
+      --chart-seq-1: #d0e0f7;
+      --color-chart-seq-1: #d0e0f7;
+      --chart-seq-2: #9dbbe6;
+      --color-chart-seq-2: #9dbbe6;
+      --chart-seq-3: #9397dc;
+      --color-chart-seq-3: #9397dc;
+      --chart-seq-4: #9970c4;
+      --color-chart-seq-4: #9970c4;
+      --chart-seq-5: #8f4ab3;
+      --color-chart-seq-5: #8f4ab3;
+    }
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"], .light)[data-contrast="more"] .seq-ramp {
+      --chart-seq-1: #d0e0f7;
+      --color-chart-seq-1: #d0e0f7;
+      --chart-seq-2: #9dbbe6;
+      --color-chart-seq-2: #9dbbe6;
+      --chart-seq-3: #9397dc;
+      --color-chart-seq-3: #9397dc;
+      --chart-seq-4: #9970c4;
+      --color-chart-seq-4: #9970c4;
+      --chart-seq-5: #8f4ab3;
+      --color-chart-seq-5: #8f4ab3;
+    }
+  }
+  @media (prefers-color-scheme: dark) and (prefers-contrast: more) {
+    :root:not([data-theme="light"], .light):not([data-contrast="normal"]) .seq-ramp {
+      --chart-seq-1: #d0e0f7;
+      --color-chart-seq-1: #d0e0f7;
+      --chart-seq-2: #9dbbe6;
+      --color-chart-seq-2: #9dbbe6;
+      --chart-seq-3: #9397dc;
+      --color-chart-seq-3: #9397dc;
+      --chart-seq-4: #9970c4;
+      --color-chart-seq-4: #9970c4;
+      --chart-seq-5: #8f4ab3;
+      --color-chart-seq-5: #8f4ab3;
     }
   }
 }

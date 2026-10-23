@@ -16,7 +16,7 @@ export function PeopleGrid({ est, lo, hi, model }: { est: number; lo: number; hi
   const g = 2;
   const size = 10 * s + 9 * g;
   return (
-    <figure className="m-0 grid shrink-0 justify-items-start gap-1" data-testid="people-grid">
+    <figure className="seq-ramp m-0 grid shrink-0 justify-items-start gap-1" data-testid="people-grid">
       <svg viewBox={`0 0 ${size} ${size}`} className="h-auto w-20 sm:w-24" role="img" aria-label={peopleAlt(est, lo, hi, lang)}>
         {cells.map((c, i) => (
           <rect

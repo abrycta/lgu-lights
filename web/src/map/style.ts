@@ -79,14 +79,19 @@ export function sourceExpr(year: number, nat: NationalValues | null): Expression
 }
 
 /**
- * Akari's sequential scale, ordered from the lowest to the highest poverty class. Darker always means poorer:
- * Akari's dark-theme scale runs dark to light, so the dark themes use it reversed (index.css flips the
- * legend and guide swatches the same way, with the .seq-ramp class).
+ * The poverty ramp, from the lowest to the highest class: darker always means poorer. Light themes use Akari's
+ * sequential scale (藍 ai). Akari's dark-theme scale runs the other way (the poorest brightest), so the dark themes
+ * use their own 藍 → 藤 ramp (indigo to wisteria) from Akari primitives, every step at least 3:1 on the panel:
+ * ai.90, ai.80, an indigo-wisteria step between them (oklch 0.71 0.10 281), fuji.62d, fuji.57; dark high contrast
+ * deepens to ai.78 and fuji.54. index.css (.seq-ramp) gives the legend, guide, people grid and chart the same steps.
  */
+export const DARK_RAMP = ["#d0e0f7", "#a6c1e8", "#969adf", "#9970c4", "#9853bc"] as const;
+export const DARK_HC_RAMP = ["#d0e0f7", "#9dbbe6", "#9397dc", "#9970c4", "#8f4ab3"] as const;
+
 export function seqRamp(key: ThemeKey): readonly string[] {
-  const dark = key.startsWith("dark");
-  const colors = scaleColors("seq", dark ? "dark" : "light");
-  return dark ? [...colors].reverse() : colors;
+  if (key === "dark") return DARK_RAMP;
+  if (key === "dark-hc") return DARK_HC_RAMP;
+  return scaleColors("seq", "light");
 }
 
 export function fillColor(year: number, breaks: readonly number[], key: ThemeKey, nat: NationalValues | null): Expression {
