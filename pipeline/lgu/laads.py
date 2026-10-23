@@ -8,8 +8,9 @@ Products (sources.yaml):
     S-NPP deliveries end 2026-11-02, so from 2026 the same product from NOAA-20 (VJ146A4: same grid, layer
     and units) is used, scaled onto the S-NPP series by one radiance ratio estimated in the overlap year 2025
     (bm_ratio); its lit fraction is then calibrated per LGU against S-NPP in the same year (calibrate_lit).
-  * viirs-vj113a1: NOAA-20 16-day NDVI on the 500 m MODIS sinusoidal grid. Per year, the per-pixel mean
-    of valid composites (pixel reliability 0-1) is mosaicked and reduced the same way (continuity for MODIS).
+  * viirs-vj113a1: NOAA-20 16-day NDVI and EVI on the 500 m MODIS sinusoidal grid. Per year, the per-pixel
+    mean of valid composites (pixel reliability 0-1) on MOD13Q1's composite phase is mosaicked and reduced the
+    same way; lgu.vegetation calibrates it onto MOD13Q1 for the years after Terra (Option A, 2026-10-23).
 
 Links are tried in registry order: the LAADS archive listing, then CMR granule search for the same
 files. Downloads use a bearer token from lgu.earthdata.token() and are deleted after each year.
@@ -37,7 +38,8 @@ log = logging.getLogger("lgu.laads")
 LAADS = "https://ladsweb.modaps.eosdis.nasa.gov"
 CMR = "https://cmr.earthdata.nasa.gov/search/granules.json"
 PH_TILES = ("h29v07", "h29v08", "h30v06", "h30v07", "h30v08")
-VJ_MIN_COMPOSITES = 40  # of 46 VJ113A1 composite dates per year (16-day composites released every 8 days)
+VJ_MIN_COMPOSITES = 20  # of 23 VJ113A1 composite dates per year on the MOD13Q1 phase (vj_phase_days)
+VJ_LAYERS = {"ndvi": "NDVI", "evi": "EVI"}
 # CMR collection versions (Collection 2 Black Marble; VJ113A1 is LP DAAC's 002), checked against CMR 2026-10-23
 CMR_VERSION = {"VNP46A4": "2", "VJ146A4": "2", "VJ113A1": "002"}
 # A tile whose finite share is below this is a fill-only (blacked-out) file, not data (audit L-C2). Ocean pixels may
@@ -264,47 +266,66 @@ def bm_year_mosaic(client: httpx.Client, year: int, work: Path, product: str | N
     return mosaic
 
 
-def vj113_year_mean(client: httpx.Client, year: int, work: Path) -> tuple[np.ndarray, tuple[float, float]]:
-    """Mean of valid 16-day NDVI composites (pixel reliability 0-1) on the sinusoidal grid, one year."""
+class IncompleteYear(RuntimeError):
+    """A VJ113A1 year with too few complete composites: the year is left out, not averaged (Option A guard)."""
+
+
+def vj_phase_days(days: list[str]) -> list[str]:
+    """VJ113A1 composite days on MOD13Q1's 16-day phase (DOY 001, 017, ... 353): 23 a year instead of 46, so the
+    yearly mean averages the same composite periods as MOD13Q1 and downloads half as much."""
+    return [d for d in days if d.isdigit() and (int(d) - 1) % 16 == 0]
+
+
+def _vj_layer(grp, name: str):  # type: ignore[no-untyped-def]
+    """One VI layer (NDVI or EVI) of a VJ113A1 tile, scaled, with its own validity mask (fill, range)."""
+    # layer names: "500 m 16 days NDVI", "500 m 16 days EVI" (checked on VJ113A1.A2024017.h29v07.002); EVI2 is not EVI
+    key = next(k for k in grp if k.split()[-1] == name)
+    raw = grp[key][:].astype(np.float32)
+    scale = float(np.asarray(grp[key].attrs.get("scale_factor", [0.0001])).ravel()[0])
+    fills = np.asarray(grp[key].attrs.get("_FillValue", [-15000, -13000])).ravel().astype(np.float32)
+    # stored as VI x 10000 with scale_factor 0.0001 (multiply); some MODIS-style files give 10000 (divide)
+    val = raw / scale if scale > 1 else raw * scale
+    return val, ~np.isin(raw, fills) & (val >= -0.2) & (val <= 1.0)
+
+
+def vj113_year_mean(client: httpx.Client, year: int, work: Path) -> tuple[dict[str, np.ndarray], tuple[float, float]]:
+    """Per-pixel mean of valid 16-day NDVI and EVI composites (pixel reliability 0-1) on the sinusoidal grid, one
+    year, on MOD13Q1's composite phase (vj_phase_days). Returns ({"ndvi": mean, "evi": mean}, grid origin)."""
     import h5py
 
     hs = [_tile_hv(f".{t}.") for t in PH_TILES]
     hmin, vmin = min(h for h, _ in hs), min(v for _, v in hs)
     nh, nv = max(h for h, _ in hs) - hmin + 1, max(v for _, v in hs) - vmin + 1
-    total = np.zeros((nv * SIN_PX, nh * SIN_PX), dtype=np.float32)
-    count = np.zeros_like(total, dtype=np.uint16)
-    days = _days(client, "VJ113A1", year)
+    total = {k: np.zeros((nv * SIN_PX, nh * SIN_PX), dtype=np.float32) for k in VJ_LAYERS}
+    count = {k: np.zeros((nv * SIN_PX, nh * SIN_PX), dtype=np.uint16) for k in VJ_LAYERS}
+    listed = _days(client, "VJ113A1", year)
+    days = vj_phase_days(listed)
     complete = 0
     for doy in days:
         found = _listing(client, "VJ113A1", year, doy)
         complete += len(found) == len(PH_TILES)
-        with cf.ThreadPoolExecutor(4) as ex:
+        with cf.ThreadPoolExecutor(5) as ex:
             files = list(ex.map(lambda nu: _download(client, nu[1], work), found))
         for f in files:
             h, v = _tile_hv(f.name)
+            ys, xs = (v - vmin) * SIN_PX, (h - hmin) * SIN_PX
             with h5py.File(f) as h5:
                 grp = next(g for k, g in h5["HDFEOS/GRIDS"].items())["Data Fields"]
-                key = next(k for k in grp if "NDVI" in k and "500m" in k)
                 rel = next((k for k in grp if "pixel_reliability" in k.lower()), None)
-                raw = grp[key][:].astype(np.float32)
-                scale = float(np.asarray(grp[key].attrs.get("scale_factor", [10000.0])).ravel()[0])
-                fill = float(np.asarray(grp[key].attrs.get("_FillValue", [-15000])).ravel()[0])
-                ok = raw != fill
-                if rel is not None:
-                    ok &= np.isin(grp[rel][:], (0, 1))
-                # MODIS/VIIRS VI files store NDVI x 10000 with scale_factor 10000 (divide)
-                val = raw / scale if scale > 1 else raw * scale
-                ok &= (val >= -0.2) & (val <= 1.0)
-            ys, xs = (v - vmin) * SIN_PX, (h - hmin) * SIN_PX
-            total[ys:ys + SIN_PX, xs:xs + SIN_PX][ok] += val[ok]
-            count[ys:ys + SIN_PX, xs:xs + SIN_PX][ok] += 1
+                good = np.isin(grp[rel][:], (0, 1)) if rel is not None else True
+                for k, name in VJ_LAYERS.items():
+                    val, ok = _vj_layer(grp, name)
+                    ok &= good
+                    total[k][ys:ys + SIN_PX, xs:xs + SIN_PX][ok] += val[ok]
+                    count[k][ys:ys + SIN_PX, xs:xs + SIN_PX][ok] += 1
             f.unlink()
-    # 46 composite dates a year; a short listing would publish a mean of a few composites (verifier gap A1-8)
+    # 23 composite dates a year on the MOD13Q1 phase; a short listing would publish a mean of a few composites
+    # (verifier gap A1-8, and Terra's end for MOD13Q1)
     if complete < VJ_MIN_COMPOSITES:
-        raise RuntimeError(f"VJ113A1 {year}: {complete} composites with all {len(PH_TILES)} PH tiles "
-                           f"({len(days)} listed), expected >= {VJ_MIN_COMPOSITES}")
+        raise IncompleteYear(f"VJ113A1 {year}: {complete} composites with all {len(PH_TILES)} PH tiles "
+                           f"({len(days)} on the MOD13Q1 phase, {len(listed)} listed), expected >= {VJ_MIN_COMPOSITES}")
     with np.errstate(invalid="ignore", divide="ignore"):
-        mean = np.where(count > 0, total / count, np.nan).astype(np.float32)
+        mean = {k: np.where(count[k] > 0, total[k] / count[k], np.nan).astype(np.float32) for k in VJ_LAYERS}
     origin = (SIN_X0 + hmin * SIN_TILE, SIN_Y0 - vmin * SIN_TILE)
     return mean, origin
 
@@ -428,7 +449,8 @@ def zonal_black_marble(adm3_path: Path, years: list[int], out: Path, recompute_r
 
 
 def zonal_vj113a1(adm3_path: Path, years: list[int], out: Path) -> Path:
-    """Per-LGU yearly mean NDVI from NOAA-20 VJ113A1 -> Parquet (adm3_pcode, year, vj_ndvi_mean)."""
+    """Per-LGU yearly mean NDVI and EVI from NOAA-20 VJ113A1 -> Parquet (adm3_pcode, year, vj_ndvi_mean,
+    vj_evi_mean), raw (uncalibrated; lgu.vegetation.calibrate maps them onto MOD13Q1)."""
     import geopandas as gpd
     import pandas as pd
     from exactextract import exact_extract
@@ -437,20 +459,33 @@ def zonal_vj113a1(adm3_path: Path, years: list[int], out: Path) -> Path:
     polys = gpd.read_parquet(adm3_path)[["adm3_pcode", "geometry"]].to_crs(SIN_CRS)
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as td, _client() as client:
         work = Path(td)
-        bands, origin = [], (0.0, 0.0)
+        bands, origin, done = [], (0.0, 0.0), []
         for y in years:
             t0 = time.time()
-            m, origin = vj113_year_mean(client, y, work)
-            bands.append(m)
+            try:
+                m, origin = vj113_year_mean(client, y, work)
+            except IncompleteYear as e:  # left out silently (internal notice only), like a partial MOD13Q1 year
+                print(f"::notice::{e}; year left out")
+                continue
+            bands += [m[k] for k in VJ_LAYERS]
+            done.append(y)
             log.info("VJ113A1 %d averaged in %.0f s", y, time.time() - t0)
+        years = done
+        if not years:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            pd.DataFrame({"adm3_pcode": pd.Series(dtype=str), "year": pd.Series(dtype="int64"),
+                          **{f"vj_{k}_mean": pd.Series(dtype=float) for k in VJ_LAYERS}}).to_parquet(out, index=False)
+            return out
         px = SIN_TILE / SIN_PX
         stack = work / "vj.tif"
         _write_stack(stack, bands, from_origin(origin[0], origin[1], px, px), SIN_CRS)
         del bands
         df = exact_extract(str(stack), polys, ["mean"], include_cols=["adm3_pcode"], output="pandas")
+    nl = len(VJ_LAYERS)
+    col = (lambda b: df["mean"]) if len(years) * nl == 1 else (lambda b: df[f"band_{b}_mean"])
     res = pd.concat([pd.DataFrame({"adm3_pcode": df.adm3_pcode, "year": y,
-                                   "vj_ndvi_mean": df[f"band_{k + 1}_mean"] if len(years) > 1 else df["mean"]})
-                     for k, y in enumerate(years)], ignore_index=True)
+                                   **{f"vj_{k}_mean": col(i * nl + j + 1) for j, k in enumerate(VJ_LAYERS)}})
+                     for i, y in enumerate(years)], ignore_index=True)
     out.parent.mkdir(parents=True, exist_ok=True)
     res.to_parquet(out, index=False)
     return out

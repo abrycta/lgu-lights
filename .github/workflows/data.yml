@@ -43,7 +43,7 @@ on:
         description: Feature years (empty = run_years in config/rounds.json)
         default: ""
       vj113a1:
-        description: Also compute NOAA-20 VJ113A1 NDVI (continuity series for MODIS, 2018 onwards; adds about 15 min)
+        description: Also compute NOAA-20 VJ113A1 NDVI/EVI for every year from 2018 (the overlap for re-calibrating; years MOD13Q1 leaves incomplete are always computed)
         type: boolean
         default: true
       canary:
@@ -165,7 +165,7 @@ jobs:
           year="${YEARS##*-}"
           echo "### Canary: year $year of $YEARS" >> "$GITHUB_STEP_SUMMARY"
           tools/zonal_parallel.sh "$year"
-      - name: VJ113A1 NDVI for one year (optional)
+      - name: VJ113A1 NDVI/EVI for one year (optional)
         if: needs.config.outputs.vj113a1 == 'true'
         working-directory: pipeline
         env:
@@ -174,6 +174,15 @@ jobs:
           EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
           YEARS: ${{ needs.config.outputs.years }}
         run: uv run python -m lgu zonal-vj --years "${YEARS##*-}"
+      - name: VJ113A1 for years MOD13Q1 leaves incomplete (Terra's end; Option A)
+        if: needs.config.outputs.vj113a1 != 'true'
+        working-directory: pipeline
+        env:
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+        # a no-op while every year has a complete MOD13Q1 year; incomplete VJ113A1 years are left out silently
+        run: uv run python -m lgu zonal-vj --years partial
       - name: Feature-store gates on the canary year
         working-directory: pipeline
         run: uv run python -m lgu features | tee -a "$GITHUB_STEP_SUMMARY"
@@ -221,7 +230,7 @@ jobs:
           EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
           YEARS: ${{ needs.config.outputs.years }}
         run: tools/zonal_parallel.sh "$YEARS"
-      - name: VJ113A1 NDVI (optional)
+      - name: VJ113A1 NDVI/EVI (optional)
         if: needs.config.outputs.vj113a1 == 'true'
         working-directory: pipeline
         env:
@@ -233,6 +242,15 @@ jobs:
         run: |
           first=${YEARS%-*}; [ "$first" -gt 2018 ] || first=2018
           uv run python -m lgu zonal-vj --years "$first-${YEARS#*-}"
+      - name: VJ113A1 for years MOD13Q1 leaves incomplete (Terra's end; Option A)
+        if: needs.config.outputs.vj113a1 != 'true'
+        working-directory: pipeline
+        env:
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+        # a no-op while every year has a complete MOD13Q1 year; incomplete VJ113A1 years are left out silently
+        run: uv run python -m lgu zonal-vj --years partial
       - name: Feature store (gated)
         working-directory: pipeline
         run: uv run python -m lgu features | tee -a "$GITHUB_STEP_SUMMARY"

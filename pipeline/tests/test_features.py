@@ -69,3 +69,41 @@ def test_vj_ndvi_is_gated_in_the_years_it_covers():
     assert features.gate_years(df) == []
     df.loc[(df.year == 2024) & (df.index % 10 == 0), "vj_ndvi_mean"] = float("nan")  # 10 % missing in a covered year
     assert any("vj_ndvi_mean" in p and "2024" in p for p in features.gate_years(df))
+
+
+def _cal(path):  # VJ113A1 -> MOD13Q1: slope 1.1, PH01 its own offset, PH02 the national one
+    import json
+
+    path.write_text(json.dumps({k: {"slope": 1.1, "offset": 0.02, "offsets": {"PH01": -0.05}} for k in ("ndvi", "evi")}))
+    return path
+
+
+def test_a_2027_like_year_uses_calibrated_vj113a1(tmp_path, capsys):
+    _tables(tmp_path, {2025: 23, 2027: 4})
+    pd.DataFrame([{"adm3_pcode": p, "year": y, "vj_ndvi_mean": 0.5, "vj_evi_mean": 0.3}
+                  for p in ("PH01", "PH02") for y in (2025, 2027)]).to_parquet(tmp_path / "zonal_vj.parquet")
+    rep = features.merge(tmp_path, tmp_path / "features.parquet", cal_path=_cal(tmp_path / "cal.json"))
+    out = pd.read_parquet(tmp_path / "features.parquet").set_index(["adm3_pcode", "year"])
+    assert rep["years"] == [2025, 2027] and rep["veg_vj113a1_years"] == [2027] and rep["skipped_years"] == []
+    # the complete MODIS year keeps its MOD13Q1 values; the Terra-less year takes calibrated VJ113A1
+    assert out.loc[("PH01", 2025), "ndvi_mean"] == 0.6 and out.loc[("PH02", 2025), "evi_mean"] == 0.4
+    assert np.isclose(out.loc[("PH01", 2027), "ndvi_mean"], 1.1 * 0.5 - 0.05)
+    assert np.isclose(out.loc[("PH02", 2027), "ndvi_mean"], 1.1 * 0.5 + 0.02)
+    assert np.isclose(out.loc[("PH02", 2027), "evi_mean"], 1.1 * 0.3 + 0.02)
+    assert "VJ113A1" in capsys.readouterr().out
+
+
+def test_a_partial_year_without_vj113a1_is_still_skipped_silently(tmp_path):
+    _tables(tmp_path, {2025: 23, 2027: 4})
+    pd.DataFrame([{"adm3_pcode": p, "year": 2025, "vj_ndvi_mean": 0.5, "vj_evi_mean": 0.3}
+                  for p in ("PH01", "PH02")]).to_parquet(tmp_path / "zonal_vj.parquet")
+    rep = features.merge(tmp_path, tmp_path / "features.parquet", cal_path=_cal(tmp_path / "cal.json"))
+    assert rep["years"] == [2025] and rep["skipped_years"] == [2027] and rep["veg_vj113a1_years"] == []
+
+
+def test_without_a_calibration_a_partial_year_is_skipped(tmp_path):
+    _tables(tmp_path, {2025: 23, 2027: 4})
+    pd.DataFrame([{"adm3_pcode": p, "year": 2027, "vj_ndvi_mean": 0.5, "vj_evi_mean": 0.3}
+                  for p in ("PH01", "PH02")]).to_parquet(tmp_path / "zonal_vj.parquet")
+    rep = features.merge(tmp_path, tmp_path / "features.parquet", cal_path=tmp_path / "missing.json")
+    assert rep["skipped_years"] == [2027]
