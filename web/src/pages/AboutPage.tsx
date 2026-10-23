@@ -274,7 +274,10 @@ export default function AboutPage() {
               </a>
             </li>
             <li>
-              <T en="Vegetation: MODIS MOD13Q1 v061 (NDVI/EVI), via Google Earth Engine." ja="植生：MODIS MOD13Q1 v061（NDVI/EVI）、Google Earth Engine経由。" />
+              <T
+                en="Vegetation (NDVI/EVI): MODIS Terra MOD13Q1 v061 via Google Earth Engine for every year Terra covers in full, then NOAA-20 VIIRS VJ113A1 v002 from NASA LAADS, calibrated per city and municipality onto the MODIS series using 2018–2025, the years both cover."
+                ja="植生（NDVI/EVI）：Terraが1年分をそろえる年はMODIS Terra MOD13Q1 v061（Google Earth Engine経由）。それ以降はNOAA-20 VIIRS VJ113A1 v002（NASA LAADS）を、両方がそろう2018〜2025年をもとに市町村ごとにMODISの系列へ較正。"
+              />
             </li>
             <li>
               <T en="Population: WorldPop, CC BY 4.0." ja="人口：WorldPop、CC BY 4.0。" />
