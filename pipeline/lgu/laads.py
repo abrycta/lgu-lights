@@ -5,6 +5,8 @@ Products (sources.yaml):
     float32 mosaic per year (lon 110-130 E, lat 0-30 N) from tiles h29-h30 x v06-v08, layer
     AllAngle_Composite_Snow_Free (fill -999.9). All years are stacked as bands of one GeoTIFF so that
     exactextract computes each polygon's pixel coverage once for every year.
+    S-NPP deliveries end 2026-11-02, so from 2026 the same product from NOAA-20 (VJ146A4: same grid, layer
+    and units) is used, scaled onto the S-NPP series by one ratio estimated in the overlap year 2025 (bm_ratio).
   * viirs-vj113a1: NOAA-20 16-day NDVI on the 500 m MODIS sinusoidal grid. Per year, the per-pixel mean
     of valid composites (pixel reliability 0-1) is mosaicked and reduced the same way (continuity for MODIS).
 
@@ -34,6 +36,27 @@ PH_TILES = ("h29v07", "h29v08", "h30v06", "h30v07", "h30v08")
 # VNP46A4: linear lat/lon, 10 x 10 degree tiles of 2,400 px (1/240 degree)
 BM_RES = 1 / 240
 BM_WEST, BM_NORTH, BM_W, BM_H = 110.0, 30.0, 4800, 7200
+
+# The Black Marble product per year (audit M4): S-NPP VNP46A4 to 2025, NOAA-20 VJ146A4 from 2026 (S-NPP deliveries
+# end 2026-11-02). Both exist for 2018-2025; the last S-NPP year is the overlap year for the cross-calibration.
+BM_NOAA20_FROM = 2026
+BM_OVERLAP_YEAR = BM_NOAA20_FROM - 1
+LIT = 0.5  # nW cm-2 sr-1
+
+
+def bm_product(year: int) -> str:
+    return "VJ146A4" if year >= BM_NOAA20_FROM else "VNP46A4"
+
+
+def bm_ratio(snpp: np.ndarray, noaa20: np.ndarray) -> float:
+    """S-NPP / NOAA-20 radiance ratio over pixels lit in S-NPP and valid in both (same year). Multiplying
+    NOAA-20 mosaics by it keeps the series continuous (NOAA-20 reads about 18 % lower over the Philippines in
+    2024: measured on tile h30v07, sum ratio 0.825)."""
+    m = np.isfinite(snpp) & np.isfinite(noaa20) & (snpp > LIT)
+    if not m.any() or np.sum(noaa20[m]) <= 0:
+        raise RuntimeError("Black Marble cross-calibration: no pixels lit in both products")
+    return float(np.sum(snpp[m], dtype=np.float64) / np.sum(noaa20[m], dtype=np.float64))
+
 
 # VJ113A1: MODIS sinusoidal grid, 500 m (2,400 px per tile)
 SIN_CRS = "+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +R=6371007.181 +units=m +no_defs"
@@ -100,16 +123,17 @@ def _tile_hv(name: str) -> tuple[int, int]:
     return int(t[1:3]), int(t[4:6])
 
 
-def bm_year_mosaic(client: httpx.Client, year: int, work: Path) -> np.ndarray:
-    """Black Marble VNP46A4 radiance mosaic (nW cm-2 sr-1, NaN = no data) for one year."""
+def bm_year_mosaic(client: httpx.Client, year: int, work: Path, product: str | None = None) -> np.ndarray:
+    """Black Marble radiance mosaic (nW cm-2 sr-1, NaN = no data) for one year, unscaled (bm_product by default)."""
     import h5py
 
-    names = _listing(client, "VNP46A4", year, "001")
+    product = product or bm_product(year)
+    names = _listing(client, product, year, "001")
     if len(names) != len(PH_TILES):
-        raise RuntimeError(f"VNP46A4 {year}: expected {len(PH_TILES)} PH tiles, found {names}")
+        raise RuntimeError(f"{product} {year}: expected {len(PH_TILES)} PH tiles, found {names}")
     mosaic = np.full((BM_H, BM_W), np.nan, dtype=np.float32)
     with cf.ThreadPoolExecutor(4) as ex:
-        files = list(ex.map(lambda n: _download(client, "VNP46A4", year, "001", n, work), names))
+        files = list(ex.map(lambda n: _download(client, product, year, "001", n, work), names))
     for f in files:
         h, v = _tile_hv(f.name)
         with h5py.File(f) as h5:
@@ -192,14 +216,24 @@ def zonal_black_marble(adm3_path: Path, years: list[int], out: Path) -> Path:
                            crs="EPSG:4326", transform=from_origin(BM_WEST, BM_NORTH, BM_RES, BM_RES), nodata=np.nan,
                            tiled=True, blockxsize=512, blockysize=512, compress="deflate", predictor=3,
                            BIGTIFF="YES") as dst:
+            scale = 1.0
+            if any(bm_product(y) != "VNP46A4" for y in years):
+                ref = bm_year_mosaic(client, BM_OVERLAP_YEAR, work, "VNP46A4")
+                scale = bm_ratio(ref, bm_year_mosaic(client, BM_OVERLAP_YEAR, work, "VJ146A4"))
+                del ref
+                log.warning("Black Marble: NOAA-20 years scaled by %.4f (S-NPP/NOAA-20, overlap year %d)",
+                            scale, BM_OVERLAP_YEAR)
             for k, y in enumerate(years):
                 t0 = time.time()
                 m = bm_year_mosaic(client, y, work)
+                if bm_product(y) != "VNP46A4":
+                    m *= np.float32(scale)
                 dst.write(m, k + 1)
-                dst.write(np.where(np.isnan(m), np.nan, (m > 0.5).astype(np.float32)), n + k + 1)
+                dst.write(np.where(np.isnan(m), np.nan, (m > LIT).astype(np.float32)), n + k + 1)
                 dst.write((~np.isnan(m)).astype(np.float32), 2 * n + k + 1)
                 del m
-                log.info("VNP46A4 %d mosaicked in %.0f s (disk free %.1f GB)", y, time.time() - t0, disk_free_gb(td))
+                log.info("%s %d mosaicked in %.0f s (disk free %.1f GB)", bm_product(y), y, time.time() - t0,
+                         disk_free_gb(td))
         t0 = time.time()
         df = exact_extract(str(stack), polys, ["mean", "sum"], include_cols=["adm3_pcode"], output="pandas")
         log.info("exactextract over %d bands in %.0f s", 3 * n, time.time() - t0)

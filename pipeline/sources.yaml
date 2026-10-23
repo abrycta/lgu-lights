@@ -302,6 +302,28 @@ sources:
         probe_contains: "VNP46A4"
     archived: { enabled: false }
 
+  - id: black-marble-vj146a4
+    description: >-
+      NASA Black Marble yearly nighttime lights from NOAA-20 (VJ146A4 v002, 2018 onwards): same tiles, grid,
+      layer and units as black-marble-vnp46a4. lgu/laads.py reads it for 2026 onwards (S-NPP ends 2026-11-02),
+      scaled onto the S-NPP series by the S-NPP/NOAA-20 ratio of the overlap year 2025 (bm_ratio).
+    kind: remote-dataset
+    licence: "NASA open data; no restrictions"
+    attribution: >-
+      Roman, M.O., et al. NASA Black Marble VIIRS/NOAA-20 Lunar BRDF-Adjusted Nighttime Lights Yearly L3
+      Global 15 arc-second Linear Lat Lon Grid, VJ146A4 v002 (LAADS DAAC).
+    cadence: yearly
+    links:
+      - id: laads-archive
+        url: https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/5200/VJ146A4/
+        probe: https://ladsweb.modaps.eosdis.nasa.gov/api/v2/content/details/allData/5200/VJ146A4/2023/001
+        probe_contains: "VJ146A4.A2023001."
+      - id: cmr
+        url: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VJ146A4&version=2
+        probe: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VJ146A4&version=2&page_size=1
+        probe_contains: "VJ146A4"
+    archived: { enabled: false }
+
   - id: viirs-vj113a1
     description: >-
       NOAA-20 VIIRS vegetation indices, 16-day 500 m sinusoidal tiles (VJ113A1 v002), the continuity
@@ -358,9 +380,12 @@ sources:
         url: ee://WorldPop/GP/100m/pop
         probe: https://earthengine-stac.storage.googleapis.com/catalog/WorldPop/WorldPop_GP_100m_pop.json
         probe_contains: "WorldPop"
-      - id: worldpop-hub
-        url: https://hub.worldpop.org/geodata/summary?id=6316
-        probe_html: true
+      # hub.worldpop.org and data.worldpop.org time out from GitHub Actions (lgu-lights-archive #16, audit L9):
+      # the second mirror is the same dataset's HDX record (CKAN API), which Actions reaches.
+      - id: hdx
+        url: https://data.humdata.org/dataset/worldpop-population-counts-for-philippines
+        probe: https://data.humdata.org/api/3/action/package_show?id=worldpop-population-counts-for-philippines
+        probe_contains: "phl_ppp_2020"
     archived: { enabled: false }
 
   - id: srtm-dem

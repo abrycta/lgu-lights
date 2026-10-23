@@ -146,6 +146,7 @@ pub fn decode(b: &[u8]) -> Result<Panel, String> {
 mod tests {
     use super::*;
     use crate::features::{row, tests::tiny_panel};
+    use crate::panel::LAST_YEAR;
 
     #[test]
     fn roundtrip_is_lossless_and_features_identical() {
@@ -154,7 +155,7 @@ mod tests {
         assert_eq!(p.ids, q.ids);
         let (pm, qm) = (p.province_stats(), q.province_stats());
         for i in 0..p.len() {
-            for t in 2013..=2025 {
+            for t in FIRST_YEAR + 1..=LAST_YEAR {
                 if let Some(r) = p.prev_round(i, t) {
                     let (a, b) = (row(&p, &pm, i, t, r), row(&q, &qm, i, t, r));
                     assert!(

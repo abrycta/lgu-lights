@@ -14,7 +14,8 @@ name: Data
 on:
   # A run is requested from the Actions tab (workflow_dispatch), or by merging a change to .github/data-run.json
   # ({"version": ..., "features": ..., "features_from": ..., "vj113a1": ...}) into main. Pushes to other branches
-  # never start a run: this workflow deletes and recreates the features-<v> and data-<v> releases the site deploys from.
+  # never start a run: this workflow replaces the features-<v> and data-<v> releases the site deploys from
+  # (scripts/swap-release.sh: the new release is a complete draft before the old one is removed).
   push:
     branches: [main]
     paths: [.github/data-run.json]
@@ -35,9 +36,9 @@ on:
         description: Feature years
         default: "2012-2025"
       vj113a1:
-        description: Also compute NOAA-20 VJ113A1 NDVI (continuity series, 2018 onwards; adds about 15 min)
+        description: Also compute NOAA-20 VJ113A1 NDVI (continuity series for MODIS, 2018 onwards; adds about 15 min)
         type: boolean
-        default: false
+        default: true
       canary:
         description: With features on, first run the satellite path for one year (the last of years) with every gate
         type: boolean
@@ -85,7 +86,7 @@ jobs:
           print(f"features={str(c.get('features', True)).lower()}")
           print(f"features_from={c.get('features_from') or c.get('version', 'v1')}")
           print(f"years={c.get('years', '2012-2025')}")
-          print(f"vj113a1={str(c.get('vj113a1', False)).lower()}")
+          print(f"vj113a1={str(c.get('vj113a1', True)).lower()}")
           print(f"canary={str(c.get('canary', True)).lower()}")
           PY
           else
@@ -193,7 +194,11 @@ jobs:
           EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
           EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
           EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
-        run: uv run python -m lgu zonal-vj --years 2018-2025
+          YEARS: ${{ needs.config.outputs.years }}
+        # NOAA-20 starts in 2018; the last year follows the run's years (audit M4)
+        run: |
+          first=${YEARS%-*}; [ "$first" -gt 2018 ] || first=2018
+          uv run python -m lgu zonal-vj --years "$first-${YEARS#*-}"
       - name: Feature store (gated)
         working-directory: pipeline
         run: uv run python -m lgu features | tee -a "$GITHUB_STEP_SUMMARY"
@@ -225,9 +230,9 @@ jobs:
           cd data
           cp interim/zonal_*.parquet interim/provenance.json build/
           tag="features-$VERSION"
-          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$tag" --prerelease --target "$GITHUB_SHA" --title "$tag" \
-            --notes "Feature store for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA)." \
+          # built as a draft under a temporary name, swapped in only when complete (audit M3)
+          ../scripts/swap-release.sh "$tag" "$GITHUB_SHA" "$tag" \
+            "Feature store for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA)." true \
             build/features.parquet build/lgus.parquet build/labels.parquet build/provinces_fies.parquet build/provinces.json \
             build/crosswalk-report.json build/provenance.json build/zonal_*.parquet build/geom.pmtiles
           du -h build/*.parquet build/geom.pmtiles | tee -a "$GITHUB_STEP_SUMMARY"
@@ -315,11 +320,10 @@ jobs:
           cp ../build/model/metrics.json ../build/features.parquet ../build/labels.parquet .
           cp "$VERSION/estimates.parquet" "$VERSION/lgu.pmtiles" .
           tag="data-$VERSION"
-          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$tag" --draft --target "$GITHUB_SHA" --title "$tag" \
-            --notes "Read models for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA; feature store features-$FEATURES_FROM). Model estimates are not official statistics." \
+          # built as a draft under a temporary name, swapped in only when complete (audit M3)
+          ../../scripts/swap-release.sh "$tag" "$GITHUB_SHA" "$tag" \
+            "Read models for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA; feature store features-$FEATURES_FROM). Model estimates are not official statistics." false \
             "read-models-$VERSION.tar.zst" metrics.json features.parquet labels.parquet estimates.parquet lgu.pmtiles
-          gh release edit "$tag" --draft=false
           {
             echo "### Data version $VERSION"
             du -sh "$VERSION" "$VERSION/tiles" "$VERSION/lgu" "read-models-$VERSION.tar.zst" lgu.pmtiles
