@@ -75,6 +75,18 @@ def _reduce(image, rows, reducer, scale: float) -> list[dict]:  # type: ignore[n
     raise RuntimeError("Earth Engine reduceRegions failed 5 times")
 
 
+def name_outputs(props: dict, bands: list[str], stat: str) -> dict:
+    """Key reduceRegions output by band name for one band or many.
+
+    With several bands Earth Engine names each output after its band (``pop_2019``, ``pop_2020``); with a single
+    band it names the output after the reducer (``sum``, ``mean``), so a one-year run would find no ``pop_<year>``.
+    """
+    if len(bands) == 1 and bands[0] not in props and stat in props:
+        props = {**props, bands[0]: props[stat]}
+        del props[stat]
+    return props
+
+
 def images(years: list[int]):  # type: ignore[no-untyped-def]
     import ee
 
@@ -105,16 +117,18 @@ def zonal(adm3_path: Path, years: list[int], out: Path) -> Path:
     veg, pop, terrain, pop_years, counts = images(years)
     composites = dict(zip(years, counts.getInfo(), strict=True))
     log.info("MOD13Q1 composites per year: %s", composites)
+    veg_bands = [f"{v}_{y}" for y in years for v in ("ndvi", "evi")] + ["elev", "slope"]
+    pop_bands = [f"pop_{y}" for y in pop_years]
     recs: dict[str, dict] = {}
     t0 = time.time()
     jobs = []
     for rows in _chunks(gdf):
-        jobs.append((veg.addBands(terrain), rows, ee.Reducer.mean(), 250))
-        jobs.append((pop, rows, ee.Reducer.sum(), 100))
+        jobs.append((veg.addBands(terrain), rows, ee.Reducer.mean(), 250, veg_bands, "mean"))
+        jobs.append((pop, rows, ee.Reducer.sum(), 100, pop_bands, "sum"))
     with cf.ThreadPoolExecutor(len(jobs)) as ex:  # interactive requests run concurrently on EE's side
-        for props_list in ex.map(lambda j: _reduce(*j), jobs):
+        for (*_, bands, stat), props_list in zip(jobs, ex.map(lambda j: _reduce(*j[:4]), jobs), strict=True):
             for props in props_list:
-                recs.setdefault(props["adm3_pcode"], {}).update(props)
+                recs.setdefault(props["adm3_pcode"], {}).update(name_outputs(props, bands, stat))
     log.info("Earth Engine: %d requests done in %.0f s", len(jobs), time.time() - t0)
     long = []
     for pcode, p in recs.items():
