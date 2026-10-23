@@ -21,6 +21,8 @@ GATES = {  # column: (min, max) over non-null values
     "evi_mean": (-0.2, 1.0),
     "pop": (0.0, 5_000_000.0),
 }
+# Gated only when the column is in the store, and per year only in years that have it (VJ113A1 NDVI starts in 2018).
+OPTIONAL_GATES = {"vj_ndvi_mean": (-0.2, 1.0)}
 
 MIN_VEG_COMPOSITES = 20  # of 23 MOD13Q1 composites a year; fewer would bias the yearly mean to one season
 
@@ -31,6 +33,46 @@ def partial_veg_years(ee: pd.DataFrame) -> list[int]:
         return []
     n = ee.groupby("year")["veg_composites"].max()
     return sorted(int(y) for y in n[n < MIN_VEG_COMPOSITES].index)
+
+
+MAX_MISSING_PER_YEAR = 0.01   # per column and year (real stores: at most 0.12 %, NDVI on small islands)
+MIN_VALID_PER_YEAR = 0.9      # mean bm_valid_frac per year (real stores: 1.00)
+BM_SUM_JUMP = (0.3, 0.5)      # national bm_sum vs its neighbours' mean: interior years, first/last year
+
+
+def gate_years(df: pd.DataFrame) -> list[str]:
+    """Per-year gates (audit L-C2): a gate over all years lets one blacked-out tile in one year through
+    (430 Mindanao LGUs are 1.9 % of 14 years of rows). Each year must have few missing values per column, mostly
+    valid Black Marble pixels, and a national radiance sum close to its neighbouring years (real stores move at
+    most 17 % against the neighbours' mean and 36 % year on year, 2022 to 2023)."""
+    problems = []
+    g = df.groupby("year")
+    for col in GATES:
+        miss = g[col].apply(lambda v: float(v.isna().mean()))
+        for y, m in miss[miss > MAX_MISSING_PER_YEAR].items():
+            problems.append(f"{col}: {m:.1%} missing in {y} (max {MAX_MISSING_PER_YEAR:.0%} per year)")
+    for col in (c for c in OPTIONAL_GATES if c in df):
+        miss = g[col].apply(lambda v: float(v.isna().mean()))
+        for y, m in miss[(miss > MAX_MISSING_PER_YEAR) & (miss < 1)].items():
+            problems.append(f"{col}: {m:.1%} missing in {y} (max {MAX_MISSING_PER_YEAR:.0%} per year)")
+    valid = g.bm_valid_frac.mean()
+    for y, v in valid[valid < MIN_VALID_PER_YEAR].items():
+        problems.append(f"bm_valid_frac: mean {v:.3f} in {y} (min {MIN_VALID_PER_YEAR})")
+    if "bm_sum" in df:
+        tot = g.bm_sum.sum(min_count=1)
+        ys = sorted(tot.index)
+        for i, y in enumerate(ys):
+            # the nearest years on each side, whatever the gap (a store of 2018, 2020, 2022 is still compared;
+            # verifier gap A3-12); the tolerance grows with the distance in years
+            near = [ys[j] for j in (i - 1, i + 1) if 0 <= j < len(ys)]
+            nb = [tot[n] for n in near if pd.notna(tot[n])]
+            if not nb or not pd.notna(tot[y]) or sum(nb) <= 0:
+                continue
+            tol = (BM_SUM_JUMP[0] if len(nb) == 2 else BM_SUM_JUMP[1]) * max(abs(n - y) for n in near)
+            ratio = float(tot[y] / (sum(nb) / len(nb)))
+            if abs(ratio - 1) > tol:
+                problems.append(f"bm_sum: national total in {y} is {ratio:.2f}x its neighbouring years (max ±{tol:.0%})")
+    return problems
 
 
 def merge(interim: Path, out: Path) -> dict:
@@ -53,10 +95,9 @@ def merge(interim: Path, out: Path) -> dict:
     per_year = df.groupby("year").size()
     if (per_year != len(lgus)).any():
         problems.append(f"rows per year differ from {len(lgus)}: {per_year.to_dict()}")
-    for col, (lo, hi) in GATES.items():
+    problems += gate_years(df)
+    for col, (lo, hi) in (GATES | {c: r for c, r in OPTIONAL_GATES.items() if c in df}).items():
         v = df[col].dropna()
-        if len(v) < 0.95 * len(df):
-            problems.append(f"{col}: {len(df) - len(v)} missing values")
         if len(v) and (v.min() < lo or v.max() > hi):
             problems.append(f"{col}: range [{v.min():.3f}, {v.max():.3f}] outside [{lo}, {hi}]")
     if problems:

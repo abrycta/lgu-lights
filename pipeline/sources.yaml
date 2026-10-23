@@ -152,6 +152,7 @@ sources:
     cadence: once (superseded series)
     pin:
       intake: "POST query (every value of every variable, JSON-stat 2) with pipeline/tools/fetch_openstat.py on 2026-10-21; adopted with pipeline/tools/adopt_manual.py"
+    hooks: ["lgu.sources:check_fies"]       # dimensions by content, PI in [0, 100], >= 80 provinces (audit L-C8)
     links:
       - id: openstat
         url: "https://openstat.psa.gov.ph/PXWeb/api/v1/en/DB/3D/0023C3DP020.px"
@@ -179,6 +180,7 @@ sources:
     cadence: every FIES round (about every 3 years)
     pin:
       intake: "POST query with pipeline/tools/fetch_openstat.py on 2026-10-21; adopted with pipeline/tools/adopt_manual.py"
+    hooks: ["lgu.sources:check_fies"]       # dimensions by content, PI in [0, 100], >= 80 provinces (audit L-C8)
     links:
       - id: openstat
         url: "https://openstat.psa.gov.ph/PXWeb/api/v1/en/DB/1F/FY/0031F3DF020.px"
@@ -206,6 +208,7 @@ sources:
     cadence: every FIES round (about every 3 years)
     pin:
       intake: "POST query with pipeline/tools/fetch_openstat.py on 2026-10-21; adopted with pipeline/tools/adopt_manual.py"
+    hooks: ["lgu.sources:check_fies"]       # dimensions by content, PI in [0, 100], >= 80 provinces (audit L-C8)
     links:
       - id: openstat
         url: "https://openstat.psa.gov.ph/PXWeb/api/v1/en/DB/1F/FY/0041F3DF02A.px"
@@ -365,6 +368,8 @@ sources:
         url: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=MOD13Q1&version=061
         probe: https://cmr.earthdata.nasa.gov/search/granules.json?short_name=MOD13Q1&version=061&page_size=1
         probe_contains: "MOD13Q1"
+        # probe only (audit L-C6): health-checked, but lgu/ee_zonal.py reads Earth Engine and never this link;
+        # the kit requires two automatic links for an unarchived remote dataset, so it is not marked automatic: false
     archived: { enabled: false }
 
   - id: worldpop-phl-100m
@@ -386,6 +391,8 @@ sources:
         url: https://data.humdata.org/dataset/worldpop-population-counts-for-philippines
         probe: https://data.humdata.org/api/3/action/package_show?id=worldpop-population-counts-for-philippines
         probe_contains: "phl_ppp_2020"
+        # probe only (audit L-C6): health-checked, but lgu/ee_zonal.py reads Earth Engine and never this link;
+        # the kit requires two automatic links for an unarchived remote dataset, so it is not marked automatic: false
     archived: { enabled: false }
 
   - id: srtm-dem
@@ -402,4 +409,6 @@ sources:
       - id: lpdaac-cmr
         url: https://cmr.earthdata.nasa.gov/search/collections.json?short_name=SRTMGL1&version=003
         probe_contains: "SRTMGL1"
+        # probe only (audit L-C6): health-checked, but lgu/ee_zonal.py reads Earth Engine and never this link;
+        # the kit requires two automatic links for an unarchived remote dataset, so it is not marked automatic: false
     archived: { enabled: false }

@@ -20,7 +20,7 @@ from archivekit import Provenance, Registry, RunManifest, SchemaError
 
 from .paths import REGISTRY_PATH, REPO_ROOT
 
-__all__ = ["check_adm3", "check_sae", "ensure", "fetch", "local_path", "registry"]
+__all__ = ["check_adm3", "check_fies", "check_sae", "ensure", "fetch", "local_path", "registry"]
 
 
 @lru_cache(maxsize=1)
@@ -51,23 +51,41 @@ def ensure(source_id: str, manifest: RunManifest | None = None) -> Path:
 
 
 def check_sae(path: Path, src: dict[str, Any]) -> list[str]:
-    """Hook: the workbook has a PSGC-keyed sheet with at least 1,500 LGU rows."""
+    """Hook: the workbook parses the way the pipeline reads it (audit L-C1): every round config/rounds.json takes
+    from it is found by header name and year, has at least 1,500 LGU rows with an estimate in [0, 100], SE >= 0
+    and the estimate inside its CI. So a re-issued workbook with an inserted or moved column is rejected here
+    (and by the archive's snapshot job) instead of shifting every figure."""
     import openpyxl
+
+    from . import labels
 
     try:  # a file object: archivekit validates temp files without an .xlsx suffix
         wb = openpyxl.load_workbook(io.BytesIO(Path(path).read_bytes()), read_only=True, data_only=True)
     except Exception as e:
         raise SchemaError(f"not a readable xlsx workbook: {e}") from e
     try:
-        best = 0
-        for ws in wb.worksheets:
-            ids = sum(1 for r in ws.iter_rows(max_col=3, values_only=True)
-                      if isinstance(r[0], (int, float)) and r[2])
-            best = max(best, ids)
-        if best < 1500:
-            raise SchemaError(f"no sheet with >= 1,500 PSGC-keyed LGU rows (best {best})")
+        labels.parse_workbook(wb, str(src.get("id", "")))
+    except (labels.SchemaError, KeyError) as e:
+        raise SchemaError(str(e)) from e
     finally:
         wb.close()
+    return []
+
+
+def check_fies(path: Path, src: dict[str, Any]) -> list[str]:
+    """Hook: an OpenSTAT JSON-stat table with year, item and geography dimensions found by content, a poverty
+    incidence item in [0, 100], and at least 80 rows indented as provinces (2+ leading dots) in every year
+    (audit L-C8)."""
+    from . import fies
+
+    try:
+        df = fies.read_jsonstat(Path(path))
+    except (fies.SchemaError, KeyError, ValueError, TypeError) as e:
+        raise SchemaError(f"not a usable FIES JSON-stat table: {e}") from e
+    per_year = df[(df.depth >= 2) & df.pi.notna()].groupby("year").size()
+    thin = {int(y): int(n) for y, n in per_year.items() if n < fies.MIN_PROVINCES}
+    if per_year.empty or thin:
+        raise SchemaError(f"fewer than {fies.MIN_PROVINCES} province rows with a figure: {thin or 'none at all'}")
     return []
 
 

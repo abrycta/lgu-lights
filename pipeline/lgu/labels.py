@@ -24,7 +24,9 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import re
+import statistics
 import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -56,9 +58,10 @@ def _num(v: object) -> float | None:
     if v is None or v == "":
         return None
     try:
-        return float(v)  # type: ignore[arg-type]
+        f = float(v)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+    return f if math.isfinite(f) else None  # "nan"/"inf" cells are missing values, never numbers (gap A1-6)
 
 
 def _rows(ws) -> list[tuple[str, str, str, tuple]]:  # type: ignore[no-untyped-def]
@@ -75,11 +78,130 @@ def _rows(ws) -> list[tuple[str, str, str, tuple]]:  # type: ignore[no-untyped-d
     return out
 
 
+class SchemaError(ValueError):
+    """A PSA workbook whose layout or values do not match what the parsers expect (audit L-C1). The registry
+    hook (lgu.sources.check_sae) re-raises it as archivekit.SchemaError, so the archive rejects the file too."""
+
+
+# Header groups of the SAE sheets (row with "Poverty Incidence"); any other group (e.g. an inserted
+# population column) is ignored instead of shifting every column after it.
+_GROUPS = (("poverty incidence", "est"), ("coefficient of variation", "cv"), ("standard error", "se"),
+           ("confidence interval", "ci"))
+MIN_ROWS = 1500  # LGU rows with an estimate per round (about 1,600 LGUs)
+
+
+def _header_block(ws) -> list[tuple]:  # type: ignore[no-untyped-def]
+    """The rows above the first LGU row."""
+    head = []
+    for r in ws.iter_rows(max_row=20, values_only=True):
+        if isinstance(r[0], (int, float)) and len(r) > 2 and r[2]:
+            return head
+        head.append(r)
+    raise SchemaError(f"sheet {ws.title!r}: no LGU row in the first 20 rows")
+
+
+def _year(v: object) -> int | None:
+    if isinstance(v, (int, float)) and 1990 <= v <= 2100 and float(v).is_integer():
+        return int(v)
+    if isinstance(v, str) and re.fullmatch(r"\s*(19|20)\d\d\s*", v):
+        return int(v)
+    return None
+
+
+def column_map(ws, default_year: int | None = None) -> dict[tuple[str, int], int]:  # type: ignore[no-untyped-def]
+    """(field, year) -> column index, read from the header names, not positions (audit L-C1).
+
+    Fields: est, cv, se, ci_lo, ci_hi. A column's group is the nearest group label at or left of it in the
+    "Poverty Incidence" header row; its year is a year cell in the header block, else the year of the column
+    to its left when it is the "Upper Limit" of a pair, else `default_year` (per-round sheets print no year).
+    """
+    head = _header_block(ws)
+    grow = next((r for r in head if any(isinstance(c, str) and "poverty incidence" in c.lower() for c in r)), None)
+    if grow is None:
+        raise SchemaError(f"sheet {ws.title!r}: no 'Poverty Incidence' header")
+    width = max(len(r) for r in head)
+    out: dict[tuple[str, int], int] = {}
+    group: str | None = None
+    prev: tuple[str | None, int | None, str | None] = (None, None, None)
+    for c in range(3, width):
+        g = grow[c] if c < len(grow) else None
+        if isinstance(g, str) and g.strip():
+            group = next((f for k, f in _GROUPS if k in g.lower()), None)
+        cells = [r[c] if c < len(r) else None for r in head]
+        years = {y for y in map(_year, cells) if y is not None}
+        if len(years) > 1:
+            raise SchemaError(f"sheet {ws.title!r}: column {c} has several years {sorted(years)}")
+        text = " ".join(str(x).lower() for x in cells if isinstance(x, str))
+        limit = "lo" if "lower" in text else "hi" if "upper" in text else None
+        year = years.pop() if years else None
+        if year is None and limit == "hi" and prev[0] == group and prev[2] == "lo":
+            year = prev[1]
+        year = year if year is not None else default_year
+        prev = (group, year, limit)
+        if group is None or year is None:
+            continue
+        field = group if group != "ci" else f"ci_{limit}" if limit else None
+        if field is None:
+            continue
+        if (field, year) in out:
+            raise SchemaError(f"sheet {ws.title!r}: two columns for {field} {year} ({out[field, year]} and {c})")
+        out[field, year] = c
+    return out
+
+
+def _require(cols: dict[tuple[str, int], int], fields: tuple[str, ...], years: tuple[int, ...], where: str) -> None:
+    missing = [f"{f} {y}" for y in years for f in fields if (f, y) not in cols]
+    if missing:
+        raise SchemaError(f"{where}: header columns not found: {', '.join(missing)}")
+
+
+# Real rounds (2006-2023) have medians of 19-34 %; a workbook in fractions would have a median below 1.
+MEDIAN_RANGE = (2.0, 70.0)
+MIN_SE_SHARE = 0.95
+
+
+def _finite(v: float | None) -> bool:
+    return v is not None and math.isfinite(v)
+
+
+def validate_rows(rows: list[SaeRow], years: tuple[int, ...], where: str) -> None:
+    """Plausibility of each round (audit L-C1): enough LGUs, estimate in [0, 100] on the percent scale (median in
+    MEDIAN_RANGE, so a re-issue in fractions is caught), SE >= 0, finite SE for nearly every row, CI around the
+    estimate."""
+    problems = []
+    for y in years:
+        rs = [r for r in rows if r.year == y]
+        if len(rs) < MIN_ROWS:
+            problems.append(f"{y}: {len(rs)} LGU rows with an estimate (expected >= {MIN_ROWS:,})")
+        if rs:
+            med = statistics.median(r.estimate for r in rs)
+            if not MEDIAN_RANGE[0] <= med <= MEDIAN_RANGE[1]:
+                problems.append(f"{y}: median estimate {med:g} is outside {MEDIAN_RANGE} (percent scale expected)")
+            finite = sum(_finite(r.se) or _finite(r.cv) for r in rs)
+            if finite < MIN_SE_SHARE * len(rs):
+                problems.append(f"{y}: only {finite} of {len(rs)} rows have a finite SE or CV")
+        bad = {
+            "estimate outside [0, 100]": sum(not 0 <= r.estimate <= 100 for r in rs),
+            "negative SE or CV": sum((r.se is not None and r.se < 0) or (r.cv is not None and r.cv < 0) for r in rs),
+            "non-finite SE, CV or CI": sum(v is not None and not math.isfinite(v)
+                                           for r in rs for v in (r.se, r.cv, r.ci_lo, r.ci_hi)),
+            "estimate outside its CI": sum(r.ci_lo is not None and r.ci_hi is not None
+                                           and not r.ci_lo - 1e-6 <= r.estimate <= r.ci_hi + 1e-6 for r in rs),
+        }
+        problems += [f"{y}: {n} rows with {what}" for what, n in bad.items() if n]
+    if problems:
+        raise SchemaError(f"{where}: " + "; ".join(problems))
+
+
 def parse_round_sheet(wb: openpyxl.Workbook, year: int, source_id: str) -> list[SaeRow]:
-    """A per-round sheet ('2012', '2015'): estimate, CV, 90 % CI lower, upper in columns 3-6."""
+    """A per-round sheet ('2012', '2015'): estimate, CV and the 90 % CI pair, located by header name."""
+    ws = wb[str(year)]
+    cols = column_map(ws, default_year=year)
+    _require(cols, ("est", "cv", "ci_lo", "ci_hi"), (year,), f"{source_id} sheet {year}")
+    i_est, i_cv, i_lo, i_hi = (cols[f, year] for f in ("est", "cv", "ci_lo", "ci_hi"))
     rows = []
-    for code, prov, name, r in _rows(wb[str(year)]):
-        est, cv, lo, hi = (_num(r[i]) for i in (3, 4, 5, 6))
+    for code, prov, name, r in _rows(ws):
+        est, cv, lo, hi = (_num(r[i]) if i < len(r) else None for i in (i_est, i_cv, i_lo, i_hi))
         if est is None:
             continue
         se = cv * est / 100 if cv is not None else None
@@ -90,23 +212,39 @@ def parse_round_sheet(wb: openpyxl.Workbook, year: int, source_id: str) -> list[
 def created_later(wb: openpyxl.Workbook, year: int) -> set[str]:
     """PSA codes a round sheet lists without an estimate: LGUs created after that round (e.g. the
     Basilan, Sulu and Maguindanao municipalities of 2006-2009 in the 2006 sheet)."""
-    return {code for code, _, _, r in _rows(wb[str(year)]) if _num(r[3]) is None}
+    ws = wb[str(year)]
+    i_est = column_map(ws, default_year=year).get(("est", year), 3)
+    return {code for code, _, _, r in _rows(ws) if _num(r[i_est]) is None}
 
 
 def parse_annex_2023(wb: openpyxl.Workbook, source_id: str) -> list[SaeRow]:
-    """2023 Annex 1, one block per round of the workbook (config/rounds.json; 2018/2021/2023): estimates
-    (cols 3-5), CV (6-8), SE (9-11), CI pairs (12-17)."""
-    rows = []
+    """2023 Annex 1, one block per round of the workbook (config/rounds.json; 2018/2021/2023): estimate, CV,
+    SE and the 90 % CI pair of each round, located by header name and year."""
     ws = wb.worksheets[0]
     years = from_workbook(source_id)
-    n = len(years)
+    cols = column_map(ws)
+    _require(cols, ("est", "cv", "se", "ci_lo", "ci_hi"), years, f"{source_id} sheet {ws.title!r}")
+    rows = []
     for code, prov, name, r in _rows(ws):
-        for k, year in enumerate(years):
-            est = _num(r[3 + k])
-            if est is None:
+        for year in years:
+            v = {f: (_num(r[cols[f, year]]) if cols[f, year] < len(r) else None)
+                 for f in ("est", "cv", "se", "ci_lo", "ci_hi")}
+            if v["est"] is None:
                 continue
-            rows.append(SaeRow(code, prov, name, year, est, _num(r[3 + n + k]), _num(r[3 + 2 * n + k]),
-                               _num(r[3 + 3 * n + 2 * k]), _num(r[4 + 3 * n + 2 * k]), source_id))
+            rows.append(SaeRow(code, prov, name, year, v["est"], v["cv"], v["se"], v["ci_lo"], v["ci_hi"], source_id))
+    return rows
+
+
+def parse_workbook(wb: openpyxl.Workbook, source_id: str) -> list[SaeRow]:
+    """Every round config/rounds.json reads from this workbook, validated (also the registry hook's check)."""
+    years = from_workbook(source_id)
+    if not years:
+        raise SchemaError(f"{source_id}: no round of config/rounds.json reads this workbook")
+    if source_id == "psa-sae-2023":
+        rows = parse_annex_2023(wb, source_id)
+    else:
+        rows = [r for y in years for r in parse_round_sheet(wb, y, source_id)]
+    validate_rows(rows, years, source_id)
     return rows
 
 
@@ -115,22 +253,35 @@ def parse_annex_2023(wb: openpyxl.Workbook, source_id: str) -> list[SaeRow]:
 MANILA = {"pcode": "PH1303901", "code6": "133900", "name": "City of Manila", "district_prefix": "1339"}
 
 
-def psgc_district_population(path: Path, prefix: str = MANILA["district_prefix"]) -> dict[str, int]:
-    """PSA code6 -> 2020 Census population of each sub-municipality (district) of a city, from the PSGC
-    publication datafile (sheet "PSGC": 10-digit PSGC, name, correspondence code, geographic level, ...,
-    2020 population). The correspondence code is the pre-2021 9-digit code whose first six digits are
-    the SAE's code6."""
+def population_column(head: list[str]) -> tuple[int, int]:
+    """(column index, census year) of the newest "<YYYY> Population" column of the PSGC sheet (audit L-C9: the
+    next PSGC carries POPCEN 2024 instead of 2020)."""
+    found = [(int(m.group(1)), i) for i, h in enumerate(head) if (m := re.fullmatch(r"(\d{4}) Population", h))]
+    if not found:
+        raise SchemaError(f"PSGC: no '<YYYY> Population' column in {head}")
+    year, i = max(found)
+    return i, year
+
+
+def psgc_district_population(path: Path, prefix: str = MANILA["district_prefix"]) -> tuple[dict[str, int], int]:
+    """(PSA code6 -> census population of each sub-municipality (district) of a city, census year), from the
+    PSGC publication datafile (sheet "PSGC": 10-digit PSGC, name, correspondence code, geographic level, ...,
+    "<YYYY> Population", the newest census used). The correspondence code is the pre-2021 9-digit code whose
+    first six digits are the SAE's code6."""
     wb = openpyxl.load_workbook(io.BytesIO(path.read_bytes()), read_only=True, data_only=True)
     ws = wb["PSGC"]
     head = [str(c or "").strip() for c in next(ws.iter_rows(max_row=1, values_only=True))]
-    i_corr, i_level = head.index("Correspondence Code"), head.index("Geographic Level")
-    i_pop = head.index("2020 Population")
+    try:
+        i_corr, i_level = head.index("Correspondence Code"), head.index("Geographic Level")
+    except ValueError as e:
+        raise SchemaError(f"PSGC: {e}") from e
+    i_pop, census = population_column(head)
     out: dict[str, int] = {}
     for r in ws.iter_rows(min_row=2, values_only=True):
         corr = f"{int(r[i_corr]):09d}" if isinstance(r[i_corr], (int, float)) else str(r[i_corr] or "")
         if r[i_level] == "SubMun" and corr.startswith(prefix):
             out[corr[:6]] = int(r[i_pop])
-    return out
+    return out, census
 
 
 def combine_districts(rows: list[SaeRow], weights: dict[str, int], city: dict = MANILA) -> list[SaeRow]:
@@ -257,13 +408,12 @@ def build_labels(sae_2018_2021: Path, sae_2023: Path, adm3: pd.DataFrame, overri
         return openpyxl.load_workbook(io.BytesIO(p.read_bytes()), read_only=True, data_only=True)
 
     wb1, wb2 = open_wb(sae_2018_2021), open_wb(sae_2023)
-    sheets = from_workbook("psa-sae-2018-2021")
-    rows = [r for y in sheets for r in parse_round_sheet(wb1, y, "psa-sae-2018-2021")]
-    new_after = {y: created_later(wb1, y) for y in sheets}
-    rows += parse_annex_2023(wb2, "psa-sae-2023")
+    rows = parse_workbook(wb1, "psa-sae-2018-2021")
+    new_after = {y: created_later(wb1, y) for y in from_workbook("psa-sae-2018-2021")}
+    rows += parse_workbook(wb2, "psa-sae-2023")
     combined: list[SaeRow] = []
     if psgc is not None:
-        weights = psgc_district_population(psgc)
+        weights, census = psgc_district_population(psgc)
         if len(weights) != 14:
             raise ValueError(f"PSGC: expected the 14 City of Manila districts, found {len(weights)}")
         combined = combine_districts(rows, weights)
@@ -272,7 +422,7 @@ def build_labels(sae_2018_2021: Path, sae_2023: Path, adm3: pd.DataFrame, overri
     if combined:
         report["combined_districts"] = {
             MANILA["pcode"]: {"rounds": [r.year for r in combined], "districts": len(weights),
-                              "weights": "PSGC 2020 Census population (psa-psgc)", "se": "weighted sum (upper bound)"}}
+                              "weights": f"PSGC {census} Census population (psa-psgc)", "se": "weighted sum (upper bound)"}}
     adm3_names = dict(zip(adm3.adm3_pcode, adm3.adm3_name))
     name_mismatch: list[dict] = []
     rematched: list[dict] = []
@@ -319,6 +469,24 @@ def build_labels(sae_2018_2021: Path, sae_2023: Path, adm3: pd.DataFrame, overri
     df = df.sort_values(["adm3_pcode", "round_year"]).reset_index(drop=True)
     report["rows_per_round"] = {int(k): int(v) for k, v in df.round_year.value_counts().sort_index().items()}
     return df, report
+
+
+def gate_report(new: dict, committed: dict, overrides: dict[str, str], max_drop: float = 0.01) -> list[str]:
+    """Compare a new crosswalk report with the committed one (pipeline/inputs/crosswalk-report.json, audit L-C9):
+    a PSA code newly unmatched (not listed in crosswalk/sae_overrides.csv) or a round losing more than
+    `max_drop` of its labelled LGUs is a problem. New rounds and gains pass."""
+    problems = []
+    known = {u["code6"] for u in committed.get("unmatched", [])} | set(overrides)
+    fresh = sorted(u["code6"] for u in new.get("unmatched", []) if u["code6"] not in known)
+    if fresh:
+        problems.append(f"newly unmatched PSA codes (add them to crosswalk/sae_overrides.csv): {', '.join(fresh)}")
+    old_rows = {int(k): int(v) for k, v in committed.get("rows_per_round", {}).items()}
+    for y, n in sorted({int(k): int(v) for k, v in new.get("rows_per_round", {}).items()}.items()):
+        if y in old_rows and n < (1 - max_drop) * old_rows[y]:
+            problems.append(f"round {y}: {n} labelled LGUs, down from {old_rows[y]} (more than {max_drop:.0%})")
+    for y in sorted(set(old_rows) - {int(k) for k in new.get("rows_per_round", {})}):
+        problems.append(f"round {y}: no labels any more (had {old_rows[y]})")
+    return problems
 
 
 def write_report(report: dict, path: Path) -> None:
