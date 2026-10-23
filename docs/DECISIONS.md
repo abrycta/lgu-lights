@@ -247,3 +247,10 @@ Two data fixes from the 2026-10-22 bug audit (items 6 and 3); features reused fr
   stay byte-identical (parity run in the PR).
 - Data runs compute VJ113A1 only for the years MOD13Q1 leaves incomplete (`lgu zonal-vj --years partial`); the
   `vj113a1` run option computes every year from 2018 (to re-fit the calibration).
+- First calibration (2026-10-23, overlap 2018–2025; 2026 is added once Terra's 2026 year is complete): NDVI slope
+  0.624, 1,463 LGUs with their own offset and 172 on the national one; EVI slope 0.767, 1,369 own and 266 national
+  (7 LGUs have no VJ113A1 value). Out of sample (fit 2018–2023, test 2024–2025): NDVI median error 0.010 (median
+  three-year change 0.013), EVI 0.011 (0.017). Swap test with the published v5 model: replacing 2023 MOD13Q1 with
+  calibrated VJ113A1 moves the 3,262 later model estimates by a median 0.000 pp (p90 0.04, max 0.58); treating 2025 as
+  a Terra-less year moves its 1,631 estimates by a median 0.007 pp (p90 0.05, max 0.64). Well under the 0.5 pp median
+  limit set for falling back to Option C.
