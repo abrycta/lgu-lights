@@ -17,6 +17,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # GitHub disables cron workflows in a public repository after 60 days without activity. Re-enabling resets
+  # that clock; live-check.yml runs the same script hourly, so each workflow can bring the other back.
+  keepalive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: { actions: write, contents: read }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { sparse-checkout: .github }
+      - name: Re-enable the scheduled workflows
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: .github/scripts/keepalive.sh
+
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
