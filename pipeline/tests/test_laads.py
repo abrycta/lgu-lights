@@ -32,3 +32,75 @@ def test_lit_fraction_is_calibrated_per_lgu_in_noaa20_years_only():
     assert out.bm_lit_frac[3:].tolist() == pytest.approx([0.3, 0.1, 0.1 * nat])
     capped = laads.calibrate_lit(res.assign(bm_lit_frac=0.9), snpp, noaa20)
     assert capped.bm_lit_frac.max() == 1.0
+
+
+# ------------------------------------------------------------------ chaos: tiles, moved and dead sources (L-C2, L-C3, L-C10)
+import json
+
+import httpx
+
+
+def test_a_fill_only_tile_is_rejected():
+    with pytest.raises(RuntimeError, match="fill-only"):
+        laads.check_tile("VNP46A4.A2025001.h30v08.002.h5", np.full((2400, 2400), np.nan, np.float32))
+    ocean = np.full((100, 100), np.nan, np.float32)
+    ocean[:4] = 1.0  # 4 % land (h30v06): still a tile
+    laads.check_tile("h30v06", ocean)
+
+
+def cmr_entry(name: str, host: str = "https://data.laadsdaac.earthdatacloud.nasa.gov/prod-lads/VNP46A4") -> dict:
+    return {"producer_granule_id": name, "links": [
+        {"rel": "http://esipfed.org/ns/fedsearch/1.1/data#", "href": f"{host}/{name}"},
+        {"rel": "http://esipfed.org/ns/fedsearch/1.1/s3#", "href": f"s3://prod-lads/VNP46A4/{name}"}]}
+
+
+def mocked(laads_status: int, cmr_status: int = 200, seen: list | None = None) -> httpx.Client:
+    names = [f"VNP46A4.A{y}001.{t}.002.2025162083150.h5" for y in (2024, 2025)
+             for t in laads.PH_TILES + ("h29v06",)]
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if seen is not None:
+            seen.append(str(req.url))
+        if req.url.host == "ladsweb.modaps.eosdis.nasa.gov":
+            return httpx.Response(laads_status, text="<html>Service Unavailable</html>")
+        if req.url.host == "cmr.earthdata.nasa.gov":
+            assert req.url.params["version"] == "2"
+            return httpx.Response(cmr_status, json={"feed": {"entry": [cmr_entry(n) for n in names]}})
+        return httpx.Response(200, content=b"\x89HDF" + b"\0" * 1_000_001,
+                              headers={"content-type": "application/octet-stream"})
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_laads_down_falls_back_to_cmr_with_exact_year_and_own_data_links(tmp_path):
+    seen: list = []
+    with mocked(503, seen=seen) as client:
+        found = laads._listing(client, "VNP46A4", 2025, "001")
+        assert [n for n, _ in found] == sorted(n for n, _ in found) and len(found) == len(laads.PH_TILES)
+        assert all(".A2025001." in n for n, _ in found)  # not the 2024 tiles CMR also returns
+        assert all(u.startswith("https://data.laadsdaac.earthdatacloud.nasa.gov/") for _, u in found)
+        f = laads._download(client, found[0][1], tmp_path)
+    assert f.name == found[0][0] and not any("ladsweb" in u and "/archive/" in u for u in seen)
+
+
+def test_cmr_fallback_lists_days_of_a_year(monkeypatch):
+    with mocked(503) as client:
+        assert laads._days(client, "VNP46A4", 2025) == ["001"]
+
+
+def test_a_dead_source_fails_loudly():
+    with mocked(503, cmr_status=503) as client, pytest.raises(httpx.HTTPStatusError):
+        laads._listing(client, "VNP46A4", 2025, "001")
+
+
+def test_committed_ratio_is_used_and_a_moved_ratio_fails(tmp_path):
+    p = tmp_path / "bm_ratio.json"
+    p.write_text(json.dumps({"overlap_year": laads.BM_OVERLAP_YEAR, "ratio": 1.2, "lit": {"VNP46A4": {}, "VJ146A4": {}}}))
+    rec = laads.load_ratio(p)
+    laads.check_ratio(1.21, rec)  # within 2 %
+    with pytest.raises(RuntimeError, match="moved"):
+        laads.check_ratio(1.26, rec)
+    laads.check_ratio(1.5, None)  # first derivation: nothing to compare
+    p.write_text(json.dumps({"overlap_year": 2019, "ratio": 1.2, "lit": {"x": {}}}))
+    with pytest.raises(RuntimeError):
+        laads.load_ratio(p)

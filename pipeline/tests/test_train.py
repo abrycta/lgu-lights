@@ -45,3 +45,12 @@ def test_level_tapers_a_large_fall_like_the_core():
     v = train.level(y, np.array([3.0, -10.0, -4.0, -40.0]))
     assert v[0] == 23.0 and v[1] == 10.0
     assert abs(v[2] - 0.25) < 1e-12 and 0 < v[3] < v[2]
+
+
+def test_metrics_gate_stops_a_much_worse_model_against_the_published_one():
+    base = {"test_round": 2023, "n": 1598, "model": {"mae": 5.55, "r2": 0.58}}
+    assert train.gate_metrics({"test_round": 2023, "n": 1598, "model": {"mae": 5.9, "r2": 0.55}}, base) == []
+    shifted = {"test_round": 2023, "n": 1598, "model": {"mae": 14.2, "r2": -1.3}}  # labels from a shifted column
+    assert len(train.gate_metrics(shifted, base)) == 2
+    assert train.gate_metrics({"test_round": 2023, "n": 1500, "model": {"mae": 5.5, "r2": 0.58}}, base)
+    assert train.gate_metrics({"test_round": 2025, "n": 10, "model": {"mae": 99, "r2": -9}}, base) == []

@@ -82,8 +82,14 @@ step "Data versions: $DATA_VERSIONS (latest $LATEST)"
 mkdir -p "$cache" "$web/dist/data"
 for v in $DATA_VERSIONS; do
   asset="read-models-$v.tar.zst"
-  want=$(gh api "repos/$REPO/releases/tags/data-$v" --jq ".assets[] | select(.name == \"$asset\") | .digest")
-  [[ "$want" == sha256:* ]] || die "data-$v has no sha256 digest for $asset"
+  want=$(gh api "repos/$REPO/releases/tags/data-$v" --jq ".assets[] | select(.name == \"$asset\") | .digest" 2>/dev/null) || want=""
+  if [[ "$want" != sha256:* ]]; then
+    # Only LATEST is required (audit L-C5): an older version whose release is missing or incomplete (e.g. a swap that
+    # failed half-way) is left out of this deploy with a warning instead of blocking every web deploy.
+    [ "$v" != "$LATEST" ] || die "data-$v (LATEST) has no sha256 digest for $asset"
+    echo "::warning title=data version skipped::data-$v has no sha256 digest for $asset; $v is left out of this deploy"
+    continue
+  fi
   want="${want#sha256:}"
   have=""
   [ -f "$cache/$asset" ] && have=$(shasum -a 256 "$cache/$asset" | cut -d' ' -f1)

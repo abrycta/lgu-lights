@@ -27,6 +27,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .labels import SchemaError
 from .rounds import ROUNDS
 
 PI = re.compile(r"^Poverty Incidence among Population")
@@ -50,24 +51,50 @@ def norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s)
 
 
+def _dims(d: dict) -> tuple[str, str, str]:
+    """(geo, item, year) dimension ids, found by content, not position (audit L-C8): the year dimension's labels
+    are all years, the item dimension holds the poverty-incidence label, the geo dimension is the other one
+    with more than one category. Any further dimension must have a single category."""
+    dims = d["dimension"]["id"]
+    labs = {k: list(d["dimension"][k]["category"].get("label", {}).values()) for k in dims}
+    year = [k for k in dims if labs[k] and all(re.fullmatch(r"\s*\d{4}\s*", str(v)) for v in labs[k])]
+    item = [k for k in dims if any(PI.match(str(v)) for v in labs[k])]
+    if len(year) != 1 or len(item) != 1 or year == item:
+        raise SchemaError(f"JSON-stat: cannot tell the year and item dimensions apart in {dims}")
+    rest = [k for k in dims if k not in (year[0], item[0])]
+    geo = [k for k in rest if len(labs[k]) > 1]
+    if len(geo) != 1:
+        raise SchemaError(f"JSON-stat: expected one geography dimension besides year and item, found {geo}")
+    return geo[0], item[0], year[0]
+
+
 def read_jsonstat(path: Path) -> pd.DataFrame:
     """JSON-stat 1.0 table -> long rows (name, depth, year, pi) for the poverty-incidence item."""
     d = json.loads(path.read_text(encoding="utf-8-sig"))["dataset"]
     dims = d["dimension"]["id"]
-    d["size"] = d["dimension"]["size"]
-    geo, item, year = dims[0], dims[1], dims[2]
+    size = [int(x) for x in d["dimension"]["size"]]
+    geo, item, year = _dims(d)
     cats = {k: d["dimension"][k]["category"] for k in dims}
     order = {k: sorted(c["index"], key=c["index"].get) for k, c in cats.items()}
     labels = {k: [cats[k]["label"][v] for v in order[k]] for k in dims}
     vals = d["value"]
-    vals = [vals.get(str(i)) for i in range(int(np.prod(d["size"])))] if isinstance(vals, dict) else vals
-    arr = np.array([np.nan if v is None else float(v) for v in vals]).reshape(d["size"])
+    vals = [vals.get(str(i)) for i in range(int(np.prod(size)))] if isinstance(vals, dict) else vals
+    if len(vals) != int(np.prod(size)):
+        raise SchemaError(f"JSON-stat: {len(vals)} values for a {size} table")
+    arr = np.array([np.nan if v is None else float(v) for v in vals]).reshape(size)
+    # any single-category dimension is dropped; the rest is put in (geo, item, year) order
+    arr = arr.reshape([n for k, n in zip(dims, size) if k in (geo, item, year)])
+    kept = [k for k in dims if k in (geo, item, year)]
+    arr = np.transpose(arr, [kept.index(geo), kept.index(item), kept.index(year)])
     k = next(i for i, lab in enumerate(labels[item]) if PI.match(lab))
+    pis = arr[:, k, :]
+    if np.isfinite(pis).any() and (np.nanmin(pis) < 0 or np.nanmax(pis) > 100):
+        raise SchemaError(f"{path.name}: poverty incidence outside [0, 100] ({np.nanmin(pis)}, {np.nanmax(pis)})")
     rows = []
     for g, name in enumerate(labels[geo]):
         depth = len(name) - len(name.lstrip("."))
         for y, yl in enumerate(labels[year]):
-            rows.append({"name": name.lstrip(". ").strip(), "depth": depth, "year": int(yl), "pi": arr[g, k, y]})
+            rows.append({"name": name.lstrip(". ").strip(), "depth": depth, "year": int(yl), "pi": pis[g, y]})
     return pd.DataFrame(rows)
 
 
@@ -101,3 +128,22 @@ def build(raw: Path, adm2: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                                                                {norm(x) for x in adm2.adm2_name})),
               "adm2_without_figure": sorted(set(adm2.adm2_pcode) - set(df.dropna(subset=["pi"]).adm2_pcode))}
     return df, report
+
+
+MIN_PROVINCES = 80  # provinces with a FIES figure per round (85-87 since 2006)
+
+
+def gate_report(new: dict, committed: dict) -> list[str]:
+    """Audit L-C8: every round keeps at least MIN_PROVINCES mapped provinces, and no FIES name is unmapped that
+    the committed report (pipeline/inputs/provinces-fies-report.json) did not already list (names compared
+    without footnote marks, so a re-issued table with new footnotes passes)."""
+    problems = [f"round {y}: {n} provinces with a FIES figure (expected >= {MIN_PROVINCES})"
+                for y, n in sorted(new.get("per_round", {}).items()) if int(n) < MIN_PROVINCES]
+    rounds_new = {int(y) for y in new.get("per_round", {})}
+    problems += [f"round {y}: no FIES figure any more" for y in sorted(ROUNDS) if y not in rounds_new
+                 and str(y) in {str(k) for k in committed.get("per_round", {})}]
+    known = {norm(n) for n in committed.get("unmapped_names", [])}
+    fresh = sorted(n for n in new.get("unmapped_names", []) if norm(n) not in known)
+    if fresh:
+        problems.append(f"FIES names not mapped to a province (add an ALIAS in lgu/fies.py): {'; '.join(fresh)}")
+    return problems

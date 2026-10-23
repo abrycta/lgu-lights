@@ -372,7 +372,27 @@ def province_metrics(test: pd.DataFrame, est: np.ndarray, fies: pd.DataFrame) ->
     return out
 
 
-def run(design_path: Path, out: Path) -> dict:
+# Metrics gate against the published data version (audit L-C1): wrong labels (a shifted column) or a broken feature
+# store show up as a much worse headline. MAE may grow by 10 %, R2 fall by 0.05, scored LGUs fall by 2 %.
+GATE_MAE_REL, GATE_R2_ABS, GATE_N_REL = 0.10, 0.05, 0.02
+
+
+def gate_metrics(new: dict, baseline: dict) -> list[str]:
+    """Problems of a new headline against the published one (both metrics.json["headline"])."""
+    problems = []
+    if new.get("test_round") != baseline.get("test_round"):
+        return []  # a new headline round is not comparable; the parity and feature gates still apply
+    nm, bm = new["model"], baseline["model"]
+    if nm["mae"] > bm["mae"] * (1 + GATE_MAE_REL):
+        problems.append(f"headline MAE {nm['mae']:.3f} vs published {bm['mae']:.3f} (max +{GATE_MAE_REL:.0%})")
+    if nm["r2"] < bm["r2"] - GATE_R2_ABS:
+        problems.append(f"headline R2 {nm['r2']:.3f} vs published {bm['r2']:.3f} (max -{GATE_R2_ABS})")
+    if new["n"] < baseline["n"] * (1 - GATE_N_REL):
+        problems.append(f"headline rows {new['n']} vs published {baseline['n']} (max -{GATE_N_REL:.0%})")
+    return problems
+
+
+def run(design_path: Path, out: Path, baseline: Path | None = None) -> dict:
     t_start = time.time()
     out.mkdir(parents=True, exist_ok=True)
     d = pd.read_csv(design_path, dtype={"adm3_pcode": str, "province": str}, float_precision="round_trip")
@@ -460,4 +480,8 @@ def run(design_path: Path, out: Path) -> dict:
     }
     report["seconds"] = round(time.time() - t_start, 1)
     (out / "metrics.json").write_text(json.dumps(report, indent=1))
+    if baseline is not None and baseline.exists():
+        problems = gate_metrics(report["headline"], json.loads(baseline.read_text())["headline"])
+        if problems:
+            raise RuntimeError("metrics gate failed (pass --accept-metrics after review): " + "; ".join(problems))
     return report
