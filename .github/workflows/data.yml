@@ -22,8 +22,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Data version (immutable folder name, e.g. v6); an existing one needs overwrite
-        required: true
+        description: Data version (immutable folder name, e.g. v6); an existing one needs overwrite. Not needed with canary_only
+        required: false
+        default: ""
       overwrite:
         description: Replace an existing data-<version> (and features-<version>) release; the old one is kept as <tag>-prev
         type: boolean
@@ -122,6 +123,8 @@ jobs:
           fi
           cat "$GITHUB_OUTPUT"
       - name: Data versions are write-once (audit L-C4)
+        # canary_only builds and publishes nothing, so it needs no version
+        if: steps.c.outputs.canary_only != 'true'
         env:
           VERSION: ${{ steps.c.outputs.version }}
           FEATURES: ${{ steps.c.outputs.features }}

@@ -10,6 +10,7 @@ Nothing is downloaded: polygons are sent in chunks and `reduceRegions` returns o
 
 Credentials: EE_SERVICE_ACCOUNT_KEY (JSON) in CI; locally the hex-encoded Keychain item earth-engine-sa-key.
 """
+
 from __future__ import annotations
 
 import concurrent.futures as cf
@@ -25,7 +26,7 @@ PROJECT = "lgu-lights"
 MODIS = "MODIS/061/MOD13Q1"
 WORLDPOP = "WorldPop/GP/100m/pop"
 DEM = "USGS/SRTMGL1_003"
-SIMPLIFY_DEG = 0.0005      # about 55 m, a fifth of a MODIS pixel; requests stay well under the 10 MB limit
+SIMPLIFY_DEG = 0.0005  # about 55 m, a fifth of a MODIS pixel; requests stay well under the 10 MB limit
 CHUNK_VERTICES = 120_000
 
 
@@ -34,8 +35,12 @@ def init() -> None:
 
     key = os.environ.get("EE_SERVICE_ACCOUNT_KEY")
     if not key:
-        hexkey = subprocess.run(["security", "find-generic-password", "-s", "earth-engine-sa-key", "-w"],
-                                capture_output=True, text=True, check=True).stdout.strip()
+        hexkey = subprocess.run(
+            ["security", "find-generic-password", "-s", "earth-engine-sa-key", "-w"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
         key = bytes.fromhex(hexkey).decode()
     email = json.loads(key)["client_email"]
     ee.Initialize(ee.ServiceAccountCredentials(email, key_data=key), project=PROJECT)
@@ -60,8 +65,9 @@ def _fc(rows):  # type: ignore[no-untyped-def]
     import ee
     from shapely.geometry import mapping
 
-    return ee.FeatureCollection([ee.Feature(ee.Geometry(mapping(r.geometry), geodesic=False),
-                                            {"adm3_pcode": r.adm3_pcode}) for r in rows])
+    return ee.FeatureCollection(
+        [ee.Feature(ee.Geometry(mapping(r.geometry), geodesic=False), {"adm3_pcode": r.adm3_pcode}) for r in rows]
+    )
 
 
 def _reduce(image, rows, reducer, scale: float) -> list[dict]:  # type: ignore[no-untyped-def]
@@ -92,8 +98,7 @@ def images(years: list[int]):  # type: ignore[no-untyped-def]
 
     def vi(y: int):  # type: ignore[no-untyped-def]
         col = ee.ImageCollection(MODIS).filterDate(f"{y}-01-01", f"{y + 1}-01-01")
-        good = col.map(lambda im: im.select(["NDVI", "EVI"]).multiply(0.0001)
-                       .updateMask(im.select("SummaryQA").lte(1)))
+        good = col.map(lambda im: im.select(["NDVI", "EVI"]).multiply(0.0001).updateMask(im.select("SummaryQA").lte(1)))
         return good.mean().rename([f"ndvi_{y}", f"evi_{y}"])
 
     veg = ee.Image.cat([vi(y) for y in years])
@@ -134,10 +139,19 @@ def zonal(adm3_path: Path, years: list[int], out: Path) -> Path:
     for pcode, p in recs.items():
         for y in years:
             py = min(y, 2020)
-            long.append({"adm3_pcode": pcode, "year": y, "ndvi_mean": p.get(f"ndvi_{y}"), "evi_mean": p.get(f"evi_{y}"),
-                         "veg_composites": composites[y],
-                         "pop": p.get(f"pop_{py}"), "pop_carried": y not in pop_years,
-                         "elev_mean": p.get("elev"), "slope_mean": p.get("slope")})
+            long.append(
+                {
+                    "adm3_pcode": pcode,
+                    "year": y,
+                    "ndvi_mean": p.get(f"ndvi_{y}"),
+                    "evi_mean": p.get(f"evi_{y}"),
+                    "veg_composites": composites[y],
+                    "pop": p.get(f"pop_{py}"),
+                    "pop_carried": y not in pop_years,
+                    "elev_mean": p.get("elev"),
+                    "slope_mean": p.get("slope"),
+                }
+            )
     df = pd.DataFrame(long)
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out, index=False)
