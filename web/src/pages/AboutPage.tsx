@@ -71,7 +71,7 @@ function Folds({ m }: { m: Metrics }) {
       <Table className="text-xs" data-testid="folds">
         <TableCaption className="text-left">
           <T
-            en="Every backtest: each one is trained only on the PSA rounds before its test year. Town level is the mean absolute error over cities and municipalities; province level compares population-weighted province averages of the same figures with the same weighting of PSA's town figures."
+            en="Every backtest: each one is trained only on the PSA rounds before its test year. Town level is the mean absolute error over cities and municipalities. Province level compares population-weighted province averages of the same figures with the same weighting of PSA's town figures."
             ja="すべての検証：それぞれ検証年より前のPSA調査回だけで学習しています。市町村レベルは市町村ごとの平均絶対誤差、州レベルは同じ値を人口で重み付けした州平均を、PSAの市町村値の同じ重み付け平均と比べたものです。"
           />
         </TableCaption>
@@ -118,7 +118,7 @@ export default function AboutPage() {
       title={<T en="Honest about the data" ja="データに正直に" />}
       lede={
         <T
-          en="Lights maps poverty incidence for every Philippine city and municipality from 2012 to 2025, and always tells you which numbers are official and which are model estimates."
+          en="Lights maps poverty incidence for every Philippine city and municipality, 2012 to 2025. It always shows which figures are official and which are model estimates."
           ja="Lightsは2012〜2025年のフィリピン全市町村の貧困率を地図にし、どの値が公式統計でどの値がモデル推計かを常に示します。"
         />
       }
@@ -130,7 +130,7 @@ export default function AboutPage() {
           </h2>
           <p className="rounded-sm border border-seal p-3">
             <T
-              en="Model estimates are not official statistics. The model starts from the last PSA round and estimates how the place moved within its province. It adds the national trend and the province’s previous PSA survey (FIES) figure when past rounds show those help, and it learns from PSA rounds back to 2006. Intervals show how uncertain each estimate is. Use PSA’s official figures for decisions whenever they exist."
+              en="Model estimates are not official statistics. The model starts from the last PSA round and estimates how the place moved within its province. When past rounds show they help, it also uses the national trend and the province’s previous PSA survey (FIES) figure. It learns from PSA rounds back to 2006. Intervals show how uncertain each estimate is. Use PSA’s official figures for decisions whenever they exist."
               ja="モデル推計は公式統計ではありません。モデルは直近のPSA調査回を出発点に、その市町村が州の中でどう動いたかを推定します。過去の調査回で効果が確かめられた場合には、全国の傾向と、その州の前回のPSA家計調査（FIES）の値も加えます。学習には2006年までさかのぼるPSA調査回を使います。区間がそれぞれの推計の不確かさを示します。判断には、公式値がある限りPSAの公式統計を使ってください。"
             />
           </p>
@@ -139,6 +139,12 @@ export default function AboutPage() {
               <T
                 en="PSA official figures (2012, 2015, 2018, 2021, 2023) are drawn solid, with their published 90 % confidence intervals. PSA changed method from ELL to Census EB between 2018 and 2021."
                 ja="PSA公式値（2012・2015・2018・2021・2023年）は濃い色で、公表された90%信頼区間とともに表示します。PSAは2018年と2021年の間にELL法からCensus EB法へ手法を変更しました。"
+              />
+            </li>
+            <li>
+              <T
+                en="PSA publishes the City of Manila only as its 14 districts. Lights combines them into one figure for each round, weighting each district by its 2020 Census population, and labels it “combined from PSA's 14 district estimates”."
+                ja="PSAはマニラ市を14の地区に分けてのみ公表しています。Lightsは各調査回について、2020年国勢調査の人口で各地区を重み付けして一つの値にまとめ、「PSAの14地区の推計を人口で加重して合算」と表示します。"
               />
             </li>
             <li>
@@ -161,13 +167,13 @@ export default function AboutPage() {
             </li>
             <li>
               <T
-                en="Backtests: in round years the panel also shows what the model would have said without that round, so you can judge it. The 2021 backtest assumed that the downward trend before COVID-19 would continue; poverty stopped falling between 2018 and 2021 (COVID-19, and PSA’s change of method), which is why it misses that round."
+                en="Backtests: in PSA round years, the panel also shows what the model would have said without that round, so you can judge it. The 2021 backtest assumed poverty would keep falling as it had before COVID-19. It stopped falling between 2018 and 2021 (COVID-19, and PSA’s change of method), so the backtest misses that round."
                 ja="検証：調査年には、その調査回がなかった場合のモデル推計も表示し、精度を確かめられるようにしています。2021年の検証は、新型コロナ以前の低下傾向が続くと仮定していました。実際には2018〜2021年に貧困率の低下が止まった（新型コロナとPSAの手法変更）ため、この回は外れています。"
               />
             </li>
             <li>
               <T
-                en="What-if scenarios are hypothetical, run in your browser, have a widened interval, and are never drawn on the main map."
+                en="What-if scenarios are hypothetical. They run in your browser, carry a widened interval, and are never drawn on the main map."
                 ja="仮定のシナリオはブラウザ内で計算する仮の値で、区間を広げて表示し、メインの地図には描きません。"
               />
             </li>
@@ -181,7 +187,7 @@ export default function AboutPage() {
           <ul className="grid list-disc gap-2 pl-5">
             <li>
               <T
-                en="Poverty incidence is the share of people whose family income is below PSA's official poverty threshold. Nationally, in 2023, that threshold was ₱13,873 a month for a family of five (PSA, 2023 Full-Year Official Poverty Statistics); it differs by province."
+                en="Poverty incidence is the share of people whose family income is below PSA's official poverty threshold. In 2023 the national threshold was ₱13,873 a month for a family of five (PSA, 2023 Full-Year Official Poverty Statistics). It differs by province."
                 ja="貧困率は、家族の所得がPSAの公式貧困線を下回る人の割合です。2023年の全国の貧困線は5人家族で月13,873ペソでした（PSA「2023年通年公式貧困統計」）。州によって異なります。"
               />{" "}
               <a className={LINK} href="https://psa.gov.ph/statistics/poverty/node/1684064929">
@@ -196,20 +202,20 @@ export default function AboutPage() {
             </li>
             <li>
               <T
-                en="Comparisons never mix sources: an official figure is ranked only among the places with official PSA figures for that year, a model estimate only among model estimates, and the sentence says which. The national rank is the share of those places with a lower value (from the published table of every place's value). The province average is weighted by population (WorldPop, published with every place) when every place has it, otherwise it is a simple average of places; when it lies inside the place's 90 % interval the sentence says “within the margin of error” instead of above or below."
+                en="Comparisons never mix sources. An official figure is ranked only among places with official PSA figures for that year, and a model estimate only among model estimates; the sentence says which. The national rank is the share of those places with a lower value, taken from the published table of every place's value. The province average is weighted by population (WorldPop, published with every place) when every place has it; otherwise it is a simple average of places. When that average lies inside the place's 90 % interval, the sentence says “within the margin of error” instead of above or below."
                 ja="比較では出典を混ぜません。公式値はその年にPSA公式値がある市町村の中でだけ、モデル推計はモデル推計の中でだけ順位を求め、どちらかを文中に示します。全国順位は、それらの市町村のうち値が低いものの割合です（全市町村の値を公開した表から計算）。州の平均は、全市町村に人口（WorldPop、各市町村のデータに公開）があれば人口で重み付けし、なければ市町村の単純平均です。平均がその市町村の90%区間に入るときは、上回る・下回るではなく「誤差の範囲内」と書きます。"
               />
             </li>
             <li>
               <T
-                en="“Did it really change?”: a change between two figures is called likely real when it is larger than 1.645 × √(SE₁² + SE₂²), a two-sided test at the 10 % level that treats the two figures as independent. PSA figures use their published standard errors; a model estimate uses the larger side of its 90 % interval divided by 1.645. A model year is compared with the PSA round it starts from. Figures on either side of PSA's 2018 → 2021 method change are never compared. Clear changes between PSA rounds are marked ▲▼ on the chart."
+                en="“Did it really change?”: a change between two figures is called likely real when it is larger than 1.645 × √(SE₁² + SE₂²). This is a two-sided test at the 10 % level that treats the two figures as independent. PSA figures use their published standard errors; a model estimate uses the larger side of its 90 % interval divided by 1.645. A model year is compared with the PSA round it starts from. Figures on either side of PSA's 2018 → 2021 method change are never compared. Clear changes between PSA rounds are marked ▲▼ on the chart."
                 ja="「本当に変わったか」：二つの値の差が1.645 × √(SE₁² + SE₂²)より大きいとき「おそらく実際の変化」とします（二つの値を独立とみなした10%水準の両側検定）。PSAの値は公表された標準誤差を、モデル推計は90%区間の広い側を1.645で割った値を使います。モデル推計の年は、出発点となったPSA調査回と比べます。PSAの2018→2021年の手法変更をまたぐ値は比較しません。PSA調査回の間の明らかな変化はグラフに▲▼で示します。"
               />
             </li>
             <li>
               <T
-                en="Province summaries count places above the national median of the same source and year, and apply the same change test between the first and last PSA rounds of the current method (2012–2018 or 2021 onwards). The national sentence ranks regions by the simple average of their places with figures of that year's source; regions with fewer than 5 such places are left out and named."
-                ja="州の要約では、同じ年・同じ出典の全国中央値を上回る市町村を数え、現在の手法の最初と最後のPSA調査回（2012〜2018年、または2021年以降）の間に同じ変化の検定を当てはめます。全国の文は、その年の出典の値がある市町村の単純平均で地域を順位付けし、そうした市町村が5未満の地域は除外して名前を示します。"
+                en="Province summaries count places above the national median for the same source and year. They apply the same change test between the first and last PSA rounds of the current method (2012–2018 or 2021 onwards). The national sentence ranks regions by the simple average of their places with figures from that year's source. Regions with fewer than 5 such places are left out and named."
+                ja="州の要約では、同じ年・同じ出典の全国中央値を上回る市町村を数えます。また、現在の手法の最初と最後のPSA調査回（2012〜2018年、または2021年以降）の間に、同じ変化の検定を当てはめます。全国の文は、その年の出典の値がある市町村の単純平均で地域を順位付けします。そうした市町村が5未満の地域は除外し、その名前を示します。"
               />
             </li>
             <li>
