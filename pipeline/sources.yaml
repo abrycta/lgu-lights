@@ -150,6 +150,7 @@ sources:
     licence: "PSA OpenSTAT terms of use (free use with attribution)"
     attribution: "Philippine Statistics Authority, OpenSTAT: Annual Per Capita Poverty Threshold, Poverty Incidence and Magnitude of Poor Population by Region/Province"
     cadence: once (superseded series)
+    status: archive-only   # PSA answers 403 to CI runners and re-serves the tables with other bytes; the adopted copy in the archive is served (Kurt, 2026-10-23; needs archivekit >= 1.3)
     pin:
       intake: "POST query (every value of every variable, JSON-stat 2) with pipeline/tools/fetch_openstat.py on 2026-10-21; adopted with pipeline/tools/adopt_manual.py"
     links:
@@ -177,6 +178,7 @@ sources:
     licence: "PSA OpenSTAT terms of use (free use with attribution)"
     attribution: "Philippine Statistics Authority, OpenSTAT: Full Year Poverty Statistics, Table 2"
     cadence: every FIES round (about every 3 years)
+    status: archive-only   # PSA answers 403 to CI runners and re-serves the tables with other bytes; the adopted copy in the archive is served (Kurt, 2026-10-23; needs archivekit >= 1.3)
     pin:
       intake: "POST query with pipeline/tools/fetch_openstat.py on 2026-10-21; adopted with pipeline/tools/adopt_manual.py"
     links:
@@ -204,6 +206,7 @@ sources:
     licence: "PSA OpenSTAT terms of use (free use with attribution)"
     attribution: "Philippine Statistics Authority, OpenSTAT: Full Year Poverty Statistics, Table 2a"
     cadence: every FIES round (about every 3 years)
+    status: archive-only   # PSA answers 403 to CI runners and re-serves the tables with other bytes; the adopted copy in the archive is served (Kurt, 2026-10-23; needs archivekit >= 1.3)
     pin:
       intake: "POST query with pipeline/tools/fetch_openstat.py on 2026-10-21; adopted with pipeline/tools/adopt_manual.py"
     links:
