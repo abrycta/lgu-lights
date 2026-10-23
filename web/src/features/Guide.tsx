@@ -4,15 +4,18 @@
 
 import { Button, Card, CardContent, CardHeader, CardTitle, LegendSwatch, T, useT } from "@abrycta/akari/react";
 import { XIcon } from "lucide-react";
-import { useState } from "react";
+import { use, useState } from "react";
 
 import { useGuide } from "@/app/prefs";
+import { loadManifest } from "@/data/load";
 import { MODEL_OPACITY, OFFICIAL_OPACITY, PLAIN_BINS } from "@/lib/honesty";
+import { yearList } from "@/lib/rounds";
 
 import { Term } from "./Term";
 
 export function Guide() {
   const t = useT();
+  const { rounds } = use(loadManifest());
   const [open, setOpen] = useGuide();
   const [step, setStep] = useState(0);
   // Start at the first step each time the guide opens (state adjusted during render, not in an effect).
@@ -56,7 +59,7 @@ export function Guide() {
         <Term k="psa" />
         <T en=" figures (" ja="の公式値（" />
         <Term k="sae">{t("small-area estimates", "小地域推計")}</Term>
-        <T en=", 2012, 2015, 2018, 2021, 2023). Lighter colours are Lights " ja="、2012・2015・2018・2021・2023年）です。淡い色はLightsの" />
+        <T en={`, ${yearList(rounds, "en")}). Lighter colours are Lights `} ja={`、${yearList(rounds, "ja")}年）です。淡い色はLightsの`} />
         <Term k="model">{t("model estimates", "モデル推計")}</Term>
         <T en=" for the other years: not official, and always shown with an " ja="で、公式統計ではなく、必ず" />
         <Term k="interval">{t("interval", "区間")}</Term>

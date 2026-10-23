@@ -27,7 +27,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-ROUNDS = (2006, 2009, 2012, 2015, 2018, 2021, 2023)
+from .rounds import ROUNDS
+
 PI = re.compile(r"^Poverty Incidence among Population")
 
 # FIES names that differ from HDX COD-AB ADM2 names (normalised), -> ADM2 pcodes

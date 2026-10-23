@@ -11,22 +11,22 @@ pub const FEATURES: [&str; 20] = [
     "y_prev",         // official estimate in round r (pp)
     "gap",            // t - r (years)
     "trend_prev",     // (y_r - y_r2) / (r - r2), previous official trend; NaN without r2
-    "era_cross",      // 1 when r <= 2018 and t >= 2021 (ELL -> Census EB estimator change)
+    "era_cross", // 1 when r < CENSUS_EB_FROM <= t (ELL -> Census EB estimator change, 2018 -> 2021)
     "prov_prev_mean", // mean official estimate of the province's LGUs in round r
-    "se_prev",        // PSA standard error in round r (pp)
-    "l_bm",           // ln(1 + Black Marble mean radiance), year t
-    "d_l_bm",         // l_bm(t) - l_bm(r)
-    "lit",            // lit fraction (radiance > 0.5 nW cm-2 sr-1), year t
-    "d_lit",          // lit(t) - lit(r)
-    "l_rpc",          // ln(1 + 1000 * radiance sum / population), year t
-    "l_dens",         // ln(1 + population / km2), year t
-    "d_l_pop",        // ln(pop(t)) - ln(pop(r))
-    "ndvi",           // MODIS NDVI annual mean, year t
-    "d_ndvi",         // ndvi(t) - ndvi(r)
-    "evi",            // MODIS EVI annual mean, year t
-    "elev",           // mean elevation (m)
-    "slope",          // mean slope (degrees)
-    "bm_valid",       // fraction of the LGU with valid Black Marble pixels, year t
+    "se_prev",   // PSA standard error in round r (pp)
+    "l_bm",      // ln(1 + Black Marble mean radiance), year t
+    "d_l_bm",    // l_bm(t) - l_bm(r)
+    "lit",       // lit fraction (radiance > 0.5 nW cm-2 sr-1), year t
+    "d_lit",     // lit(t) - lit(r)
+    "l_rpc",     // ln(1 + 1000 * radiance sum / population), year t
+    "l_dens",    // ln(1 + population / km2), year t
+    "d_l_pop",   // ln(pop(t)) - ln(pop(r))
+    "ndvi",      // MODIS NDVI annual mean, year t
+    "d_ndvi",    // ndvi(t) - ndvi(r)
+    "evi",       // MODIS EVI annual mean, year t
+    "elev",      // mean elevation (m)
+    "slope",     // mean slope (degrees)
+    "bm_valid",  // fraction of the LGU with valid Black Marble pixels, year t
     "prov_fies_gap", // PSA FIES provincial poverty in round r minus prov_prev_mean, centred over provinces (v3)
 ];
 pub const N_FEATURES: usize = FEATURES.len();
@@ -57,7 +57,7 @@ pub fn row_with(
         None => f64::NAN,
     };
     // Years outside the feature years (rounds before 2012) have no satellite or population inputs.
-    let at = |y: i32| panel::year_index(y).map_or([f64::NAN; panel::N_RAW], raw_at);
+    let at = |y: i32| panel.year_index(y).map_or([f64::NAN; panel::N_RAW], raw_at);
     let now = at(t);
     let then = at(ry);
     let area = panel.stat(lgu, 0);
@@ -83,7 +83,11 @@ pub fn row_with(
         o.estimate,
         f64::from(t - ry),
         trend,
-        if ry <= 2018 && t >= 2021 { 1.0 } else { 0.0 },
+        if ry < panel::CENSUS_EB_FROM && t >= panel::CENSUS_EB_FROM {
+            1.0
+        } else {
+            0.0
+        },
         prov.means[p * ROUNDS.len() + r],
         o.se,
         l_bm_t,
@@ -115,13 +119,14 @@ pub fn row(panel: &Panel, prov: &ProvinceStats, lgu: usize, t: i32, r: usize) ->
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::panel::{N_RAW, N_YEARS, Official};
+    use crate::panel::{N_RAW, Official};
 
     pub(crate) fn tiny_panel() -> Panel {
-        let mut p = Panel::default();
+        let mut p = Panel::new(2012, 2025);
+        let n_years = p.n_years;
         for (id, prov, base) in [(100u32, 1u32, 1.0f64), (200, 1, 4.0), (300, 2, 0.2)] {
-            let mut raw = vec![0.0; N_YEARS * N_RAW];
-            for y in 0..N_YEARS {
+            let mut raw = vec![0.0; n_years * N_RAW];
+            for y in 0..n_years {
                 let g = 1.0 + 0.05 * y as f64;
                 raw[y * N_RAW..(y + 1) * N_RAW].copy_from_slice(&[
                     base * g,

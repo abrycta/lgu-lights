@@ -52,6 +52,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
+from .rounds import BACKTESTS, ROUNDS
+
 log = logging.getLogger("lgu.train")
 
 FEATURES = ["y_prev", "gap", "trend_prev", "era_cross", "prov_prev_mean", "se_prev", "l_bm", "d_l_bm", "lit",
@@ -65,8 +67,7 @@ WHATIF_WIDEN = 1.25
 TARGET_NOTE = ("forest: change since the previous round minus the province's mean change in the same "
                "transition (v2); linear: national drift and lagged provincial FIES gap when selected (v3)")
 N_BINS = 4
-OUTER_TESTS = (2018, 2021, 2023)  # F1, F2, F3 (the folds reported since v1)
-VIIRS_FIRST_TARGET = 2015         # first transition whose both ends are in the feature years
+OUTER_TESTS = BACKTESTS  # F1, F2, F3 (the folds reported since v1), config/rounds.json
 DEFAULT = {"num_leaves": 15, "learning_rate": 0.03, "n_estimators": 400, "min_child_samples": 40,
            "lambda_l2": 5.0, "objective": "huber"}
 GRID = {"num_leaves": [7, 15, 31], "n_estimators": [250, 600], "min_child_samples": [20, 60],
@@ -382,6 +383,8 @@ def run(design_path: Path, out: Path) -> dict:
     lab["target_within"] = within_target(lab)
     # WorldPop population of the target year (province-level aggregation weights)
     pop = pd.read_parquet(design_path.parent / "features.parquet", columns=["adm3_pcode", "year", "pop"])
+    # first transition whose both ends are in the feature years (2015 with feature years from 2012)
+    viirs_first_target = min(r for r in ROUNDS if r > int(pop.year.min()))
     lab = lab.merge(pop, on=["adm3_pcode", "year"], how="left")
     fies_path = design_path.parent / "provinces_fies.parquet"
     fies = pd.read_parquet(fies_path) if fies_path.exists() else pd.DataFrame(
@@ -413,7 +416,7 @@ def run(design_path: Path, out: Path) -> dict:
         row["carry_forward"] = metrics(test, carry, None) | province_metrics(test, carry, fies)
         # mean change per year in the training rounds of the VIIRS era (the v1/v2 definition, so the
         # baseline stays comparable across versions); the all-rounds variant is reported beside it
-        viirs = train[train.year >= VIIRS_FIRST_TARGET]
+        viirs = train[train.year >= viirs_first_target]
         drift = float((viirs.target / viirs.gap).mean())
         drift_all = float((train.target / train.gap).mean())
         row["carry_forward_drift_all_rounds"] = metrics(

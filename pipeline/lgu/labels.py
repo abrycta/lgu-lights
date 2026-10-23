@@ -33,8 +33,8 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
-ROUNDS = (2006, 2009, 2012, 2015, 2018, 2021, 2023)
-ESTIMATOR = {2006: "ELL", 2009: "ELL", 2012: "ELL", 2015: "ELL", 2018: "ELL", 2021: "CensusEB", 2023: "CensusEB"}
+from .rounds import ESTIMATOR, from_workbook
+
 Z90 = 1.6448536269514722
 
 
@@ -94,16 +94,19 @@ def created_later(wb: openpyxl.Workbook, year: int) -> set[str]:
 
 
 def parse_annex_2023(wb: openpyxl.Workbook, source_id: str) -> list[SaeRow]:
-    """2023 Annex 1: estimates 2018/2021/2023 (cols 3-5), CV (6-8), SE (9-11), CI pairs (12-17)."""
+    """2023 Annex 1, one block per round of the workbook (config/rounds.json; 2018/2021/2023): estimates
+    (cols 3-5), CV (6-8), SE (9-11), CI pairs (12-17)."""
     rows = []
     ws = wb.worksheets[0]
+    years = from_workbook(source_id)
+    n = len(years)
     for code, prov, name, r in _rows(ws):
-        for k, year in enumerate((2018, 2021, 2023)):
+        for k, year in enumerate(years):
             est = _num(r[3 + k])
             if est is None:
                 continue
-            rows.append(SaeRow(code, prov, name, year, est, _num(r[6 + k]), _num(r[9 + k]),
-                               _num(r[12 + 2 * k]), _num(r[13 + 2 * k]), source_id))
+            rows.append(SaeRow(code, prov, name, year, est, _num(r[3 + n + k]), _num(r[3 + 2 * n + k]),
+                               _num(r[3 + 3 * n + 2 * k]), _num(r[4 + 3 * n + 2 * k]), source_id))
     return rows
 
 
@@ -254,8 +257,9 @@ def build_labels(sae_2018_2021: Path, sae_2023: Path, adm3: pd.DataFrame, overri
         return openpyxl.load_workbook(io.BytesIO(p.read_bytes()), read_only=True, data_only=True)
 
     wb1, wb2 = open_wb(sae_2018_2021), open_wb(sae_2023)
-    rows = [r for y in (2006, 2009, 2012, 2015) for r in parse_round_sheet(wb1, y, "psa-sae-2018-2021")]
-    new_after = {y: created_later(wb1, y) for y in (2006, 2009, 2012, 2015)}
+    sheets = from_workbook("psa-sae-2018-2021")
+    rows = [r for y in sheets for r in parse_round_sheet(wb1, y, "psa-sae-2018-2021")]
+    new_after = {y: created_later(wb1, y) for y in sheets}
     rows += parse_annex_2023(wb2, "psa-sae-2023")
     combined: list[SaeRow] = []
     if psgc is not None:

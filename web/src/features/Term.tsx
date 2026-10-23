@@ -2,7 +2,10 @@
 // a keyboard (Enter/Space on the term), on touch (tap) and with a mouse (it also opens on hover).
 
 import { Popover, PopoverContent, PopoverTrigger, useLang } from "@abrycta/akari/react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, use, useRef, useState } from "react";
+
+import { loadManifest } from "@/data/load";
+import { yearList } from "@/lib/rounds";
 
 export type TermKey = "incidence" | "psa" | "sae" | "model" | "interval";
 
@@ -10,7 +13,7 @@ export type TermKey = "incidence" | "psa" | "sae" | "model" | "interval";
  * The poverty threshold is PSA's 2023 full-year figure: PhP 13,873 a month for a family of five,
  * nationally (https://psa.gov.ph/statistics/poverty/node/1684064929). Provincial thresholds differ.
  */
-export const DEFINITIONS: Record<TermKey, { term: { en: string; ja: string }; en: string; ja: string }> = {
+const definitions = (rounds: readonly number[]): Record<TermKey, { term: { en: string; ja: string }; en: string; ja: string }> => ({
   incidence: {
     term: { en: "Poverty incidence", ja: "貧困率" },
     en: "The share of people whose family income is below PSA's official poverty threshold: the money a family needs for basic food and non-food needs. In 2023 that was ₱13,873 a month for a family of five, nationally (it varies by province).",
@@ -23,8 +26,8 @@ export const DEFINITIONS: Record<TermKey, { term: { en: string; ja: string }; en
   },
   sae: {
     term: { en: "Small-area estimate", ja: "小地域推計" },
-    en: "PSA's official poverty figure for each city and municipality. A household survey is too small to measure every town directly, so PSA combines it with the census. Published for 2012, 2015, 2018, 2021 and 2023.",
-    ja: "PSAが市町村ごとに出す公式の貧困率です。家計調査だけでは市町村ごとに測るには標本が小さいため、国勢調査と組み合わせて推計します。2012・2015・2018・2021・2023年に公表。",
+    en: `PSA's official poverty figure for each city and municipality. A household survey is too small to measure every town directly, so PSA combines it with the census. Published for ${yearList(rounds, "en", true)}.`,
+    ja: `PSAが市町村ごとに出す公式の貧困率です。家計調査だけでは市町村ごとに測るには標本が小さいため、国勢調査と組み合わせて推計します。${yearList(rounds, "ja")}年に公表。`,
   },
   model: {
     term: { en: "Model estimate", ja: "モデル推計" },
@@ -36,13 +39,13 @@ export const DEFINITIONS: Record<TermKey, { term: { en: string; ja: string }; en
     en: "The range the true figure probably lies in. For PSA figures it is the 90 % confidence interval, for model estimates the 90 % prediction interval: about 9 times in 10 the true figure is inside it.",
     ja: "実際の値がおそらく入る範囲です。PSAの値では90%信頼区間、モデル推計では90%予測区間で、10回に9回ほどは実際の値がこの中に入ります。",
   },
-};
+});
 
 export function Term({ k, children }: { k: TermKey; children?: ReactNode }) {
   const { lang } = useLang();
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const d = DEFINITIONS[k];
+  const d = definitions(use(loadManifest()).rounds)[k];
   const hover = (o: boolean) => (e: React.PointerEvent) => {
     if (e.pointerType !== "mouse") return;
     if (closeTimer.current) clearTimeout(closeTimer.current);

@@ -3,9 +3,9 @@ name: Rust
 
 on:
   push:
-    paths: [crates/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/rust.yml, .github/actions/setup-rust/**]
+    paths: [config/**, crates/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/rust.yml, .github/actions/setup-rust/**]
   pull_request:
-    paths: [crates/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/rust.yml, .github/actions/setup-rust/**]
+    paths: [config/**, crates/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/rust.yml, .github/actions/setup-rust/**]
   workflow_dispatch:
 
 permissions:

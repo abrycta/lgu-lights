@@ -17,3 +17,18 @@ def test_ratio_scales_noaa20_onto_snpp_over_lit_pixels():
     assert laads.bm_ratio(snpp, noaa20) == pytest.approx(1.25)
     with pytest.raises(RuntimeError):
         laads.bm_ratio(np.zeros((2, 2), np.float32), np.ones((2, 2), np.float32))
+
+
+def test_lit_fraction_is_calibrated_per_lgu_in_noaa20_years_only():
+    import pandas as pd
+
+    res = pd.DataFrame({"adm3_pcode": ["A", "B", "C", "A", "B", "C"], "year": [2025] * 3 + [2026] * 3,
+                        "bm_lit_frac": [0.3, 0.1, 0.0, 0.2, 0.05, 0.1]})
+    snpp = pd.Series({"A": 0.3, "B": 0.1, "C": 0.02})
+    noaa20 = pd.Series({"A": 0.2, "B": 0.05, "C": 0.0})
+    out = laads.calibrate_lit(res, snpp, noaa20)
+    assert out.bm_lit_frac[:3].tolist() == [0.3, 0.1, 0.0]  # S-NPP year untouched
+    nat = 0.42 / 0.25  # C has no NOAA-20 lit pixels in the overlap year: national ratio
+    assert out.bm_lit_frac[3:].tolist() == pytest.approx([0.3, 0.1, 0.1 * nat])
+    capped = laads.calibrate_lit(res.assign(bm_lit_frac=0.9), snpp, noaa20)
+    assert capped.bm_lit_frac.max() == 1.0

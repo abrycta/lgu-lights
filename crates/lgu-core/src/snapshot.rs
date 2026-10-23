@@ -10,7 +10,7 @@
 //! ```
 //! Version 1 (data v1, v2: five rounds 2012-2023, no provincial FIES) is still read.
 
-use crate::panel::{FIRST_YEAR, N_RAW, N_STATIC, N_YEARS, Official, Panel, ROUNDS};
+use crate::panel::{N_RAW, N_STATIC, Official, Panel, ROUNDS};
 
 const MAGIC: &[u8; 4] = b"LGUS";
 const VERSION: u32 = 2;
@@ -18,20 +18,20 @@ const VERSION: u32 = 2;
 pub fn encode(p: &Panel) -> Vec<u8> {
     let n = p.len();
     let mut out =
-        Vec::with_capacity(40 + n * (8 + 4 * (N_YEARS * N_RAW + N_STATIC + ROUNDS.len() * 2)));
+        Vec::with_capacity(40 + n * (8 + 4 * (p.n_years * N_RAW + N_STATIC + ROUNDS.len() * 2)));
     out.extend_from_slice(MAGIC);
     for v in [
         VERSION,
         n as u32,
         p.provinces.len() as u32,
-        N_YEARS as u32,
+        p.n_years as u32,
         N_RAW as u32,
         N_STATIC as u32,
         ROUNDS.len() as u32,
     ] {
         out.extend_from_slice(&v.to_le_bytes());
     }
-    out.extend_from_slice(&FIRST_YEAR.to_le_bytes());
+    out.extend_from_slice(&p.first_year.to_le_bytes());
     for v in p.ids.iter().chain(&p.province).chain(&p.provinces) {
         out.extend_from_slice(&v.to_le_bytes());
     }
@@ -88,21 +88,29 @@ pub fn decode(b: &[u8]) -> Result<Panel, String> {
         r.u32()? as usize,
         r.u32()? as usize,
     ];
-    // Snapshots written before model v3 carry the five rounds 2012-2023 only; they are read with the
-    // earlier rounds empty, so an older data version still works with this build (rollback).
-    const LEGACY_ROUNDS: usize = 5; // 2012, 2015, 2018, 2021, 2023
-    let skip = match shape[3] {
-        k if k == ROUNDS.len() => 0,
-        LEGACY_ROUNDS => ROUNDS.len() - LEGACY_ROUNDS,
-        _ => return Err("snapshot layout differs from this build of lgu-core".into()),
-    };
-    if shape[..3] != [N_YEARS, N_RAW, N_STATIC] || r.u32()? as i32 != FIRST_YEAR {
+    // Older data versions still work with this build (rollback, and the site serves several versions):
+    // version 1 snapshots (before model v3) carry the five rounds 2012-2023 only, read with the earlier
+    // rounds empty; a version 2 snapshot written before a round was added to config/rounds.json carries the
+    // first `k` rounds, read with the later rounds empty.
+    let k = shape[3];
+    let skip = match version {
+        1 => ROUNDS
+            .iter()
+            .position(|&y| y == 2012)
+            .filter(|&s| s + k == ROUNDS.len()),
+        _ => (k <= ROUNDS.len()).then_some(0),
+    }
+    .ok_or("snapshot rounds differ from this build of lgu-core")?;
+    // The feature years are the snapshot's own (header); only the field layout must match this build.
+    let n_years = shape[0];
+    let first_year = r.u32()? as i32;
+    if shape[1..3] != [N_RAW, N_STATIC] || n_years == 0 {
         return Err("snapshot layout differs from this build of lgu-core".into());
     }
     let ids = (0..n).map(|_| r.u32()).collect::<Result<_, _>>()?;
     let province = (0..n).map(|_| r.u32()).collect::<Result<_, _>>()?;
     let provinces = (0..np).map(|_| r.u32()).collect::<Result<_, _>>()?;
-    let raw = (0..n * N_YEARS * N_RAW)
+    let raw = (0..n * n_years * N_RAW)
         .map(|_| r.f32())
         .collect::<Result<_, _>>()?;
     let statics = (0..n * N_STATIC)
@@ -110,21 +118,27 @@ pub fn decode(b: &[u8]) -> Result<Panel, String> {
         .collect::<Result<_, _>>()?;
     let mut officials = vec![Official::NONE; n * ROUNDS.len()];
     for i in 0..n {
-        for k in skip..ROUNDS.len() {
-            officials[i * ROUNDS.len() + k] = Official {
+        for j in skip..skip + k {
+            officials[i * ROUNDS.len() + j] = Official {
                 estimate: r.f32()?,
                 se: r.f32()?,
             };
         }
     }
     let prov_fies = if version >= 2 {
-        (0..np * ROUNDS.len())
-            .map(|_| r.f32())
-            .collect::<Result<_, _>>()?
+        let mut v = vec![f64::NAN; np * ROUNDS.len()];
+        for p in 0..np {
+            for j in 0..k {
+                v[p * ROUNDS.len() + j] = r.f32()?;
+            }
+        }
+        v
     } else {
         Vec::new()
     };
     let p = Panel {
+        first_year,
+        n_years,
         ids,
         province,
         provinces,
@@ -146,7 +160,6 @@ pub fn decode(b: &[u8]) -> Result<Panel, String> {
 mod tests {
     use super::*;
     use crate::features::{row, tests::tiny_panel};
-    use crate::panel::LAST_YEAR;
 
     #[test]
     fn roundtrip_is_lossless_and_features_identical() {
@@ -155,7 +168,7 @@ mod tests {
         assert_eq!(p.ids, q.ids);
         let (pm, qm) = (p.province_stats(), q.province_stats());
         for i in 0..p.len() {
-            for t in FIRST_YEAR + 1..=LAST_YEAR {
+            for t in p.first_year + 1..=p.last_year() {
                 if let Some(r) = p.prev_round(i, t) {
                     let (a, b) = (row(&p, &pm, i, t, r), row(&q, &qm, i, t, r));
                     assert!(
@@ -196,6 +209,35 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn years_come_from_the_snapshot_and_missing_later_rounds_read_empty() {
+        // a panel with one more feature year than the tiny panel, written with one round fewer (as a
+        // snapshot from before a round was added to config/rounds.json)
+        let mut p = Panel::new(2012, 2026);
+        let raw = vec![1.0; p.n_years * N_RAW];
+        let offs: Vec<Official> = (0..ROUNDS.len())
+            .map(|k| Official {
+                estimate: 10.0 + k as f64,
+                se: 1.0,
+            })
+            .collect();
+        p.push(100, 1, &raw, &[1.0; N_STATIC], &offs);
+        let full = encode(&p);
+        let q = decode(&full).unwrap();
+        assert_eq!(
+            (q.first_year, q.last_year(), q.year_index(2026)),
+            (2012, 2026, Some(14))
+        );
+        let nr = ROUNDS.len();
+        let mut b = full[..full.len() - 4 * nr].to_vec(); // provincial FIES: drop all, re-add nr - 1
+        b.truncate(b.len() - 8); // the last round's official of the one LGU
+        b.extend(std::iter::repeat_n(f32::NAN.to_le_bytes(), nr - 1).flatten());
+        b[28..32].copy_from_slice(&((nr - 1) as u32).to_le_bytes());
+        let q = decode(&b).unwrap();
+        assert!((0..nr - 1).all(|k| q.official(0, k).estimate == 10.0 + k as f64));
+        assert!(!q.official(0, nr - 1).is_some());
     }
 
     #[test]

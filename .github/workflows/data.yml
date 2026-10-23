@@ -33,8 +33,8 @@ on:
         description: With features off, the data version whose feature store is reused (empty = this version)
         default: ""
       years:
-        description: Feature years
-        default: "2012-2025"
+        description: Feature years (empty = run_years in config/rounds.json)
+        default: ""
       vj113a1:
         description: Also compute NOAA-20 VJ113A1 NDVI (continuity series for MODIS, 2018 onwards; adds about 15 min)
         type: boolean
@@ -67,7 +67,7 @@ jobs:
       canary: ${{ steps.c.outputs.canary }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { sparse-checkout: .github }
+        with: { sparse-checkout: ".github\nconfig" }
       - id: c
         env:
           EVENT: ${{ github.event_name }}
@@ -85,13 +85,13 @@ jobs:
           print(f"version={c.get('version', 'v1')}")
           print(f"features={str(c.get('features', True)).lower()}")
           print(f"features_from={c.get('features_from') or c.get('version', 'v1')}")
-          print(f"years={c.get('years', '2012-2025')}")
+          print(f"years={c.get('years') or json.load(open('config/rounds.json'))['run_years']}")
           print(f"vj113a1={str(c.get('vj113a1', True)).lower()}")
           print(f"canary={str(c.get('canary', True)).lower()}")
           PY
           else
             { echo "version=$I_VERSION"; echo "features=$I_FEATURES"; echo "features_from=${I_FROM:-$I_VERSION}"
-              echo "years=$I_YEARS"; echo "vj113a1=$I_VJ"; echo "canary=$I_CANARY"; } >> "$GITHUB_OUTPUT"
+              echo "years=${I_YEARS:-$(jq -r .run_years config/rounds.json)}"; echo "vj113a1=$I_VJ"; echo "canary=$I_CANARY"; } >> "$GITHUB_OUTPUT"
           fi
           cat "$GITHUB_OUTPUT"
 
@@ -285,16 +285,18 @@ jobs:
       - name: Parity gate (Rust core vs LightGBM predict, tolerance 1e-5)
         run: |
           m=data/build/model
-          for spec in lightgbm-final=model.json lightgbm-backtest-2018=backtest-2018.json \
-                      lightgbm-backtest-2021=backtest-2021.json lightgbm-backtest-2023=backtest-2023.json; do
+          specs="lightgbm-final=model.json"
+          for y in $(jq -r '.backtests[]' config/rounds.json); do specs="$specs lightgbm-backtest-$y=backtest-$y.json"; done
+          for spec in $specs; do
             target/release/lgu parity --build data/build --model "$m/${spec#*=}" --expected "$m/expected.csv" \
               --column "${spec%%=*}" --tol 1e-5 | tee -a "$GITHUB_STEP_SUMMARY"
           done
       - name: Read models
         run: |
           m=data/build/model
-          target/release/lgu materialise --build data/build --model $m/model.json \
-            --backtest 2018=$m/backtest-2018.json --backtest 2021=$m/backtest-2021.json --backtest 2023=$m/backtest-2023.json \
+          bt=()
+          for y in $(jq -r '.backtests[]' config/rounds.json); do bt+=(--backtest "$y=$m/backtest-$y.json"); done
+          target/release/lgu materialise --build data/build --model $m/model.json "${bt[@]}" \
             --metrics $m/metrics.json --provinces data/build/provinces.json --provenance data/build/provenance.json \
             --version "$VERSION" --sha "$GITHUB_SHA" --generated "$(date -u +%FT%TZ)" --out "data/dist/$VERSION"
           cd pipeline && uv run python -m lgu to-parquet --out "../data/dist/$VERSION"

@@ -26,8 +26,8 @@ pub fn whatif(
 ) -> Option<Estimate> {
     let r = panel.prev_round(lgu, year)?;
     let ry = ROUNDS[r];
-    let ri = panel::year_index(ry)?;
-    let ti = panel::year_index(year)?;
+    let ri = panel.year_index(ry)?;
+    let ti = panel.year_index(year)?;
     let g = 1.0 + s.radiance_growth_pct / 100.0;
     let raw_at = |yi: usize| {
         let mut a = [0.0; panel::N_RAW];

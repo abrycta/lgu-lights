@@ -12,6 +12,7 @@
 import type { LguDetail, Source, Tier, YearRecord } from "@/data/types";
 
 import { CENSUS_EB_FROM, combinedNote, type Lang } from "./honesty";
+import { LAST_ELL } from "./rounds";
 
 const Z90 = 1.645;
 
@@ -119,7 +120,7 @@ export function pointOf(rec: YearRecord, source: Source): Point | null {
   return null;
 }
 
-/** PSA's method era of a year: ELL before 2021, Census EB from 2021. */
+/** PSA's method era of a year: ELL before CENSUS_EB_FROM (2021), Census EB from it. */
 export const eraOf = (year: number) => (year >= CENSUS_EB_FROM ? "CensusEB" : "ELL");
 
 export type Change = { kind: "up" | "down" | "unclear"; diff: number } | { kind: "notComparable"; diff: number };
@@ -158,8 +159,8 @@ export function changeSentence(years: YearRecord[], rec: YearRecord | undefined,
   const ja = lang === "ja";
   if (c.kind === "notComparable") {
     return ja
-      ? `PSAは2018年と2021年の間に推計方法を変えたため、この値とPSAの${prev.year}年の値は厳密には比較できません。変化とはみなしません。`
-      : `PSA changed its method between 2018 and 2021, so this figure and PSA's ${prev.year} figure aren't strictly comparable; we don't call it a change.`;
+      ? `PSAは${LAST_ELL}年と${CENSUS_EB_FROM}年の間に推計方法を変えたため、この値とPSAの${prev.year}年の値は厳密には比較できません。変化とはみなしません。`
+      : `PSA changed its method between ${LAST_ELL} and ${CENSUS_EB_FROM}, so this figure and PSA's ${prev.year} figure aren't strictly comparable; we don't call it a change.`;
   }
   let a = String(r100(prev.est));
   let b = String(r100(cur.est));
@@ -414,8 +415,8 @@ export function provinceSummary(
   if (w && "methodBreak" in w) {
     out.push(
       ja
-        ? `PSAは2021年に推計方法を変えたため、${w.methodBreak}年の値はそれ以前の調査回とは比較していません。`
-        : `PSA changed its method in 2021, so the ${w.methodBreak} figures are not compared with earlier rounds.`,
+        ? `PSAは${CENSUS_EB_FROM}年に推計方法を変えたため、${w.methodBreak}年の値はそれ以前の調査回とは比較していません。`
+        : `PSA changed its method in ${CENSUS_EB_FROM}, so the ${w.methodBreak} figures are not compared with earlier rounds.`,
     );
   } else if (w) {
     let fell = 0;

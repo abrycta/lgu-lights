@@ -1,0 +1,14 @@
+{
+  "about": "The one source of PSA Small Area Estimate rounds and the default years of a data run (audit M5). Read by pipeline/lgu/rounds.py (Python), crates/lgu-core/build.rs (Rust, at build time) and web/scripts/gen-rounds.mjs (web/src/lib/rounds.gen.ts). The panel's feature years are not set here: they come from the feature store. A new round: add it here, add its workbook parser to pipeline/lgu/labels.py if the layout is new, and run a data version.",
+  "run_years": "2012-2025",
+  "rounds": [
+    { "year": 2006, "estimator": "ELL", "workbook": "psa-sae-2018-2021" },
+    { "year": 2009, "estimator": "ELL", "workbook": "psa-sae-2018-2021" },
+    { "year": 2012, "estimator": "ELL", "workbook": "psa-sae-2018-2021" },
+    { "year": 2015, "estimator": "ELL", "workbook": "psa-sae-2018-2021" },
+    { "year": 2018, "estimator": "ELL", "workbook": "psa-sae-2023" },
+    { "year": 2021, "estimator": "CensusEB", "workbook": "psa-sae-2023" },
+    { "year": 2023, "estimator": "CensusEB", "workbook": "psa-sae-2023" }
+  ],
+  "backtests": [2018, 2021, 2023]
+}
