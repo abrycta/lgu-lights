@@ -161,8 +161,8 @@ export default function AboutPage() {
             </li>
             <li>
               <T
-                en="Reliability tiers follow the coefficient of variation: “Solid” up to 10 %, “Use with care” up to 20 %, “Rough guess” above (the last two are hatched on the map)."
-                ja="信頼性は変動係数で区分：10%以下は「確かな値」、20%以下は「注意して使う値」、それを超えると「おおよその目安」（後の二つは地図で斜線）。"
+                en="Reliability tiers follow the coefficient of variation: “Solid” up to 10 %, “Moderate range” up to 20 %, “Wide range” above (the last two are hatched on the map)."
+                ja="信頼性は変動係数で区分：10%以下は「確かな値」、20%以下は「幅がやや広い値」、それを超えると「幅が広い値」（後の二つは地図で斜線）。"
               />
             </li>
             <li>

@@ -116,8 +116,8 @@ export function Shell({ children }: { children: ReactNode }) {
             </div>
             <p>
               <T
-                en="Poverty estimates: PSA Small Area Estimates (official) and Lights model estimates (not official). Boundaries: OCHA/NAMRIA/PSA COD-AB, CC BY-IGO, indicative."
-                ja="貧困推計：PSA小地域推計（公式）とLightsのモデル推計（非公式）。境界：OCHA/NAMRIA/PSA COD-AB（CC BY-IGO、参考）。"
+                en="Poverty estimates: PSA Small Area Estimates (official) and Lights model estimates. Boundaries: OCHA/NAMRIA/PSA COD-AB, CC BY-IGO, indicative."
+                ja="貧困推計：PSA小地域推計（公式）とLightsのモデル推計。境界：OCHA/NAMRIA/PSA COD-AB（CC BY-IGO、参考）。"
               />{" "}
               <PageLink page="about" className="underline underline-offset-4">
                 <T en="Sources and licences" ja="出典とライセンス" />

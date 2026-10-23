@@ -88,12 +88,12 @@ export function reliabilitySentence(tier: Tier, lo: number, hi: number, lang: La
   const b = r100(hi);
   if (lang === "ja") {
     if (tier === 0) return `確かな値：実際の値はほぼ確実に100人あたり${a}〜${b}人の範囲です。`;
-    if (tier === 1) return `注意して使う値：実際の値はおそらく100人あたり${a}〜${b}人で、この水準にしては幅が広めです。`;
-    return `おおよその目安：実際の値は100人あたり${a}〜${b}人のどこかかもしれません。`;
+    if (tier === 1) return `幅がやや広い値：実際の値はおそらく100人あたり${a}〜${b}人です。`;
+    return `幅が広い値：実際の値は100人あたり${a}〜${b}人のどこかかもしれません。`;
   }
   if (tier === 0) return `Solid: the true figure is very likely between ${a} and ${b} in 100.`;
-  if (tier === 1) return `Use with care: the true figure is probably between ${a} and ${b} in 100, a wide range for a figure this size.`;
-  return `Rough guess: the true figure could be anywhere from ${a} to ${b} in 100.`;
+  if (tier === 1) return `Moderate range: the true figure is probably between ${a} and ${b} in 100.`;
+  return `Wide range: the true figure could be anywhere from ${a} to ${b} in 100.`;
 }
 
 // ---------------------------------------------------------------------------------------------

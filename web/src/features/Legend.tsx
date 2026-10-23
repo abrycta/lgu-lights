@@ -37,10 +37,10 @@ export function Legend({ breaks, year, isRound }: { breaks: readonly number[]; y
       <MapLegendKey
         items={[
           { fill: "seq-4", opacity: OFFICIAL_OPACITY, label: <T en="PSA official (solid)" ja="PSA公式統計（濃い色）" /> },
-          { fill: "seq-4", opacity: MODEL_OPACITY, italic: true, label: <T en="Model estimate (lighter, not official)" ja="モデル推計（淡い色、非公式）" /> },
+          { fill: "seq-4", opacity: MODEL_OPACITY, italic: true, label: <T en="Model estimate (lighter)" ja="モデル推計（淡い色）" /> },
           { fill: "seq-3", label: <T en="Solid (CV ≤ 10 %): no stripes" ja="確かな値（CV 10%以下）：斜線なし" /> },
-          { fill: "seq-3", hatch: "sparse", label: <T en="Use with care (CV 10–20 %)" ja="注意して使う値（CV 10〜20%）" /> },
-          { fill: "seq-3", hatch: "dense", label: <T en="Rough guess (CV > 20 %)" ja="おおよその目安（CV 20%超）" /> },
+          { fill: "seq-3", hatch: "sparse", label: <T en="Moderate range (CV 10–20 %)" ja="幅がやや広い値（CV 10〜20%）" /> },
+          { fill: "seq-3", hatch: "dense", label: <T en="Wide range (CV > 20 %)" ja="幅が広い値（CV 20%超）" /> },
           { fill: "var(--ak-map-no-data)", label: <T en="No estimate" ja="推計なし" /> },
         ]}
       />
