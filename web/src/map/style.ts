@@ -6,7 +6,7 @@
 // scale with the manifest's fixed breaks, and opacity/hatching follow lib/honesty.ts so the map,
 // legend and table make the same official-vs-model distinction.
 
-import { hatchFilter as akariHatchFilter, hatchPattern as akariHatchPattern, stepColor, type Expression as AkariExpression } from "@abrycta/akari/maps";
+import { hatchFilter as akariHatchFilter, hatchPattern as akariHatchPattern, scaleColors } from "@abrycta/akari/maps";
 import { flat } from "@abrycta/akari/tokens";
 
 import type { ExpressionSpecification as Expression } from "maplibre-gl";
@@ -78,10 +78,23 @@ export function sourceExpr(year: number, nat: NationalValues | null): Expression
   return attr("s", year, nat);
 }
 
+/**
+ * Akari's sequential scale, ordered from the lowest to the highest poverty class. Darker always means poorer:
+ * Akari's dark-theme scale runs dark to light, so the dark themes use it reversed (index.css flips the
+ * legend and guide swatches the same way, with the .seq-ramp class).
+ */
+export function seqRamp(key: ThemeKey): readonly string[] {
+  const dark = key.startsWith("dark");
+  const colors = scaleColors("seq", dark ? "dark" : "light");
+  return dark ? [...colors].reverse() : colors;
+}
+
 export function fillColor(year: number, breaks: readonly number[], key: ThemeKey, nat: NationalValues | null): Expression {
   const v = valueExpr(year, nat);
-  const theme = key.startsWith("dark") ? "dark" : "light";
-  return ["case", ["<", v, 0], tokenColor("map.no-data", key), stepColor(v as AkariExpression, breaks, { scale: "seq", theme }) as unknown as Expression];
+  const colors = seqRamp(key);
+  if (breaks.length !== colors.length - 1) throw new Error(`fillColor: ${colors.length} colours need ${colors.length - 1} breaks (got ${breaks.length})`);
+  const step = ["step", v, colors[0], ...breaks.flatMap((b, i) => [b, colors[i + 1]])] as unknown as Expression;
+  return ["case", ["<", v, 0], tokenColor("map.no-data", key), step];
 }
 
 /** Official figures are opaque; model estimates are lighter; no data is Akari's map.no-data, opaque. */

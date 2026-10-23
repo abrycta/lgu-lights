@@ -123,3 +123,34 @@ html:has([data-testid="embed-frame"]),
 html:has([data-testid="embed-frame"]) body {
   overflow: hidden;
 }
+
+/* Darker always means poorer. Akari's dark-theme sequential scale runs dark to light, so in the dark themes the
+   poverty ramp (legend, guide swatches) uses it reversed, like the map fill (map/style.ts seqRamp). */
+@layer components {
+  :is([data-theme="dark"], .dark) .seq-ramp {
+    --chart-seq-1: var(--ak-seq-5);
+    --color-chart-seq-1: var(--ak-seq-5);
+    --chart-seq-2: var(--ak-seq-4);
+    --color-chart-seq-2: var(--ak-seq-4);
+    --chart-seq-3: var(--ak-seq-3);
+    --color-chart-seq-3: var(--ak-seq-3);
+    --chart-seq-4: var(--ak-seq-2);
+    --color-chart-seq-4: var(--ak-seq-2);
+    --chart-seq-5: var(--ak-seq-1);
+    --color-chart-seq-5: var(--ak-seq-1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"], .light) .seq-ramp {
+      --chart-seq-1: var(--ak-seq-5);
+      --color-chart-seq-1: var(--ak-seq-5);
+      --chart-seq-2: var(--ak-seq-4);
+      --color-chart-seq-2: var(--ak-seq-4);
+      --chart-seq-3: var(--ak-seq-3);
+      --color-chart-seq-3: var(--ak-seq-3);
+      --chart-seq-4: var(--ak-seq-2);
+      --color-chart-seq-4: var(--ak-seq-2);
+      --chart-seq-5: var(--ak-seq-1);
+      --color-chart-seq-5: var(--ak-seq-1);
+    }
+  }
+}

@@ -13,7 +13,7 @@ export function Legend({ breaks, year, isRound }: { breaks: readonly number[]; y
   const [, setGuide] = useGuide();
   const ticks = ["0", ...breaks.map(String), "100%"];
   return (
-    <div className="grid w-72 max-w-full gap-2 rounded-sm border border-border bg-background/95 p-3 text-xs shadow-sm" data-testid="legend">
+    <div className="seq-ramp grid w-72 max-w-full gap-2 rounded-sm border border-border bg-background/95 p-3 text-xs shadow-sm" data-testid="legend">
       <MapLegend
         title={
           <>
