@@ -96,8 +96,8 @@ export function WhatIf({ pcode, name, rec, widen }: { pcode: string; name: strin
       </div>
       <p className="text-xs text-muted-foreground">
         <T
-          en={`Change the satellite inputs for ${year} and see what the model would say. Not a forecast and not an official figure; the interval is widened ×${widen}.`}
-          ja={`${year}年の衛星データを変えると、モデルがどう推計するかを示します。予測でも公式統計でもありません。区間は×${widen}に広げています。`}
+          en={`Change the satellite inputs for ${year} and see what the model would say. Not a forecast; the interval is widened ×${widen}.`}
+          ja={`${year}年の衛星データを変えると、モデルがどう推計するかを示します。予測ではありません。区間は×${widen}に広げています。`}
         />
       </p>
       <div className="grid gap-1">
