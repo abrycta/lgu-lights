@@ -3,6 +3,9 @@
 One row per (adm3_pcode, year): Black Marble radiance (bm_*), MODIS NDVI/EVI, WorldPop population,
 SRTM elevation and slope, and (when computed) NOAA-20 VJ113A1 NDVI. Data-quality gates run here:
 a failed gate raises, so a bad feature store is never published (DATA-ARCHIVING.md principle 4).
+A year without a full MODIS vegetation year (fewer than MIN_VEG_COMPOSITES 16-day composites, as when
+Terra ends around February 2027) is left out silently: no failure, nothing published for that year,
+only an internal ::notice in the run log.
 """
 from __future__ import annotations
 
@@ -19,10 +22,26 @@ GATES = {  # column: (min, max) over non-null values
     "pop": (0.0, 5_000_000.0),
 }
 
+MIN_VEG_COMPOSITES = 20  # of 23 MOD13Q1 composites a year; fewer would bias the yearly mean to one season
+
+
+def partial_veg_years(ee: pd.DataFrame) -> list[int]:
+    """Years whose yearly NDVI/EVI mean rests on too few composites (needs the `veg_composites` column)."""
+    if "veg_composites" not in ee.columns:  # zonal tables from before the column existed
+        return []
+    n = ee.groupby("year")["veg_composites"].max()
+    return sorted(int(y) for y in n[n < MIN_VEG_COMPOSITES].index)
+
 
 def merge(interim: Path, out: Path) -> dict:
     bm = pd.read_parquet(interim / "zonal_bm.parquet")
     ee = pd.read_parquet(interim / "zonal_ee.parquet")
+    skipped = partial_veg_years(ee)
+    if skipped:
+        print(f"::notice::partial MODIS vegetation year(s) {skipped} (under {MIN_VEG_COMPOSITES} composites) left out")
+        ee = ee[~ee.year.isin(skipped)]
+        bm = bm[~bm.year.isin(skipped)]
+    ee = ee.drop(columns="veg_composites", errors="ignore")  # the feature store keeps its columns
     df = bm.merge(ee, on=["adm3_pcode", "year"], how="outer", validate="one_to_one")
     vj = interim / "zonal_vj.parquet"
     if vj.exists():
@@ -46,4 +65,5 @@ def merge(interim: Path, out: Path) -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out, index=False, compression="snappy")
     return {"rows": len(df), "years": sorted(int(y) for y in df.year.unique()), "columns": list(df.columns),
+            "skipped_years": skipped,
             "missing": {c: int(df[c].isna().sum()) for c in df.columns if df[c].isna().any()}}
