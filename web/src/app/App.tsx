@@ -21,7 +21,7 @@ function initialLang(): "en" | "ja" {
 /** While a page's code loads: the shell (Header, footer) shows at once and this keeps the page's room, so the footer
  * does not jump; no loading screen (Kurt, 2026-10-23). */
 function PageSpace() {
-  return <div className="min-h-[calc(100dvh-81px)]" />;
+  return <div className="min-h-[calc(100dvh-var(--ak-layout-header-height))]" />;
 }
 
 function Pages() {
