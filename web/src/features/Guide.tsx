@@ -35,7 +35,7 @@ export function Guide() {
       </p>
       <div className="flex gap-1" aria-hidden="true">
         {["bg-chart-seq-1", "bg-chart-seq-2", "bg-chart-seq-3", "bg-chart-seq-4", "bg-chart-seq-5"].map((c) => (
-          <span key={c} className={`h-3 flex-1 rounded-xs ${c}`} />
+          <span key={c} className={`h-3 flex-1 rounded-xs shadow-[inset_0_0_0_1px_var(--border)] ${c}`} />
         ))}
       </div>
       <p className="text-muted-foreground">{PLAIN_BINS.map((b) => `${t(b.name.en, b.name.ja)} (${t(b.range.en, b.range.ja)})`).join(" · ")}</p>
@@ -74,7 +74,7 @@ export function Guide() {
   const last = step === steps.length - 1;
 
   return (
-    <Card size="sm" className="w-80 max-w-[calc(100vw-2rem)] text-sm shadow-md" role="dialog" aria-labelledby="guide-title" data-testid="guide">
+    <Card size="sm" className="seq-ramp w-80 max-w-[calc(100vw-2rem)] text-sm shadow-md" role="dialog" aria-labelledby="guide-title" data-testid="guide">
       <CardHeader className="flex items-start justify-between gap-2">
         <CardTitle id="guide-title" className="font-display">
           <T en="How to read this map" ja="地図の読み方" /> <span className="font-mono text-xs text-muted-foreground">{step + 1}/3</span>
