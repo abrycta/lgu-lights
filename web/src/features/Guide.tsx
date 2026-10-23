@@ -4,7 +4,7 @@
 
 import { Button, Card, CardContent, CardHeader, CardTitle, LegendSwatch, T, useT } from "@abrycta/akari/react";
 import { XIcon } from "lucide-react";
-import { use, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 
 import { useGuide } from "@/app/prefs";
 import { loadManifest } from "@/data/load";
@@ -20,10 +20,29 @@ export function Guide() {
   const [step, setStep] = useState(0);
   // Start at the first step each time the guide opens (state adjusted during render, not in an effect).
   const [wasOpen, setWasOpen] = useState(open);
+  const [reopened, setReopened] = useState(false);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) setStep(0);
+    setReopened(open);
   }
+  // Opened from the legend (not the first-visit guide): on phones the legend sits under the map, so the guide
+  // (top of the map) can be off screen. Bring its top into view and focus its heading; where it is already on
+  // screen (desktop) nothing moves.
+  const card = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!reopened || !card.current) return;
+    setReopened(false);
+    // Below Akari's sticky app header (taller on phones than --ak-layout-header-height), with a small gap.
+    const header = document.querySelector('[data-slot="app-header"]');
+    const under = (header && getComputedStyle(header).position === "sticky" ? header.getBoundingClientRect().bottom : 0) + 8;
+    const r = card.current.getBoundingClientRect();
+    if (r.top >= under && r.top < innerHeight - 48) return;
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scrollTo({ top: scrollY + r.top - under, behavior: reduce ? "auto" : "smooth" });
+    heading.current?.focus({ preventScroll: true });
+  }, [reopened]);
   if (!open) return null;
 
   const steps = [
@@ -74,9 +93,9 @@ export function Guide() {
   const last = step === steps.length - 1;
 
   return (
-    <Card size="sm" className="seq-ramp w-80 max-w-[calc(100vw-2rem)] text-sm shadow-md" role="dialog" aria-labelledby="guide-title" data-testid="guide">
+    <Card ref={card} size="sm" className="seq-ramp w-80 max-w-[calc(100vw-2rem)] text-sm shadow-md" role="dialog" aria-labelledby="guide-title" data-testid="guide">
       <CardHeader className="flex items-start justify-between gap-2">
-        <CardTitle id="guide-title" className="font-display">
+        <CardTitle id="guide-title" ref={heading} tabIndex={-1} className="font-display outline-none">
           <T en="How to read this map" ja="地図の読み方" /> <span className="font-mono text-xs text-muted-foreground">{step + 1}/3</span>
         </CardTitle>
         <Button variant="ghost" size="icon" className="-mt-1 -mr-1 size-7" aria-label={t("Close the guide", "ガイドを閉じる")} onClick={() => setOpen(false)}>
