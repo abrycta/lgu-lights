@@ -62,7 +62,7 @@ export function SeriesChart({ years, selected, onSelectYear }: { years: YearReco
   };
 
   return (
-    <figure className="m-0 grid gap-1">
+    <figure className="seq-ramp m-0 grid gap-1">
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full overflow-visible" role="img" aria-label={t(`Poverty incidence ${yearSpan(first, last, "en")}: official PSA points with 90 % intervals and model estimates with 50 % and 90 % bands. The table below lists every value.`, `${yearSpan(first, last, "ja")}年の貧困率：PSA公式値（90%区間）とモデル推計（50%・90%帯）。下の表にすべての値があります。`)}>
         {ticks.map((v) => (
           <g key={v}>
