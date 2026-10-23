@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use lgu_core::model::{Estimate, Model, Z90};
-use lgu_core::panel::{self, FIRST_YEAR, LAST_YEAR, ROUNDS};
+use lgu_core::panel::{self, ROUNDS};
 use lgu_core::snapshot;
 use lgu_core::tiers::{BREAKS, cv_tier};
 use serde_json::{Value, json};
@@ -69,7 +69,7 @@ pub fn run(a: &Args) -> Result<(), String> {
 
     let mut attrs = String::from("pcode,n");
     for k in ["v", "t", "s"] {
-        for y in FIRST_YEAR..=LAST_YEAR {
+        for y in p.years() {
             attrs.push_str(&format!(",{k}{}", y % 100));
         }
     }
@@ -83,10 +83,10 @@ pub fn run(a: &Args) -> Result<(), String> {
 
     for i in 0..p.len() {
         let l = &s.lgus[i];
-        let mut years = Vec::with_capacity(panel::N_YEARS);
+        let mut years = Vec::with_capacity(p.n_years);
         let (mut v, mut t, mut src) = (Vec::new(), Vec::new(), Vec::new());
-        for y in FIRST_YEAR..=LAST_YEAR {
-            let yi = panel::year_index(y).unwrap();
+        for y in p.years() {
+            let yi = p.year_index(y).unwrap();
             let official =
                 panel::round_index(y).and_then(|k| s.labels[i * ROUNDS.len() + k].clone());
             let kind = if panel::round_index(y).is_some() {
@@ -226,8 +226,8 @@ pub fn run(a: &Args) -> Result<(), String> {
             "version": version,
             "generated_at": a.opt("generated"),
             "git_sha": a.opt("sha"),
-            "years": (FIRST_YEAR..=LAST_YEAR).collect::<Vec<_>>(),
-            "rounds": panel::published_rounds().collect::<Vec<_>>(),
+            "years": p.years().collect::<Vec<_>>(),
+            "rounds": p.published_rounds().collect::<Vec<_>>(),
             "breaks": BREAKS,
             "tiers": {"reliable_max_cv": 10, "caution_max_cv": 20},
             "z90": Z90,
@@ -241,7 +241,7 @@ pub fn run(a: &Args) -> Result<(), String> {
     eprintln!(
         "materialised {} LGUs x {} years into {}: {:?}",
         p.len(),
-        panel::N_YEARS,
+        p.n_years,
         out.display(),
         counts
     );

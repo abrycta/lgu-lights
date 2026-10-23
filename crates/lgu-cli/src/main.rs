@@ -18,7 +18,7 @@ use std::process::ExitCode;
 
 use lgu_core::features::{self, FEATURES};
 use lgu_core::model::Model;
-use lgu_core::panel::{FIRST_YEAR, LAST_YEAR, ROUNDS};
+use lgu_core::panel::ROUNDS;
 use lgu_store::Store;
 
 pub(crate) struct Args(HashMap<String, Vec<String>>);
@@ -68,7 +68,7 @@ pub(crate) fn load_model(p: &Path) -> Result<Model, String> {
 
 /// The design matrix: one row per (LGU, year) with a previous official round. Training rows are the
 /// round years with an official estimate (`label = 1`, `target` = change in pp since the previous round);
-/// rounds up to FIRST_YEAR (2009, 2012) appear only when labelled.
+/// rounds up to the first feature year (2009, 2012) appear only when labelled.
 fn design(a: &Args) -> Result<(), String> {
     let s = load_store(a)?;
     let p = &s.panel;
@@ -80,11 +80,13 @@ fn design(a: &Args) -> Result<(), String> {
     }
     out.push('\n');
     let mut n = (0, 0);
-    // Round years up to FIRST_YEAR (2009, 2012) are training rows only; later years are every year.
+    // Round years up to the first feature year (2009, 2012) are training rows only; later years are every
+    // feature year (the feature store's own).
+    let first_year = p.first_year;
     let years: Vec<i32> = ROUNDS
         .into_iter()
-        .filter(|&y| y <= FIRST_YEAR)
-        .chain(FIRST_YEAR + 1..=LAST_YEAR)
+        .filter(|&y| y <= first_year)
+        .chain(first_year + 1..=p.last_year())
         .collect();
     for i in 0..p.len() {
         for &t in &years {
@@ -95,7 +97,7 @@ fn design(a: &Args) -> Result<(), String> {
             let lab = lgu_core::panel::round_index(t)
                 .map(|k| p.official(i, k))
                 .filter(|o| o.is_some());
-            if t <= FIRST_YEAR && lab.is_none() {
+            if t <= first_year && lab.is_none() {
                 continue;
             }
             let (label, target, y, se) = match lab {

@@ -10,6 +10,7 @@ import { cvText, interval, pctInline } from "@/lib/format";
 import { backtestNote, narrative } from "@/lib/narrative";
 import { TIER_LABEL } from "@/lib/honesty";
 import { reliabilitySentence, shownFigure } from "@/lib/plain";
+import { CENSUS_EB_FROM, LAST_ELL, yearSpan } from "@/lib/rounds";
 
 import { PeopleGrid } from "./PeopleGrid";
 import { PlainWords } from "./PlainWords";
@@ -159,8 +160,8 @@ export function LguPanel({
       {detailed ? (
         <p className="text-xs text-muted-foreground">
           <T
-            en="Method change: PSA used the ELL method for 2012–2018 and Census EB from 2021. Official figures on either side of the change are not strictly comparable."
-            ja="手法の変更：PSAは2012〜2018年にELL法、2021年以降はCensus EB法を使用しています。変更の前後で公式値は厳密には比較できません。"
+            en={`Method change: PSA used the ELL method for ${yearSpan(manifest.rounds[0]!, LAST_ELL, "en")} and Census EB from ${CENSUS_EB_FROM}. Official figures on either side of the change are not strictly comparable.`}
+            ja={`手法の変更：PSAは${yearSpan(manifest.rounds[0]!, LAST_ELL, "ja")}年にELL法、${CENSUS_EB_FROM}年以降はCensus EB法を使用しています。変更の前後で公式値は厳密には比較できません。`}
           />
         </p>
       ) : null}

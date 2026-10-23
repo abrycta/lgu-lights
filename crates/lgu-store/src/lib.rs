@@ -12,7 +12,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 
-use lgu_core::panel::{self, N_RAW, N_STATIC, N_YEARS, Official, Panel, RAW_FIELDS, ROUNDS};
+use lgu_core::panel::{self, N_RAW, N_STATIC, Official, Panel, RAW_FIELDS, ROUNDS};
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use parquet::record::Field;
 
@@ -104,27 +104,34 @@ pub fn load(lgus_path: &Path, features_path: &Path, labels_path: &Path) -> Resul
         .map(|(i, r)| (text(r, "adm3_pcode"), i))
         .collect();
     let n = lgu_rows.len();
-    let mut raw = vec![f64::NAN; n * N_YEARS * N_RAW];
+    // The panel's feature years are the feature store's own (audit M4): consecutive, every year present.
+    let feature_rows = read_rows(features_path)?;
+    let years: std::collections::BTreeSet<i32> =
+        feature_rows.iter().map(|r| num(r, "year") as i32).collect();
+    let (Some(&first), Some(&last)) = (years.first(), years.last()) else {
+        return Err("feature store has no rows".into());
+    };
+    if years.len() != (last - first + 1) as usize {
+        return Err(format!(
+            "feature store years are not consecutive: {years:?}"
+        ));
+    }
+    let mut p = Panel::new(first, last);
+    let n_years = p.n_years;
+    let mut raw = vec![f64::NAN; n * n_years * N_RAW];
     let mut statics = vec![f64::NAN; n * N_STATIC];
     for (i, r) in lgu_rows.iter().enumerate() {
         statics[i * N_STATIC] = num(r, "area_km2");
     }
-    for r in read_rows(features_path)? {
+    for r in feature_rows {
         let Some(&i) = index.get(&text(&r, "adm3_pcode")) else {
             continue;
         };
-        // A feature year outside the panel's years (e.g. a new 2026 year) must stop the run, never vanish
-        // silently from the snapshot and read models: extend panel::LAST_YEAR first (audit M4).
-        let year = num(&r, "year") as i32;
-        let Some(yi) = panel::year_index(year) else {
-            return Err(format!(
-                "feature store has year {year}, outside the panel years {}..={}: extend lgu_core::panel::LAST_YEAR",
-                panel::FIRST_YEAR,
-                panel::LAST_YEAR
-            ));
-        };
+        let yi = p
+            .year_index(num(&r, "year") as i32)
+            .expect("year in the feature store's range");
         for (k, f) in RAW_FIELDS.iter().enumerate() {
-            raw[(i * N_YEARS + yi) * N_RAW + k] = num(&r, f);
+            raw[(i * n_years + yi) * N_RAW + k] = num(&r, f);
         }
         if statics[i * N_STATIC + 1].is_nan() {
             statics[i * N_STATIC + 1] = num(&r, "elev_mean");
@@ -137,8 +144,11 @@ pub fn load(lgus_path: &Path, features_path: &Path, labels_path: &Path) -> Resul
         let Some(&i) = index.get(&text(&r, "adm3_pcode")) else {
             continue;
         };
-        let Some(k) = panel::round_index(num(&r, "round_year") as i32) else {
-            continue;
+        let year = num(&r, "round_year") as i32;
+        let Some(k) = panel::round_index(year) else {
+            return Err(format!(
+                "labels have round {year}, not in config/rounds.json: add it there"
+            ));
         };
         officials[i * ROUNDS.len() + k] = Official {
             estimate: num(&r, "estimate"),
@@ -153,7 +163,6 @@ pub fn load(lgus_path: &Path, features_path: &Path, labels_path: &Path) -> Resul
             estimator: text(&r, "estimator"),
         });
     }
-    let mut p = Panel::default();
     let mut lgus = Vec::with_capacity(n);
     for (i, r) in lgu_rows.iter().enumerate() {
         let pcode = text(r, "adm3_pcode");
@@ -162,7 +171,7 @@ pub fn load(lgus_path: &Path, features_path: &Path, labels_path: &Path) -> Resul
         p.push(
             id,
             prov,
-            &raw[i * N_YEARS * N_RAW..(i + 1) * N_YEARS * N_RAW],
+            &raw[i * n_years * N_RAW..(i + 1) * n_years * N_RAW],
             &statics[i * N_STATIC..(i + 1) * N_STATIC],
             &officials[i * ROUNDS.len()..(i + 1) * ROUNDS.len()],
         );

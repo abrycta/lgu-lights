@@ -44,8 +44,8 @@ export const PLAIN_BINS: { name: { en: string; ja: string }; range: { en: string
   { name: { en: "Very high", ja: "非常に高い" }, range: { en: "40+", ja: "40人以上" }, span: 1 },
 ];
 
-/** First year of PSA's Census EB small-area method (ELL before): figures across it are not compared. */
-export const CENSUS_EB_FROM = 2021;
+/** First year of PSA's Census EB small-area method (ELL before), from config/rounds.json. */
+export { CENSUS_EB_FROM } from "./rounds";
 
 /** "PSA official (2021)" / "Model estimate (2024)". */
 export function sourceLabel(source: Source, year: number, lang: Lang): string {
@@ -87,7 +87,7 @@ export function combinedNote(pcode: string | undefined, lang: "en" | "ja"): stri
   return lang === "ja" ? `PSAの${n}地区の推計を人口で加重して合算` : `combined from PSA's ${n} district estimates`;
 }
 
-/** PSA's SAE method changed from ELL (2012–2018) to Census EB (2021 onwards). */
+/** PSA's SAE method changed from ELL to Census EB (config/rounds.json). */
 export function estimatorLabel(e: string): string {
   return e === "CensusEB" ? "Census EB" : e;
 }

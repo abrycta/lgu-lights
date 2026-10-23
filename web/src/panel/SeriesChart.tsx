@@ -5,13 +5,14 @@ import type { YearRecord } from "@/data/types";
 import { interval, pct, pctShown } from "@/lib/format";
 import { sourceLabel } from "@/lib/honesty";
 import { clearChanges } from "@/lib/plain";
+import { CENSUS_EB_FROM, LAST_ELL, yearSpan } from "@/lib/rounds";
 
 const W = 360;
 const H = 190;
 const M = { l: 30, r: 8, t: 10, b: 36 };
 
 /**
- * The 2012–2025 series: official PSA points with 90 % CI whiskers (solid ink), model estimates as a
+ * The series over the data version's years (2012–2025 in v5): official PSA points with 90 % CI whiskers (solid ink), model estimates as a
  * dashed line with 50 % and 90 % bands (lighter, Akari sequential scale). Backtest years show the
  * model's out-of-sample value as a hollow marker next to the official point. The year table below
  * carries the same numbers for screen readers.
@@ -20,8 +21,9 @@ export function SeriesChart({ years, selected, onSelectYear }: { years: YearReco
   const t = useT();
   const { lang } = useLang();
   const [hover, setHover] = useState<number | null>(null);
-  const first = years[0]?.year ?? 2012;
-  const last = years[years.length - 1]?.year ?? 2025;
+  if (!years.length) return null;
+  const first = years[0]!.year;
+  const last = years[years.length - 1]!.year;
   const top = Math.max(
     10,
     ...years.flatMap((y) => [y.official ? Math.max(0, y.official.hi90) : 0, y.model?.hi90 ?? 0]),
@@ -45,7 +47,7 @@ export function SeriesChart({ years, selected, onSelectYear }: { years: YearReco
   const line = (run: YearRecord[]) => run.map((r, i) => `${i ? "L" : "M"}${x(r.year)},${y(r.model!.estimate)}`).join("");
 
   const ticks = Array.from({ length: yMax / 10 + 1 }, (_, i) => i * 10).filter((v, _, a) => a.length <= 6 || v % 20 === 0);
-  const eraX = (x(2018) + x(2021)) / 2;
+  const eraX = (x(LAST_ELL) + x(CENSUS_EB_FROM)) / 2;
   // #3 Official rounds whose change from the previous round (same method) beats the margin of error.
   const clear = clearChanges(years);
   const hv = hover != null ? years.find((r) => r.year === hover) : undefined;
@@ -61,7 +63,7 @@ export function SeriesChart({ years, selected, onSelectYear }: { years: YearReco
 
   return (
     <figure className="m-0 grid gap-1">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full overflow-visible" role="img" aria-label={t("Poverty incidence 2012–2025: official PSA points with 90 % intervals and model estimates with 50 % and 90 % bands. The table below lists every value.", "2012〜2025年の貧困率：PSA公式値（90%区間）とモデル推計（50%・90%帯）。下の表にすべての値があります。")}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full overflow-visible" role="img" aria-label={t(`Poverty incidence ${yearSpan(first, last, "en")}: official PSA points with 90 % intervals and model estimates with 50 % and 90 % bands. The table below lists every value.`, `${yearSpan(first, last, "ja")}年の貧困率：PSA公式値（90%区間）とモデル推計（50%・90%帯）。下の表にすべての値があります。`)}>
         {ticks.map((v) => (
           <g key={v}>
             <line x1={M.l} x2={W - M.r} y1={y(v)} y2={y(v)} className="stroke-border" strokeWidth={0.5} />
@@ -70,7 +72,7 @@ export function SeriesChart({ years, selected, onSelectYear }: { years: YearReco
             </text>
           </g>
         ))}
-        {/* ELL -> Census EB method change between the 2018 and 2021 rounds. */}
+        {/* ELL -> Census EB method change between the last ELL and the first Census EB round. */}
         <line x1={eraX} x2={eraX} y1={M.t} y2={H - M.b} className="stroke-muted-foreground" strokeDasharray="2 3" strokeWidth={1} />
         <text x={eraX - 3} y={M.t + 8} textAnchor="end" className="fill-muted-foreground text-[8px]">
           ELL

@@ -6,6 +6,7 @@ import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { dataBase, loadIndex, loadManifest, loadNational } from "@/data/load";
 import type { Index } from "@/data/types";
 import { nationalSentence, valuesOf } from "@/lib/plain";
+import { yearList } from "@/lib/rounds";
 import { Legend } from "@/features/Legend";
 import { LguSearch } from "@/features/LguSearch";
 import { ProvincePicker } from "@/features/ProvincePicker";
@@ -59,6 +60,7 @@ function NationalLine({ index, year, isRound }: { index: Index; year: number; is
 }
 
 function Intro() {
+  const { rounds } = use(loadManifest());
   return (
     <div className="grid gap-3 text-sm" data-testid="intro">
       <h2 className="font-display text-xl">
@@ -66,8 +68,8 @@ function Intro() {
       </h2>
       <p>
         <T
-          en="PSA publishes official small-area poverty estimates only every few years (2012, 2015, 2018, 2021, 2023). Between and after those rounds, Lights fills the gaps with model estimates built on past PSA rounds, PSA's provincial poverty survey and satellite data (night-time lights, vegetation)."
-          ja="PSAの公式な小地域貧困推計は数年ごと（2012・2015・2018・2021・2023年）にしか公表されません。その間と以後の年は、過去のPSA調査、PSAの州別貧困調査、衛星データ（夜間光・植生）に基づくモデル推計で補っています。"
+          en={`PSA publishes official small-area poverty estimates only every few years (${yearList(rounds, "en")}). Between and after those rounds, Lights fills the gaps with model estimates built on past PSA rounds, PSA's provincial poverty survey and satellite data (night-time lights, vegetation).`}
+          ja={`PSAの公式な小地域貧困推計は数年ごと（${yearList(rounds, "ja")}年）にしか公表されません。その間と以後の年は、過去のPSA調査、PSAの州別貧困調査、衛星データ（夜間光・植生）に基づくモデル推計で補っています。`}
         />
       </p>
       <p>

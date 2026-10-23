@@ -3,9 +3,9 @@ name: Pipeline
 
 on:
   push:
-    paths: [pipeline/**, .github/workflows/pipeline.yml]
+    paths: [pipeline/**, config/**, .github/workflows/pipeline.yml]
   pull_request:
-    paths: [pipeline/**, .github/workflows/pipeline.yml]
+    paths: [pipeline/**, config/**, .github/workflows/pipeline.yml]
   workflow_dispatch:
 
 permissions:

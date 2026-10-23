@@ -3,6 +3,7 @@ import { use } from "react";
 
 import { loadManifest, loadMetrics } from "@/data/load";
 import type { Metrics } from "@/data/types";
+import { CENSUS_EB_FROM, LAST_ELL, ROUNDS, roundsBefore, yearList, yearSpan } from "@/lib/rounds";
 
 const LINK = "underline underline-offset-4 hover:text-foreground";
 
@@ -111,6 +112,11 @@ function Folds({ m }: { m: Metrics }) {
 }
 
 export default function AboutPage() {
+  const manifest = use(loadManifest());
+  const [fy, ly] = [manifest.years[0]!, manifest.years[manifest.years.length - 1]!];
+  const [r0, rN] = [manifest.rounds[0]!, manifest.rounds[manifest.rounds.length - 1]!];
+  const [first, last] = [ROUNDS[0].year, ROUNDS[ROUNDS.length - 1]!.year];
+  const train = roundsBefore(fy);
   return (
     // The centred page column, like krtmtthw.dev's About page; content is left-aligned inside it.
     <Page
@@ -118,8 +124,8 @@ export default function AboutPage() {
       title={<T en="Honest about the data" ja="データに正直に" />}
       lede={
         <T
-          en="Lights maps poverty incidence for every Philippine city and municipality, 2012 to 2025. It always shows which figures are official and which are model estimates."
-          ja="Lightsは2012〜2025年のフィリピン全市町村の貧困率を地図にし、どの値が公式統計でどの値がモデル推計かを常に示します。"
+          en={`Lights maps poverty incidence for every Philippine city and municipality, ${fy} to ${ly}. It always shows which figures are official and which are model estimates.`}
+          ja={`Lightsは${yearSpan(fy, ly, "ja")}年のフィリピン全市町村の貧困率を地図にし、どの値が公式統計でどの値がモデル推計かを常に示します。`}
         />
       }
     >
@@ -130,15 +136,15 @@ export default function AboutPage() {
           </h2>
           <p className="rounded-sm border border-seal p-3">
             <T
-              en="Model estimates are not official statistics. The model starts from the last PSA round and estimates how the place moved within its province. When past rounds show they help, it also uses the national trend and the province’s previous PSA survey (FIES) figure. It learns from PSA rounds back to 2006. Intervals show how uncertain each estimate is. Use PSA’s official figures for decisions whenever they exist."
-              ja="モデル推計は公式統計ではありません。モデルは直近のPSA調査回を出発点に、その市町村が州の中でどう動いたかを推定します。過去の調査回で効果が確かめられた場合には、全国の傾向と、その州の前回のPSA家計調査（FIES）の値も加えます。学習には2006年までさかのぼるPSA調査回を使います。区間がそれぞれの推計の不確かさを示します。判断には、公式値がある限りPSAの公式統計を使ってください。"
+              en={`Model estimates are not official statistics. The model starts from the last PSA round and estimates how the place moved within its province. When past rounds show they help, it also uses the national trend and the province’s previous PSA survey (FIES) figure. It learns from PSA rounds back to ${first}. Intervals show how uncertain each estimate is. Use PSA’s official figures for decisions whenever they exist.`}
+              ja={`モデル推計は公式統計ではありません。モデルは直近のPSA調査回を出発点に、その市町村が州の中でどう動いたかを推定します。過去の調査回で効果が確かめられた場合には、全国の傾向と、その州の前回のPSA家計調査（FIES）の値も加えます。学習には${first}年までさかのぼるPSA調査回を使います。区間がそれぞれの推計の不確かさを示します。判断には、公式値がある限りPSAの公式統計を使ってください。`}
             />
           </p>
           <ul className="grid list-disc gap-1 pl-5">
             <li>
               <T
-                en="PSA official figures (2012, 2015, 2018, 2021, 2023) are drawn solid, with their published 90 % confidence intervals. PSA changed method from ELL to Census EB between 2018 and 2021."
-                ja="PSA公式値（2012・2015・2018・2021・2023年）は濃い色で、公表された90%信頼区間とともに表示します。PSAは2018年と2021年の間にELL法からCensus EB法へ手法を変更しました。"
+                en={`PSA official figures (${yearList(manifest.rounds, "en")}) are drawn solid, with their published 90 % confidence intervals. PSA changed method from ELL to Census EB between ${LAST_ELL} and ${CENSUS_EB_FROM}.`}
+                ja={`PSA公式値（${yearList(manifest.rounds, "ja")}年）は濃い色で、公表された90%信頼区間とともに表示します。PSAは${LAST_ELL}年と${CENSUS_EB_FROM}年の間にELL法からCensus EB法へ手法を変更しました。`}
               />
             </li>
             <li>
@@ -208,14 +214,14 @@ export default function AboutPage() {
             </li>
             <li>
               <T
-                en="“Did it really change?”: a change between two figures is called likely real when it is larger than 1.645 × √(SE₁² + SE₂²). This is a two-sided test at the 10 % level that treats the two figures as independent. PSA figures use their published standard errors; a model estimate uses the larger side of its 90 % interval divided by 1.645. A model year is compared with the PSA round it starts from. Figures on either side of PSA's 2018 → 2021 method change are never compared. Clear changes between PSA rounds are marked ▲▼ on the chart."
-                ja="「本当に変わったか」：二つの値の差が1.645 × √(SE₁² + SE₂²)より大きいとき「おそらく実際の変化」とします（二つの値を独立とみなした10%水準の両側検定）。PSAの値は公表された標準誤差を、モデル推計は90%区間の広い側を1.645で割った値を使います。モデル推計の年は、出発点となったPSA調査回と比べます。PSAの2018→2021年の手法変更をまたぐ値は比較しません。PSA調査回の間の明らかな変化はグラフに▲▼で示します。"
+                en={`“Did it really change?”: a change between two figures is called likely real when it is larger than 1.645 × √(SE₁² + SE₂²). This is a two-sided test at the 10 % level that treats the two figures as independent. PSA figures use their published standard errors; a model estimate uses the larger side of its 90 % interval divided by 1.645. A model year is compared with the PSA round it starts from. Figures on either side of PSA's ${LAST_ELL} → ${CENSUS_EB_FROM} method change are never compared. Clear changes between PSA rounds are marked ▲▼ on the chart.`}
+                ja={`「本当に変わったか」：二つの値の差が1.645 × √(SE₁² + SE₂²)より大きいとき「おそらく実際の変化」とします（二つの値を独立とみなした10%水準の両側検定）。PSAの値は公表された標準誤差を、モデル推計は90%区間の広い側を1.645で割った値を使います。モデル推計の年は、出発点となったPSA調査回と比べます。PSAの${LAST_ELL}→${CENSUS_EB_FROM}年の手法変更をまたぐ値は比較しません。PSA調査回の間の明らかな変化はグラフに▲▼で示します。`}
               />
             </li>
             <li>
               <T
-                en="Province summaries count places above the national median for the same source and year. They apply the same change test between the first and last PSA rounds of the current method (2012–2018 or 2021 onwards). The national sentence ranks regions by the simple average of their places with figures from that year's source. Regions with fewer than 5 such places are left out and named."
-                ja="州の要約では、同じ年・同じ出典の全国中央値を上回る市町村を数えます。また、現在の手法の最初と最後のPSA調査回（2012〜2018年、または2021年以降）の間に、同じ変化の検定を当てはめます。全国の文は、その年の出典の値がある市町村の単純平均で地域を順位付けします。そうした市町村が5未満の地域は除外し、その名前を示します。"
+                en={`Province summaries count places above the national median for the same source and year. They apply the same change test between the first and last PSA rounds of the current method (${yearSpan(r0, LAST_ELL, "en")} or ${CENSUS_EB_FROM} onwards). The national sentence ranks regions by the simple average of their places with figures from that year's source. Regions with fewer than 5 such places are left out and named.`}
+                ja={`州の要約では、同じ年・同じ出典の全国中央値を上回る市町村を数えます。また、現在の手法の最初と最後のPSA調査回（${yearSpan(r0, LAST_ELL, "ja")}年、または${CENSUS_EB_FROM}年以降）の間に、同じ変化の検定を当てはめます。全国の文は、その年の出典の値がある市町村の単純平均で地域を順位付けします。そうした市町村が5未満の地域は除外し、その名前を示します。`}
               />
             </li>
             <li>
@@ -236,8 +242,8 @@ export default function AboutPage() {
           <ul className="grid list-disc gap-2 pl-5">
             <li>
               <T
-                en="Poverty incidence: Philippine Statistics Authority (PSA), City and Municipal Level Small Area Poverty Estimates, 2012–2023; the 2006 and 2009 rounds are used only to train the model. Used with attribution under PSA/OpenSTAT terms (CC BY; to be confirmed with PSA)."
-                ja="貧困率：フィリピン統計庁（PSA）市町村別小地域貧困推計 2012〜2023年。2006年・2009年の調査回はモデルの学習にのみ使用。PSA/OpenSTATの条件（CC BY、PSAに確認中）に従い出典を明記して使用。"
+                en={`Poverty incidence: Philippine Statistics Authority (PSA), City and Municipal Level Small Area Poverty Estimates, ${yearSpan(r0, rN, "en")}; the ${yearList(train, "en", true)} rounds are used only to train the model. Used with attribution under PSA/OpenSTAT terms (CC BY; to be confirmed with PSA).`}
+                ja={`貧困率：フィリピン統計庁（PSA）市町村別小地域貧困推計 ${yearSpan(r0, rN, "ja")}年。${train.map((y) => `${y}年`).join("・")}の調査回はモデルの学習にのみ使用。PSA/OpenSTATの条件（CC BY、PSAに確認中）に従い出典を明記して使用。`}
               />{" "}
               <a className={LINK} href="https://psa.gov.ph/">
                 psa.gov.ph
@@ -245,8 +251,8 @@ export default function AboutPage() {
             </li>
             <li>
               <T
-                en="Provincial poverty: PSA Family Income and Expenditure Survey (FIES) official poverty statistics by province, 2006–2023, from PSA OpenSTAT. The model uses only the previous round’s figure, never the figure for the year it estimates."
-                ja="州別の貧困率：PSA家計所得支出調査（FIES）に基づく州別公式貧困統計 2006〜2023年、PSA OpenSTATより。モデルは前回の調査回の値だけを使い、推計する年の値は使いません。"
+                en={`Provincial poverty: PSA Family Income and Expenditure Survey (FIES) official poverty statistics by province, ${yearSpan(first, last, "en")}, from PSA OpenSTAT. The model uses only the previous round’s figure, never the figure for the year it estimates.`}
+                ja={`州別の貧困率：PSA家計所得支出調査（FIES）に基づく州別公式貧困統計 ${yearSpan(first, last, "ja")}年、PSA OpenSTATより。モデルは前回の調査回の値だけを使い、推計する年の値は使いません。`}
               />{" "}
               <a className={LINK} href="https://openstat.psa.gov.ph/">
                 OpenSTAT

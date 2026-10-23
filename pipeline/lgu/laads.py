@@ -6,7 +6,8 @@ Products (sources.yaml):
     AllAngle_Composite_Snow_Free (fill -999.9). All years are stacked as bands of one GeoTIFF so that
     exactextract computes each polygon's pixel coverage once for every year.
     S-NPP deliveries end 2026-11-02, so from 2026 the same product from NOAA-20 (VJ146A4: same grid, layer
-    and units) is used, scaled onto the S-NPP series by one ratio estimated in the overlap year 2025 (bm_ratio).
+    and units) is used, scaled onto the S-NPP series by one radiance ratio estimated in the overlap year 2025
+    (bm_ratio); its lit fraction is then calibrated per LGU against S-NPP in the same year (calibrate_lit).
   * viirs-vj113a1: NOAA-20 16-day NDVI on the 500 m MODIS sinusoidal grid. Per year, the per-pixel mean
     of valid composites (pixel reliability 0-1) is mosaicked and reduced the same way (continuity for MODIS).
 
@@ -56,6 +57,24 @@ def bm_ratio(snpp: np.ndarray, noaa20: np.ndarray) -> float:
     if not m.any() or np.sum(noaa20[m]) <= 0:
         raise RuntimeError("Black Marble cross-calibration: no pixels lit in both products")
     return float(np.sum(snpp[m], dtype=np.float64) / np.sum(noaa20[m], dtype=np.float64))
+
+
+def calibrate_lit(res, overlap_snpp, overlap_noaa20):  # type: ignore[no-untyped-def]
+    """Per-LGU lit-fraction calibration of the NOAA-20 years, in the overlap year, like the radiance ratio.
+
+    NOAA-20 sets more dim pixels to zero than S-NPP, so a radiance ratio alone leaves its lit fraction low
+    (2024, tile h30v07: 2.5 % of pixels lit against 3.6 %). Each LGU's NOAA-20 lit fraction is multiplied by
+    its own S-NPP / NOAA-20 ratio of the overlap year (NOAA-20 already radiance-scaled); an LGU with no NOAA-20
+    lit pixels that year takes the ratio of the national sums. Results are clipped to 1. `overlap_*` are
+    Series of bm_lit_frac indexed by adm3_pcode; `res` rows of S-NPP years are returned unchanged."""
+    nat = float(overlap_snpp.sum() / overlap_noaa20.sum()) if overlap_noaa20.sum() > 0 else 1.0
+    ratio = (overlap_snpp / overlap_noaa20.where(overlap_noaa20 > 0)).fillna(nat)
+    res = res.copy()
+    noaa = res.year.map(bm_product) != "VNP46A4"
+    k = res.loc[noaa, "adm3_pcode"].map(ratio).fillna(nat)
+    res.loc[noaa, "bm_lit_frac"] = (res.loc[noaa, "bm_lit_frac"] * k).clip(upper=1.0)
+    log.warning("Black Marble: NOAA-20 lit fraction calibrated per LGU (national ratio %.4f)", nat)
+    return res
 
 
 # VJ113A1: MODIS sinusoidal grid, 500 m (2,400 px per tile)
@@ -206,7 +225,13 @@ def zonal_black_marble(adm3_path: Path, years: list[int], out: Path) -> Path:
     from rasterio.transform import from_origin
 
     polys = gpd.read_parquet(adm3_path)[["adm3_pcode", "geometry"]]
-    n = len(years)
+    noaa20 = any(bm_product(y) != "VNP46A4" for y in years)
+    # Layers: the output years, plus, with a NOAA-20 year, the overlap year from both satellites (the lit
+    # fraction calibration); each layer is three bands (radiance, lit, valid).
+    layers = [(y, bm_product(y)) for y in years]
+    if noaa20:
+        layers += [(BM_OVERLAP_YEAR, "VNP46A4"), (BM_OVERLAP_YEAR, "VJ146A4")]
+    n = len(layers)
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as td, _client() as client:
         work = Path(td)
         stack = work / "bm.tif"
@@ -216,35 +241,37 @@ def zonal_black_marble(adm3_path: Path, years: list[int], out: Path) -> Path:
                            crs="EPSG:4326", transform=from_origin(BM_WEST, BM_NORTH, BM_RES, BM_RES), nodata=np.nan,
                            tiled=True, blockxsize=512, blockysize=512, compress="deflate", predictor=3,
                            BIGTIFF="YES") as dst:
-            scale = 1.0
-            if any(bm_product(y) != "VNP46A4" for y in years):
-                ref = bm_year_mosaic(client, BM_OVERLAP_YEAR, work, "VNP46A4")
-                scale = bm_ratio(ref, bm_year_mosaic(client, BM_OVERLAP_YEAR, work, "VJ146A4"))
-                del ref
+            scale, overlap = 1.0, {}
+            if noaa20:
+                overlap = {p: bm_year_mosaic(client, BM_OVERLAP_YEAR, work, p) for p in ("VNP46A4", "VJ146A4")}
+                scale = bm_ratio(overlap["VNP46A4"], overlap["VJ146A4"])
                 log.warning("Black Marble: NOAA-20 years scaled by %.4f (S-NPP/NOAA-20, overlap year %d)",
                             scale, BM_OVERLAP_YEAR)
-            for k, y in enumerate(years):
+            for k, (y, product) in enumerate(layers):
                 t0 = time.time()
-                m = bm_year_mosaic(client, y, work)
-                if bm_product(y) != "VNP46A4":
+                m = overlap.pop(product) if k >= len(years) else bm_year_mosaic(client, y, work, product)
+                if product != "VNP46A4":
                     m *= np.float32(scale)
                 dst.write(m, k + 1)
                 dst.write(np.where(np.isnan(m), np.nan, (m > LIT).astype(np.float32)), n + k + 1)
                 dst.write((~np.isnan(m)).astype(np.float32), 2 * n + k + 1)
                 del m
-                log.info("%s %d mosaicked in %.0f s (disk free %.1f GB)", bm_product(y), y, time.time() - t0,
+                log.info("%s %d mosaicked in %.0f s (disk free %.1f GB)", product, y, time.time() - t0,
                          disk_free_gb(td))
         t0 = time.time()
         df = exact_extract(str(stack), polys, ["mean", "sum"], include_cols=["adm3_pcode"], output="pandas")
         log.info("exactextract over %d bands in %.0f s", 3 * n, time.time() - t0)
     rows = []
-    for k, y in enumerate(years):
+    for k, (y, _) in enumerate(layers):
         b_rad, b_lit, b_val = k + 1, n + k + 1, 2 * n + k + 1
         rows.append(pd.DataFrame({
             "adm3_pcode": df.adm3_pcode, "year": y,
             "bm_mean": df[f"band_{b_rad}_mean"], "bm_sum": df[f"band_{b_rad}_sum"],
             "bm_lit_frac": df[f"band_{b_lit}_mean"], "bm_valid_frac": df[f"band_{b_val}_mean"]}))
-    res = pd.concat(rows, ignore_index=True)
+    res = pd.concat(rows[:len(years)], ignore_index=True)
+    if noaa20:
+        snpp, vj = (r.set_index("adm3_pcode").bm_lit_frac for r in rows[len(years):])
+        res = calibrate_lit(res, snpp, vj)
     out.parent.mkdir(parents=True, exist_ok=True)
     res.to_parquet(out, index=False)
     return out

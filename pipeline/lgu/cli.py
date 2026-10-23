@@ -21,12 +21,13 @@ import shutil
 from pathlib import Path
 
 from .paths import CROSSWALK_OVERRIDES, DATA, INTERIM, RAW, REPO_ROOT
+from .rounds import RUN_YEARS
 
 BUILD = DATA / "build"
 COMMITTED = Path(__file__).resolve().parents[1] / "inputs"
 FILE_SOURCES = ["psa-sae-2018-2021", "psa-sae-2023", "cod-ab-phl-tables", "cod-ab-phl-gdb",
                 "psa-fies-prov-2006-2015", "psa-fies-prov-2018-2023", "psa-fies-prov-nohuc", "psa-psgc"]
-DEFAULT_YEARS = "2012-2025"
+DEFAULT_YEARS = RUN_YEARS  # config/rounds.json
 
 
 def years_arg(s: str) -> list[int]:
