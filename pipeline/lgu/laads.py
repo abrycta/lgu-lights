@@ -37,7 +37,7 @@ log = logging.getLogger("lgu.laads")
 LAADS = "https://ladsweb.modaps.eosdis.nasa.gov"
 CMR = "https://cmr.earthdata.nasa.gov/search/granules.json"
 PH_TILES = ("h29v07", "h29v08", "h30v06", "h30v07", "h30v08")
-VJ_MIN_COMPOSITES = 20  # of 23 VJ113A1 16-day composites per year
+VJ_MIN_COMPOSITES = 40  # of 46 VJ113A1 composite dates per year (16-day composites released every 8 days)
 # CMR collection versions (Collection 2 Black Marble; VJ113A1 is LP DAAC's 002), checked against CMR 2026-10-23
 CMR_VERSION = {"VNP46A4": "2", "VJ146A4": "2", "VJ113A1": "002"}
 # A tile whose finite share is below this is a fill-only (blacked-out) file, not data (audit L-C2). Ocean pixels may
@@ -299,7 +299,7 @@ def vj113_year_mean(client: httpx.Client, year: int, work: Path) -> tuple[np.nda
             total[ys:ys + SIN_PX, xs:xs + SIN_PX][ok] += val[ok]
             count[ys:ys + SIN_PX, xs:xs + SIN_PX][ok] += 1
             f.unlink()
-    # 23 16-day composites a year; a short listing would publish a mean of a few composites (verifier gap A1-8)
+    # 46 composite dates a year; a short listing would publish a mean of a few composites (verifier gap A1-8)
     if complete < VJ_MIN_COMPOSITES:
         raise RuntimeError(f"VJ113A1 {year}: {complete} composites with all {len(PH_TILES)} PH tiles "
                            f"({len(days)} listed), expected >= {VJ_MIN_COMPOSITES}")
