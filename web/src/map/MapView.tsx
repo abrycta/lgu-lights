@@ -186,6 +186,18 @@ export default function MapView({ base, year, breaks, theme, lang, province, lgu
     if (!frozen) {
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
+      // On a narrow map (tablet landscape) the open compact credit covers the legend's "How to read this map"
+      // button: collapse it to its (i) button then, as MapLibre does on the first drag. Otherwise it stays open.
+      const collapseCreditOverLegend = () => {
+        const credit = map.getContainer().querySelector(".maplibregl-ctrl-attrib.maplibregl-compact-show");
+        const button = [...(map.getContainer().closest("section")?.querySelectorAll<HTMLElement>('[data-testid="guide-open"]') ?? [])].find((l) => l.offsetParent);
+        if (!credit || !button) return;
+        const a = credit.getBoundingClientRect();
+        const b = button.getBoundingClientRect();
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) credit.classList.remove("maplibregl-compact-show");
+      };
+      map.on("load", collapseCreditOverLegend);
+      map.on("resize", collapseCreditOverLegend);
     }
 
     map.on("load", () => {
