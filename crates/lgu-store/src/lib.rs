@@ -113,8 +113,15 @@ pub fn load(lgus_path: &Path, features_path: &Path, labels_path: &Path) -> Resul
         let Some(&i) = index.get(&text(&r, "adm3_pcode")) else {
             continue;
         };
-        let Some(yi) = panel::year_index(num(&r, "year") as i32) else {
-            continue;
+        // A feature year outside the panel's years (e.g. a new 2026 year) must stop the run, never vanish
+        // silently from the snapshot and read models: extend panel::LAST_YEAR first (audit M4).
+        let year = num(&r, "year") as i32;
+        let Some(yi) = panel::year_index(year) else {
+            return Err(format!(
+                "feature store has year {year}, outside the panel years {}..={}: extend lgu_core::panel::LAST_YEAR",
+                panel::FIRST_YEAR,
+                panel::LAST_YEAR
+            ));
         };
         for (k, f) in RAW_FIELDS.iter().enumerate() {
             raw[(i * N_YEARS + yi) * N_RAW + k] = num(&r, f);
