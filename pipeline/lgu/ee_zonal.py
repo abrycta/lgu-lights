@@ -2,7 +2,8 @@
 
 Nothing is downloaded: polygons are sent in chunks and `reduceRegions` returns one row per LGU.
   * modis-mod13q1: yearly mean NDVI and EVI of 16-day composites with SummaryQA 0-1 (good, marginal),
-    250 m, area-weighted mean.
+    250 m, area-weighted mean. `veg_composites` records how many composites Earth Engine holds for the
+    year (23 in a full year), so the feature store can skip a partial vegetation year (Terra's end).
   * worldpop-phl-100m: population sum per LGU, 2012-2020 (WorldPop GP 100 m ends in 2020; later years are
     carried forward and flagged `pop_carried`).
   * srtm-dem: mean elevation and mean slope (static).
@@ -84,12 +85,13 @@ def images(years: list[int]):  # type: ignore[no-untyped-def]
         return good.mean().rename([f"ndvi_{y}", f"evi_{y}"])
 
     veg = ee.Image.cat([vi(y) for y in years])
+    counts = ee.List([ee.ImageCollection(MODIS).filterDate(f"{y}-01-01", f"{y + 1}-01-01").size() for y in years])
     pop_years = sorted({min(y, 2020) for y in years})  # WorldPop GP ends in 2020
     wp = ee.ImageCollection(WORLDPOP).filter(ee.Filter.eq("country", "PHL"))
     pop = ee.Image.cat([wp.filter(ee.Filter.eq("year", y)).first().rename(f"pop_{y}") for y in pop_years])
     dem = ee.Image(DEM).select("elevation")
     terrain = ee.Image.cat([dem.rename("elev"), ee.Terrain.slope(dem).rename("slope")])
-    return veg, pop, terrain, pop_years
+    return veg, pop, terrain, pop_years, counts
 
 
 def zonal(adm3_path: Path, years: list[int], out: Path) -> Path:
@@ -100,7 +102,9 @@ def zonal(adm3_path: Path, years: list[int], out: Path) -> Path:
     init()
     gdf = gpd.read_parquet(adm3_path)[["adm3_pcode", "geometry"]]
     gdf["geometry"] = gdf.geometry.simplify(SIMPLIFY_DEG, preserve_topology=True)
-    veg, pop, terrain, pop_years = images(years)
+    veg, pop, terrain, pop_years, counts = images(years)
+    composites = dict(zip(years, counts.getInfo(), strict=True))
+    log.info("MOD13Q1 composites per year: %s", composites)
     recs: dict[str, dict] = {}
     t0 = time.time()
     jobs = []
@@ -117,6 +121,7 @@ def zonal(adm3_path: Path, years: list[int], out: Path) -> Path:
         for y in years:
             py = min(y, 2020)
             long.append({"adm3_pcode": pcode, "year": y, "ndvi_mean": p.get(f"ndvi_{y}"), "evi_mean": p.get(f"evi_{y}"),
+                         "veg_composites": composites[y],
                          "pop": p.get(f"pop_{py}"), "pop_carried": y not in pop_years,
                          "elev_mean": p.get("elev"), "slope_mean": p.get("slope")})
     df = pd.DataFrame(long)
