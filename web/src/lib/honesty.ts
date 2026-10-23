@@ -25,11 +25,11 @@ export function classLabels(breaks: readonly number[] = DEFAULT_BREAKS): string[
   return out;
 }
 
-/** Reliability tiers in plain words (CV ≤ 10 %, ≤ 20 %, above): Solid, Use with care, Rough guess. */
+/** Reliability tiers in plain words (CV ≤ 10 %, ≤ 20 %, above): Solid, Moderate range, Wide range. */
 export const TIER_LABEL: Record<Tier, Bi> = {
   0: { en: "Solid", ja: "確かな値" },
-  1: { en: "Use with care", ja: "注意して使う値" },
-  2: { en: "Rough guess", ja: "おおよその目安" },
+  1: { en: "Moderate range", ja: "幅がやや広い値" },
+  2: { en: "Wide range", ja: "幅が広い値" },
 };
 
 /**

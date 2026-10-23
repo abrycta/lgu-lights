@@ -43,8 +43,8 @@ export function Guide() {
     <div key="h" className="grid gap-2">
       <p>
         <T
-          en="Stripes mean the figure is uncertain. Light stripes: “Use with care”. Dense stripes: “Rough guess”. No stripes: “Solid”."
-          ja="斜線は値が不確かなことを示します。まばらな斜線は「注意して使う値」、密な斜線は「おおよその目安」、斜線なしは「確かな値」です。"
+          en="Stripes show how wide a figure’s range is. Light stripes: “Moderate range”. Dense stripes: “Wide range”. No stripes: “Solid”."
+          ja="斜線は値の幅の広さを示します。まばらな斜線は「幅がやや広い値」、密な斜線は「幅が広い値」、斜線なしは「確かな値」です。"
         />
       </p>
       <div className="flex gap-2" aria-hidden="true">
@@ -61,7 +61,7 @@ export function Guide() {
         <Term k="sae">{t("small-area estimates", "小地域推計")}</Term>
         <T en={`, ${yearList(rounds, "en")}). Lighter colours are Lights `} ja={`、${yearList(rounds, "ja")}年）です。淡い色はLightsの`} />
         <Term k="model">{t("model estimates", "モデル推計")}</Term>
-        <T en=" for the other years: not official, and always shown with an " ja="で、公式統計ではなく、必ず" />
+        <T en=" for the other years, always shown with an " ja="で、必ず" />
         <Term k="interval">{t("interval", "区間")}</Term>
         <T en="." ja="を添えています。" />
       </p>

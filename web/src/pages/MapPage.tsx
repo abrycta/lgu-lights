@@ -74,8 +74,8 @@ function Intro() {
       </p>
       <p>
         <T
-          en="Model estimates are not official statistics. They are drawn lighter, labelled “Model estimate”, and always come with an interval. Stripes mark figures to “Use with care” (CV over 10 %) and “Rough guesses” (over 20 %); figures without stripes are “Solid”."
-          ja="モデル推計は公式統計ではありません。淡い色で描き、「モデル推計」と表示し、必ず区間を添えています。斜線は「注意して使う値」（CV 10%超）と「おおよその目安」（20%超）を示し、斜線のない値は「確かな値」です。"
+          en="Model estimates are not official statistics. They are drawn lighter, labelled “Model estimate”, and always come with an interval. Stripes mark a “Moderate range” (CV over 10 %) or a “Wide range” (over 20 %); figures without stripes are “Solid”."
+          ja="モデル推計は公式統計ではありません。淡い色で描き、「モデル推計」と表示し、必ず区間を添えています。斜線は「幅がやや広い値」（CV 10%超）と「幅が広い値」（20%超）を示し、斜線のない値は「確かな値」です。"
         />
       </p>
       <Glossary />

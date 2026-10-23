@@ -48,7 +48,7 @@ describe("natural frequencies", () => {
   });
 
   it("reliability in plain words", () => {
-    expect(reliabilitySentence(2, 9.6, 40.2, "en")).toBe("Rough guess: the true figure could be anywhere from 10 to 40 in 100.");
+    expect(reliabilitySentence(2, 9.6, 40.2, "en")).toBe("Wide range: the true figure could be anywhere from 10 to 40 in 100.");
   });
 });
 

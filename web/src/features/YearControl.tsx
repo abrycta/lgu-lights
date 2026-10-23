@@ -19,7 +19,7 @@ export function YearControl({ years, rounds, year, onChange }: { years: number[]
           {isRound ? (
             <T en="PSA round: official figures where published" ja="PSA調査年：公表値は公式統計" />
           ) : (
-            <T en="Model estimates, not official" ja="モデル推計（非公式）" />
+            <T en="Model estimates" ja="モデル推計" />
           )}
         </span>
       </div>
