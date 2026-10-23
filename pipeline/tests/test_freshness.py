@@ -1,6 +1,5 @@
 """Freshness check (audit L-C7), with mocked HTTP."""
 import httpx
-import pytest
 
 from lgu import freshness, laads
 
