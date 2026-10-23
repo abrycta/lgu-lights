@@ -65,6 +65,12 @@ concurrency:
 env:
   GH_TOKEN: ${{ github.token }}
 
+# An explicit bash runs every step with `-eo pipefail`, so a failing command piped into `tee` fails its step
+# (the runner's implicit default is `bash -e` only, which reported a failed canary gate as a success).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   config:
     runs-on: ubuntu-24.04
