@@ -7,7 +7,10 @@
     fies         PSA OpenSTAT provincial poverty (FIES) -> data/build/provinces_fies.parquet (lgu/fies.py)
     zonal-ee     Earth Engine: MODIS NDVI/EVI, WorldPop, SRTM -> data/interim/zonal_ee.parquet
     zonal-bm     LAADS Black Marble VNP46A4 + exactextract -> data/interim/zonal_bm.parquet
-    zonal-vj     LAADS VJ113A1 NDVI + exactextract -> data/interim/zonal_vj.parquet (continuity; optional)
+    zonal-vj     LAADS VJ113A1 NDVI/EVI + exactextract -> data/interim/zonal_vj.parquet (after Terra; --years
+                 partial = only the years MOD13Q1 leaves incomplete, from zonal_ee.parquet)
+    veg-calibrate  VJ113A1 -> MOD13Q1 calibration from the overlap years (--features, --vj) -> --out JSON
+                 (default pipeline/inputs/veg_calibration.json) with an out-of-sample check (lgu/vegetation.py)
     features     merge zonal tables -> data/build/features.parquet (the feature store)
     train        design.csv (from the Rust CLI) -> models, metrics, parity expectations (lgu/train.py)
     to-parquet   estimates.csv (from the Rust CLI) -> estimates.parquet
@@ -59,6 +62,8 @@ def run(cmd: str, argv: list[str]) -> int:
     ap.add_argument("--accept-metrics", action="store_true", help="train: skip the metrics gate (a reviewed model change)")
     ap.add_argument("--recompute-ratio", action="store_true",
                     help="zonal-bm: re-derive the S-NPP/NOAA-20 calibration instead of pipeline/inputs/bm_ratio.json")
+    ap.add_argument("--features", type=Path, help="veg-calibrate: feature store or zonal_ee table with MOD13Q1 values")
+    ap.add_argument("--vj", type=Path, help="veg-calibrate: zonal_vj.parquet of the overlap years")
     a = ap.parse_args(argv)
     BUILD.mkdir(parents=True, exist_ok=True)
 
@@ -157,7 +162,32 @@ def run(cmd: str, argv: list[str]) -> int:
 
     if cmd == "zonal-vj":
         from . import laads
-        laads.zonal_vj113a1(INTERIM / "adm3.parquet", years_arg(a.years), a.out or INTERIM / "zonal_vj.parquet")
+        if a.years == "partial":  # only the years MOD13Q1 leaves incomplete (Terra's end), from zonal_ee.parquet
+            import pandas as pd
+
+            from . import features, vegetation
+            ys = [y for y in features.partial_veg_years(pd.read_parquet(INTERIM / "zonal_ee.parquet"))
+                  if y >= vegetation.OVERLAP_FROM]
+            if not ys:
+                print("::notice::MOD13Q1 complete for every year: VJ113A1 not needed")
+                return 0
+        else:
+            ys = years_arg(a.years)
+        laads.zonal_vj113a1(INTERIM / "adm3.parquet", ys, a.out or INTERIM / "zonal_vj.parquet")
+        return 0
+
+    if cmd == "veg-calibrate":
+        import pandas as pd
+
+        from . import vegetation
+        mod, vj = pd.read_parquet(a.features), pd.read_parquet(a.vj)
+        cal = vegetation.fit(mod, vj)
+        ys = cal["overlap_years"]
+        cal["validation"] = vegetation.validate(mod, vj, ys[:-2], ys[-2:])
+        out = a.out or vegetation.CAL_PATH
+        out.write_text(json.dumps(cal, indent=1) + "\n")
+        print(json.dumps({k: {kk: vv for kk, vv in v.items() if kk != "offsets"} if isinstance(v, dict) else v
+                          for k, v in cal.items()}, indent=1))
         return 0
 
     if cmd == "features":

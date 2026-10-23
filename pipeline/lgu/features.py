@@ -4,8 +4,10 @@ One row per (adm3_pcode, year): Black Marble radiance (bm_*), MODIS NDVI/EVI, Wo
 SRTM elevation and slope, and (when computed) NOAA-20 VJ113A1 NDVI. Data-quality gates run here:
 a failed gate raises, so a bad feature store is never published (DATA-ARCHIVING.md principle 4).
 A year without a full MODIS vegetation year (fewer than MIN_VEG_COMPOSITES 16-day composites, as when
-Terra ends around February 2027) is left out silently: no failure, nothing published for that year,
-only an internal ::notice in the run log.
+Terra ends around February 2027) takes NOAA-20 VJ113A1 NDVI and EVI calibrated onto MOD13Q1
+(lgu.vegetation, Option A) when zonal_vj.parquet holds that year and a calibration is committed;
+otherwise it is left out silently: no failure, nothing published for that year, only an internal
+::notice in the run log.
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ GATES = {  # column: (min, max) over non-null values
     "pop": (0.0, 5_000_000.0),
 }
 # Gated only when the column is in the store, and per year only in years that have it (VJ113A1 NDVI starts in 2018).
-OPTIONAL_GATES = {"vj_ndvi_mean": (-0.2, 1.0)}
+OPTIONAL_GATES = {"vj_ndvi_mean": (-0.2, 1.0), "vj_evi_mean": (-0.2, 1.0)}
 
 MIN_VEG_COMPOSITES = 20  # of 23 MOD13Q1 composites a year; fewer would bias the yearly mean to one season
 
@@ -75,19 +77,46 @@ def gate_years(df: pd.DataFrame) -> list[str]:
     return problems
 
 
-def merge(interim: Path, out: Path) -> dict:
+def fill_from_vj(ee: pd.DataFrame, vj: pd.DataFrame | None, partial: list[int], cal: dict | None) -> tuple[pd.DataFrame, list[int]]:
+    """NDVI/EVI of partial MOD13Q1 years from calibrated VJ113A1 where VJ113A1 holds that year (lgu.laads only
+    writes complete VJ113A1 years). Returns the table and the years filled; other columns are left as they are."""
+    if vj is None or cal is None or not partial:
+        return ee, []
+    from . import vegetation
+
+    have = sorted(int(y) for y in set(vj.year) & set(partial))
+    if not have:
+        return ee, []
+    cal_vals = vegetation.apply(vj[vj.year.isin(have)], cal).set_index(["adm3_pcode", "year"])
+    ee = ee.copy()
+    rows = ee.year.isin(have)
+    key = pd.MultiIndex.from_frame(ee.loc[rows, ["adm3_pcode", "year"]])
+    for col in ("ndvi_mean", "evi_mean"):
+        ee.loc[rows, col] = cal_vals[col].reindex(key).to_numpy()
+    return ee, have
+
+
+def merge(interim: Path, out: Path, cal_path: Path | None = None) -> dict:
+    from . import vegetation
+
     bm = pd.read_parquet(interim / "zonal_bm.parquet")
     ee = pd.read_parquet(interim / "zonal_ee.parquet")
-    skipped = partial_veg_years(ee)
+    vj_path = interim / "zonal_vj.parquet"
+    vj = pd.read_parquet(vj_path) if vj_path.exists() else None
+    partial = partial_veg_years(ee)
+    ee, from_vj = fill_from_vj(ee, vj, partial, vegetation.load(cal_path or vegetation.CAL_PATH) if partial else None)
+    if from_vj:
+        print(f"::notice::MODIS vegetation year(s) {from_vj} incomplete (Terra's end): NDVI/EVI from NOAA-20 VJ113A1, "
+              "calibrated onto MOD13Q1 per LGU")
+    skipped = [y for y in partial if y not in from_vj]
     if skipped:
         print(f"::notice::partial MODIS vegetation year(s) {skipped} (under {MIN_VEG_COMPOSITES} composites) left out")
         ee = ee[~ee.year.isin(skipped)]
         bm = bm[~bm.year.isin(skipped)]
     ee = ee.drop(columns="veg_composites", errors="ignore")  # the feature store keeps its columns
     df = bm.merge(ee, on=["adm3_pcode", "year"], how="outer", validate="one_to_one")
-    vj = interim / "zonal_vj.parquet"
-    if vj.exists():
-        df = df.merge(pd.read_parquet(vj), on=["adm3_pcode", "year"], how="left", validate="one_to_one")
+    if vj is not None:
+        df = df.merge(vj, on=["adm3_pcode", "year"], how="left", validate="one_to_one")
     lgus = pd.read_parquet(interim / "lgus.parquet")
     problems = []
     if set(df.adm3_pcode) != set(lgus.adm3_pcode):
@@ -106,5 +135,5 @@ def merge(interim: Path, out: Path) -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out, index=False, compression="snappy")
     return {"rows": len(df), "years": sorted(int(y) for y in df.year.unique()), "columns": list(df.columns),
-            "skipped_years": skipped,
+            "skipped_years": skipped, "veg_vj113a1_years": from_vj,
             "missing": {c: int(df[c].isna().sum()) for c in df.columns if df[c].isna().any()}}

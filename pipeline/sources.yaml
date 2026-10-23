@@ -329,9 +329,10 @@ sources:
 
   - id: viirs-vj113a1
     description: >-
-      NOAA-20 VIIRS vegetation indices, 16-day 500 m sinusoidal tiles (VJ113A1 v002), the continuity
-      series for MODIS NDVI after Terra ends (February 2027). Not on Earth Engine (spike S3): read from
-      LAADS by lgu/laads.py; 2018 onwards.
+      NOAA-20 VIIRS vegetation indices, 16-day 500 m sinusoidal tiles (VJ113A1 v002): NDVI and EVI for
+      years MOD13Q1 does not cover in full (Terra ends February 2027), calibrated onto MOD13Q1 per LGU
+      (lgu/vegetation.py, pipeline/inputs/veg_calibration.json; Option A, 2026-10-23). Not on Earth Engine
+      (spike S3): read from LAADS by lgu/laads.py; 2018 onwards.
     kind: remote-dataset
     licence: "NASA open data; no restrictions"
     attribution: >-

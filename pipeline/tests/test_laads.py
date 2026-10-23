@@ -129,3 +129,20 @@ def test_a_vj113a1_year_with_few_composites_fails(monkeypatch, tmp_path):
     monkeypatch.setattr(laads, "_listing", lambda client, product, year, doy: [])
     with pytest.raises(RuntimeError, match="0 composites"):
         laads.vj113_year_mean(None, 2025, tmp_path)
+
+
+def test_vj113a1_uses_the_mod13q1_composite_phase():
+    days = [f"{d:03d}" for d in range(1, 366, 8)]  # VJ113A1 releases a composite every 8 days
+    phase = laads.vj_phase_days(days)
+    assert phase[:3] == ["001", "017", "033"] and phase[-1] == "353" and len(phase) == 23
+
+
+def test_an_incomplete_vj113a1_year_is_an_incomplete_year(monkeypatch, tmp_path):
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "h5py", sys.modules.get("h5py") or types.ModuleType("h5py"))
+    monkeypatch.setattr(laads, "_days", lambda client, product, year: ["001", "009", "017"])
+    monkeypatch.setattr(laads, "_listing", lambda client, product, year, doy: [])
+    with pytest.raises(laads.IncompleteYear):
+        laads.vj113_year_mean(None, 2027, tmp_path)
