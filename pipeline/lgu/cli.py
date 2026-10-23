@@ -64,6 +64,8 @@ def run(cmd: str, argv: list[str]) -> int:
                     help="zonal-bm: re-derive the S-NPP/NOAA-20 calibration instead of pipeline/inputs/bm_ratio.json")
     ap.add_argument("--features", type=Path, help="veg-calibrate: feature store or zonal_ee table with MOD13Q1 values")
     ap.add_argument("--vj", type=Path, help="veg-calibrate: zonal_vj.parquet of the overlap years")
+    ap.add_argument("--granules", type=Path, nargs="*", default=[],
+                    help="veg-calibrate: vj_granules.json file(s) (file name -> sha256) of the overlap pull")
     a = ap.parse_args(argv)
     BUILD.mkdir(parents=True, exist_ok=True)
 
@@ -184,10 +186,15 @@ def run(cmd: str, argv: list[str]) -> int:
         cal = vegetation.fit(mod, vj)
         ys = cal["overlap_years"]
         cal["validation"] = vegetation.validate(mod, vj, ys[:-2], ys[-2:])
+        granules: dict[str, str] = {}
+        for g in a.granules:
+            granules |= json.loads(g.read_text())
+        if granules:
+            cal["granules"] = dict(sorted(granules.items()))
         out = a.out or vegetation.CAL_PATH
         out.write_text(json.dumps(cal, indent=1) + "\n")
         print(json.dumps({k: {kk: vv for kk, vv in v.items() if kk != "offsets"} if isinstance(v, dict) else v
-                          for k, v in cal.items()}, indent=1))
+                          for k, v in cal.items() if k != "granules"} | {"granules": len(granules)}, indent=1))
         return 0
 
     if cmd == "features":

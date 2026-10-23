@@ -284,6 +284,8 @@ jobs:
           extra=()
           # a freshly derived S-NPP/NOAA-20 calibration, to be reviewed and committed as pipeline/inputs/bm_ratio.json
           if [ -f interim/bm_ratio.json ]; then cp interim/bm_ratio.json build/ && extra+=(build/bm_ratio.json); fi
+          # sha256 of every VJ113A1 granule averaged (provenance of the calibrated vegetation years)
+          if [ -f interim/vj_granules.json ]; then cp interim/vj_granules.json build/ && extra+=(build/vj_granules.json); fi
           tag="features-$VERSION"
           # built as a draft under a temporary name, swapped in only when complete (audit M3)
           ../scripts/swap-release.sh "$tag" "$GITHUB_SHA" "$tag" \
