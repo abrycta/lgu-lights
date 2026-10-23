@@ -151,7 +151,7 @@ export default function MapPage({ embed }: { embed?: MapViewProps["frozen"] } = 
   return (
     <>
       <SyntheticBanner version={manifest.version} />
-      <div className={`flex flex-col lg:flex-row ${embed ? "h-dvh" : "lg:h-[calc(100dvh-81px)]"}`}>
+      <div className={`flex flex-col lg:flex-row ${embed ? "h-dvh" : "lg:h-[calc(100dvh-var(--ak-layout-header-height))]"}`}>
         <section className="flex min-w-0 flex-1 flex-col" aria-label={t("Map and controls", "地図と操作")}>
           <div className="grid gap-3 border-b border-border px-ak-gutter py-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
             <YearControl years={manifest.years} rounds={manifest.rounds} year={year} onChange={setYear} />
