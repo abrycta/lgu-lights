@@ -288,9 +288,11 @@ def _vj_layer(grp, name: str):  # type: ignore[no-untyped-def]
     return val, ~np.isin(raw, fills) & (val >= -0.2) & (val <= 1.0)
 
 
-def vj113_year_mean(client: httpx.Client, year: int, work: Path) -> tuple[dict[str, np.ndarray], tuple[float, float]]:
+def vj113_year_mean(client: httpx.Client, year: int, work: Path,
+                    granules: dict[str, str] | None = None) -> tuple[dict[str, np.ndarray], tuple[float, float]]:
     """Per-pixel mean of valid 16-day NDVI and EVI composites (pixel reliability 0-1) on the sinusoidal grid, one
-    year, on MOD13Q1's composite phase (vj_phase_days). Returns ({"ndvi": mean, "evi": mean}, grid origin)."""
+    year, on MOD13Q1's composite phase (vj_phase_days). Returns ({"ndvi": mean, "evi": mean}, grid origin).
+    With `granules`, each file name -> sha256 is recorded there (provenance, as for the Black Marble calibration)."""
     import h5py
 
     hs = [_tile_hv(f".{t}.") for t in PH_TILES]
@@ -309,6 +311,8 @@ def vj113_year_mean(client: httpx.Client, year: int, work: Path) -> tuple[dict[s
         for f in files:
             h, v = _tile_hv(f.name)
             ys, xs = (v - vmin) * SIN_PX, (h - hmin) * SIN_PX
+            if granules is not None:
+                granules[f.name] = _sha256(f)
             with h5py.File(f) as h5:
                 grp = next(g for k, g in h5["HDFEOS/GRIDS"].items())["Data Fields"]
                 rel = next((k for k in grp if "pixel_reliability" in k.lower()), None)
@@ -450,7 +454,8 @@ def zonal_black_marble(adm3_path: Path, years: list[int], out: Path, recompute_r
 
 def zonal_vj113a1(adm3_path: Path, years: list[int], out: Path) -> Path:
     """Per-LGU yearly mean NDVI and EVI from NOAA-20 VJ113A1 -> Parquet (adm3_pcode, year, vj_ndvi_mean,
-    vj_evi_mean), raw (uncalibrated; lgu.vegetation.calibrate maps them onto MOD13Q1)."""
+    vj_evi_mean), raw (uncalibrated; lgu.vegetation.apply maps them onto MOD13Q1). The sha256 of every granule
+    used is written next to `out` as vj_granules.json."""
     import geopandas as gpd
     import pandas as pd
     from exactextract import exact_extract
@@ -459,18 +464,23 @@ def zonal_vj113a1(adm3_path: Path, years: list[int], out: Path) -> Path:
     polys = gpd.read_parquet(adm3_path)[["adm3_pcode", "geometry"]].to_crs(SIN_CRS)
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as td, _client() as client:
         work = Path(td)
-        bands, origin, done = [], (0.0, 0.0), []
+        bands, origin, done, granules = [], (0.0, 0.0), [], {}
         for y in years:
             t0 = time.time()
             try:
-                m, origin = vj113_year_mean(client, y, work)
+                year_granules: dict[str, str] = {}
+                m, origin = vj113_year_mean(client, y, work, year_granules)
             except IncompleteYear as e:  # left out silently (internal notice only), like a partial MOD13Q1 year
                 print(f"::notice::{e}; year left out")
                 continue
             bands += [m[k] for k in VJ_LAYERS]
+            granules |= year_granules
             done.append(y)
             log.info("VJ113A1 %d averaged in %.0f s", y, time.time() - t0)
         years = done
+        # provenance: every granule averaged, by sha256 (published with the features release; veg-calibrate --granules)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        (out.parent / "vj_granules.json").write_text(json.dumps(dict(sorted(granules.items())), indent=1) + "\n")
         if not years:
             out.parent.mkdir(parents=True, exist_ok=True)
             pd.DataFrame({"adm3_pcode": pd.Series(dtype=str), "year": pd.Series(dtype="int64"),

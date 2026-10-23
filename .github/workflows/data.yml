@@ -50,6 +50,10 @@ on:
         description: With features on, first run the satellite path for one year (the last of years) with every gate
         type: boolean
         default: true
+      canary_only:
+        description: Run only the canary (a check of the satellite path); nothing is built or published
+        type: boolean
+        default: false
 
 permissions:
   contents: read   # only the jobs that publish release assets (features, model) get contents: write
@@ -72,6 +76,7 @@ jobs:
       years: ${{ steps.c.outputs.years }}
       vj113a1: ${{ steps.c.outputs.vj113a1 }}
       canary: ${{ steps.c.outputs.canary }}
+      canary_only: ${{ steps.c.outputs.canary_only }}
       accept_metrics: ${{ steps.c.outputs.accept_metrics }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -85,6 +90,7 @@ jobs:
           I_YEARS: ${{ inputs.years }}
           I_VJ: ${{ inputs.vj113a1 }}
           I_CANARY: ${{ inputs.canary }}
+          I_CANARY_ONLY: ${{ inputs.canary_only }}
           I_OVERWRITE: ${{ inputs.overwrite }}
           I_ACCEPT: ${{ inputs.accept_metrics }}
         run: |
@@ -98,12 +104,14 @@ jobs:
           print(f"years={c.get('years') or json.load(open('config/rounds.json'))['run_years']}")
           print(f"vj113a1={str(c.get('vj113a1', True)).lower()}")
           print(f"canary={str(c.get('canary', True)).lower()}")
+          print("canary_only=false")
           print(f"overwrite={str(c.get('overwrite', False)).lower()}")
           print(f"accept_metrics={str(c.get('accept_metrics', False)).lower()}")
           PY
           else
             { echo "version=$I_VERSION"; echo "features=$I_FEATURES"; echo "features_from=${I_FROM:-$I_VERSION}"
               echo "years=${I_YEARS:-$(jq -r .run_years config/rounds.json)}"; echo "vj113a1=$I_VJ"; echo "canary=$I_CANARY"
+              echo "canary_only=${I_CANARY_ONLY:-false}"
               echo "overwrite=$I_OVERWRITE"; echo "accept_metrics=$I_ACCEPT"; } >> "$GITHUB_OUTPUT"
           fi
           cat "$GITHUB_OUTPUT"
@@ -131,7 +139,7 @@ jobs:
 
   canary:
     needs: config
-    if: needs.config.outputs.features == 'true' && needs.config.outputs.canary == 'true'
+    if: needs.config.outputs.features == 'true' && (needs.config.outputs.canary == 'true' || needs.config.outputs.canary_only == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -191,7 +199,7 @@ jobs:
     needs: [config, canary]
     # Only after the canary passed (or when it was turned off).
     if: >-
-      !cancelled() && needs.config.outputs.features == 'true' &&
+      !cancelled() && needs.config.outputs.features == 'true' && needs.config.outputs.canary_only != 'true' &&
       (needs.canary.result == 'success' || (needs.canary.result == 'skipped' && needs.config.outputs.canary != 'true'))
     env:
       VERSION: ${{ needs.config.outputs.version }}
@@ -284,6 +292,8 @@ jobs:
           extra=()
           # a freshly derived S-NPP/NOAA-20 calibration, to be reviewed and committed as pipeline/inputs/bm_ratio.json
           if [ -f interim/bm_ratio.json ]; then cp interim/bm_ratio.json build/ && extra+=(build/bm_ratio.json); fi
+          # sha256 of every VJ113A1 granule averaged (provenance of the calibrated vegetation years)
+          if [ -f interim/vj_granules.json ]; then cp interim/vj_granules.json build/ && extra+=(build/vj_granules.json); fi
           tag="features-$VERSION"
           # built as a draft under a temporary name, swapped in only when complete (audit M3)
           ../scripts/swap-release.sh "$tag" "$GITHUB_SHA" "$tag" \
@@ -296,7 +306,7 @@ jobs:
     needs: [config, canary, features]
     # features is skipped when the store is reused, never because the canary failed
     if: >-
-      !cancelled() && needs.config.result == 'success' &&
+      !cancelled() && needs.config.result == 'success' && needs.config.outputs.canary_only != 'true' &&
       (needs.canary.result == 'success' || needs.canary.result == 'skipped') &&
       (needs.features.result == 'success' || (needs.features.result == 'skipped' && needs.config.outputs.features != 'true'))
     env:
