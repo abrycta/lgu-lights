@@ -26,13 +26,13 @@ import json
 import pytest
 
 
-def jsonstat(tmp_path, order=("Geolocation", "Item", "Year"), pi=(13.7, 20.7)):
+def jsonstat(tmp_path, order=("Geolocation", "Item", "Year"), pi=(13.7, 20.7), items=None):
     """A two-province JSON-stat 1.0 table with its dimensions in `order`."""
     cats = {"Geolocation": ["..Region I", "....Abra 2/", "....Sulu"],
-            "Item": ["Annual Per Capita Poverty Threshold (in PhP)", "Poverty Incidence among Population (%)"],
+            "Item": items or ["Annual Per Capita Poverty Threshold (in PhP)", "Poverty Incidence among Population (%)"],
             "Year": ["2021", "2023"]}
     def val(g, i, y):
-        return float(y) if i == 0 else [9.0, pi[0], pi[1]][g] + y
+        return float(y) if i == 0 else 12.5 if i == 1 and items else [9.0, pi[0], pi[1]][g] + y
     dims = {k: {"label": k, "category": {"index": {str(j): j for j in range(len(v))},
                                          "label": {str(j): x for j, x in enumerate(v)}}} for k, v in cats.items()}
     size = [len(cats[k]) for k in order]
@@ -61,3 +61,13 @@ def test_gate_flags_new_unmapped_names_and_thin_rounds():
     assert fies.gate_report({"per_round": {"2023": 87}, "unmapped_names": ["City of Cebu 2/"]}, committed) == []
     problems = fies.gate_report({"per_round": {"2023": 79}, "unmapped_names": ["Maguindanao del Centro"]}, committed)
     assert any("79 provinces" in p for p in problems) and any("Maguindanao del Centro" in p for p in problems)
+
+
+def test_a_cv_item_for_poverty_incidence_is_never_read_as_the_incidence(tmp_path):
+    cv_first = ["Annual Per Capita Poverty Threshold (in PhP)",
+                "Poverty Incidence among Population - Coefficient of Variation",
+                "Poverty Incidence among Population (%)"]
+    out = fies.read_jsonstat(jsonstat(tmp_path, items=cv_first))
+    assert out[(out.name == "Abra 2/") & (out.year == 2023)].pi.item() == 13.7 + 1  # not the CV (12.5)
+    with pytest.raises(fies.SchemaError, match="2 poverty-incidence items"):
+        fies.read_jsonstat(jsonstat(tmp_path, items=cv_first[:1] + ["Poverty Incidence among Population (%)"] * 2))

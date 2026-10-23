@@ -37,6 +37,7 @@ log = logging.getLogger("lgu.laads")
 LAADS = "https://ladsweb.modaps.eosdis.nasa.gov"
 CMR = "https://cmr.earthdata.nasa.gov/search/granules.json"
 PH_TILES = ("h29v07", "h29v08", "h30v06", "h30v07", "h30v08")
+VJ_MIN_COMPOSITES = 20  # of 23 VJ113A1 16-day composites per year
 # CMR collection versions (Collection 2 Black Marble; VJ113A1 is LP DAAC's 002), checked against CMR 2026-10-23
 CMR_VERSION = {"VNP46A4": "2", "VJ146A4": "2", "VJ113A1": "002"}
 # A tile whose finite share is below this is a fill-only (blacked-out) file, not data (audit L-C2). Ocean pixels may
@@ -115,12 +116,34 @@ def _data_link(entry: dict) -> str | None:
                  if str(lk.get("rel", "")).endswith("/data#") and str(lk.get("href", "")).startswith("https://")), None)
 
 
+def _cmr_found(client: httpx.Client, product: str, year: int, doy: str) -> list[tuple[str, str]]:
+    day = _doy_date(year, doy)
+    found = []
+    for e in _cmr_entries(client, product, day, day):
+        url = _data_link(e)
+        if url:
+            found.append((url.rsplit("/", 1)[-1], url))
+    return found
+
+
+def _ph_tiles(found: list[tuple[str, str]], year: int, doy: str) -> dict[str, tuple[str, str]]:
+    tag = f".A{year}{doy}."
+    keep: dict[str, tuple[str, str]] = {}
+    for name, url in sorted(found):
+        if tag in name and name.endswith(".h5"):
+            tile = next((t for t in PH_TILES if f".{t}." in name), None)
+            if tile:
+                keep[tile] = (name, url)  # sorted: the newest production timestamp wins
+    return keep
+
+
 def _listing(client: httpx.Client, product: str, year: int, doy: str) -> list[tuple[str, str]]:
     """(file name, download URL) of the PH tiles for one product/year/day: the LAADS listing, then CMR (audit L-C3).
 
-    CMR's temporal search also returns granules that merely overlap the day (the previous year's yearly tiles,
-    the 16-day composite started before it), so names are kept only for exactly this year and day; one granule
-    per tile (the newest production) is kept."""
+    CMR is also asked when LAADS answers but lists fewer than all PH tiles (an empty or partial listing, verifier
+    gap A2-7); LAADS links are kept for the tiles it has. CMR's temporal search also returns granules that merely
+    overlap the day (the previous year's yearly tiles, the 16-day composite started before it), so names are kept
+    only for exactly this year and day; one granule per tile (the newest production) is kept."""
     try:
         r = client.get(f"{LAADS}/api/v2/content/details/allData/5200/{product}/{year}/{doy}",
                        headers={"Accept": "application/json"})
@@ -129,19 +152,18 @@ def _listing(client: httpx.Client, product: str, year: int, doy: str) -> list[tu
     except (httpx.HTTPError, KeyError, ValueError, TypeError) as e:
         log.warning("%s %s/%s: LAADS listing failed (%s); trying CMR", product, year, doy, type(e).__name__)
         print(f"::warning title=LAADS listing failed::{product} {year}/{doy}: {type(e).__name__}; using CMR granule links")
-        day = _doy_date(year, doy)
-        found = []
-        for e in _cmr_entries(client, product, day, day):
-            url = _data_link(e)
-            if url:
-                found.append((url.rsplit("/", 1)[-1], url))
-    tag = f".A{year}{doy}."
-    keep: dict[str, tuple[str, str]] = {}
-    for name, url in sorted(found):
-        if tag in name and name.endswith(".h5"):
-            tile = next((t for t in PH_TILES if f".{t}." in name), None)
-            if tile:
-                keep[tile] = (name, url)  # sorted: the newest production timestamp wins
+        keep = _ph_tiles(_cmr_found(client, product, year, doy), year, doy)
+        return [keep[t] for t in sorted(keep)]
+    keep = _ph_tiles(found, year, doy)
+    if len(keep) < len(PH_TILES):
+        print(f"::warning title=LAADS listing incomplete::{product} {year}/{doy}: {len(keep)} of {len(PH_TILES)} "
+              "PH tiles listed; asking CMR for the rest")
+        try:
+            cmr = _ph_tiles(_cmr_found(client, product, year, doy), year, doy)
+        except httpx.HTTPError as e:
+            log.warning("%s %s/%s: CMR failed too (%s)", product, year, doy, type(e).__name__)
+            cmr = {}
+        keep = cmr | keep  # LAADS links win for the tiles it listed
     return [keep[t] for t in sorted(keep)]
 
 
@@ -150,18 +172,21 @@ def _doy_date(year: int, doy: str) -> str:
 
 
 def _days(client: httpx.Client, product: str, year: int) -> list[str]:
-    """Days (DOY) with granules in one year: the LAADS listing, then CMR."""
+    """Days (DOY) with granules in one year: the LAADS listing, then CMR (also when LAADS lists no day, gap A2-7)."""
     try:
         r = client.get(f"{LAADS}/api/v2/content/details/allData/5200/{product}/{year}",
                        headers={"Accept": "application/json"})
         r.raise_for_status()
-        return sorted(c["name"] for c in r.json()["content"])
+        days = sorted(c["name"] for c in r.json()["content"])
+        if days:
+            return days
+        print(f"::warning title=LAADS listing empty::{product} {year}: no days listed; asking CMR")
     except (httpx.HTTPError, KeyError, ValueError, TypeError) as e:
         log.warning("%s %s: LAADS day listing failed (%s); trying CMR", product, year, type(e).__name__)
-        pat = re.compile(rf"\.A{year}(\d{{3}})\.")
-        names = [(_data_link(e) or "").rsplit("/", 1)[-1] for e in
-                 _cmr_entries(client, product, f"{year}-01-01T00:00:00Z", f"{year}-12-31T23:59:59Z")]
-        return sorted({m.group(1) for n in names if (m := pat.search(n))})
+    pat = re.compile(rf"\.A{year}(\d{{3}})\.")
+    names = [(_data_link(e) or "").rsplit("/", 1)[-1] for e in
+             _cmr_entries(client, product, f"{year}-01-01T00:00:00Z", f"{year}-12-31T23:59:59Z")]
+    return sorted({m.group(1) for n in names if (m := pat.search(n))})
 
 
 def _download(client: httpx.Client, url: str, dest: Path) -> Path:
@@ -248,8 +273,11 @@ def vj113_year_mean(client: httpx.Client, year: int, work: Path) -> tuple[np.nda
     nh, nv = max(h for h, _ in hs) - hmin + 1, max(v for _, v in hs) - vmin + 1
     total = np.zeros((nv * SIN_PX, nh * SIN_PX), dtype=np.float32)
     count = np.zeros_like(total, dtype=np.uint16)
-    for doy in _days(client, "VJ113A1", year):
+    days = _days(client, "VJ113A1", year)
+    complete = 0
+    for doy in days:
         found = _listing(client, "VJ113A1", year, doy)
+        complete += len(found) == len(PH_TILES)
         with cf.ThreadPoolExecutor(4) as ex:
             files = list(ex.map(lambda nu: _download(client, nu[1], work), found))
         for f in files:
@@ -271,6 +299,10 @@ def vj113_year_mean(client: httpx.Client, year: int, work: Path) -> tuple[np.nda
             total[ys:ys + SIN_PX, xs:xs + SIN_PX][ok] += val[ok]
             count[ys:ys + SIN_PX, xs:xs + SIN_PX][ok] += 1
             f.unlink()
+    # 23 16-day composites a year; a short listing would publish a mean of a few composites (verifier gap A1-8)
+    if complete < VJ_MIN_COMPOSITES:
+        raise RuntimeError(f"VJ113A1 {year}: {complete} composites with all {len(PH_TILES)} PH tiles "
+                           f"({len(days)} listed), expected >= {VJ_MIN_COMPOSITES}")
     with np.errstate(invalid="ignore", divide="ignore"):
         mean = np.where(count > 0, total / count, np.nan).astype(np.float32)
     origin = (SIN_X0 + hmin * SIN_TILE, SIN_Y0 - vmin * SIN_TILE)

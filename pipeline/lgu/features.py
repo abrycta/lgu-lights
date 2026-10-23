@@ -21,6 +21,8 @@ GATES = {  # column: (min, max) over non-null values
     "evi_mean": (-0.2, 1.0),
     "pop": (0.0, 5_000_000.0),
 }
+# Gated only when the column is in the store, and per year only in years that have it (VJ113A1 NDVI starts in 2018).
+OPTIONAL_GATES = {"vj_ndvi_mean": (-0.2, 1.0)}
 
 MIN_VEG_COMPOSITES = 20  # of 23 MOD13Q1 composites a year; fewer would bias the yearly mean to one season
 
@@ -49,6 +51,10 @@ def gate_years(df: pd.DataFrame) -> list[str]:
         miss = g[col].apply(lambda v: float(v.isna().mean()))
         for y, m in miss[miss > MAX_MISSING_PER_YEAR].items():
             problems.append(f"{col}: {m:.1%} missing in {y} (max {MAX_MISSING_PER_YEAR:.0%} per year)")
+    for col in (c for c in OPTIONAL_GATES if c in df):
+        miss = g[col].apply(lambda v: float(v.isna().mean()))
+        for y, m in miss[(miss > MAX_MISSING_PER_YEAR) & (miss < 1)].items():
+            problems.append(f"{col}: {m:.1%} missing in {y} (max {MAX_MISSING_PER_YEAR:.0%} per year)")
     valid = g.bm_valid_frac.mean()
     for y, v in valid[valid < MIN_VALID_PER_YEAR].items():
         problems.append(f"bm_valid_frac: mean {v:.3f} in {y} (min {MIN_VALID_PER_YEAR})")
@@ -56,10 +62,13 @@ def gate_years(df: pd.DataFrame) -> list[str]:
         tot = g.bm_sum.sum(min_count=1)
         ys = sorted(tot.index)
         for i, y in enumerate(ys):
-            nb = [tot[ys[j]] for j in (i - 1, i + 1) if 0 <= j < len(ys) and abs(ys[j] - y) == 1]
+            # the nearest years on each side, whatever the gap (a store of 2018, 2020, 2022 is still compared;
+            # verifier gap A3-12); the tolerance grows with the distance in years
+            near = [ys[j] for j in (i - 1, i + 1) if 0 <= j < len(ys)]
+            nb = [tot[n] for n in near if pd.notna(tot[n])]
             if not nb or not pd.notna(tot[y]) or sum(nb) <= 0:
                 continue
-            tol = BM_SUM_JUMP[0] if len(nb) == 2 else BM_SUM_JUMP[1]
+            tol = (BM_SUM_JUMP[0] if len(nb) == 2 else BM_SUM_JUMP[1]) * max(abs(n - y) for n in near)
             ratio = float(tot[y] / (sum(nb) / len(nb)))
             if abs(ratio - 1) > tol:
                 problems.append(f"bm_sum: national total in {y} is {ratio:.2f}x its neighbouring years (max ±{tol:.0%})")
@@ -87,7 +96,7 @@ def merge(interim: Path, out: Path) -> dict:
     if (per_year != len(lgus)).any():
         problems.append(f"rows per year differ from {len(lgus)}: {per_year.to_dict()}")
     problems += gate_years(df)
-    for col, (lo, hi) in GATES.items():
+    for col, (lo, hi) in (GATES | {c: r for c, r in OPTIONAL_GATES.items() if c in df}).items():
         v = df[col].dropna()
         if len(v) and (v.min() < lo or v.max() > hi):
             problems.append(f"{col}: range [{v.min():.3f}, {v.max():.3f}] outside [{lo}, {hi}]")

@@ -51,6 +51,19 @@ def test_metrics_gate_stops_a_much_worse_model_against_the_published_one():
     base = {"test_round": 2023, "n": 1598, "model": {"mae": 5.55, "r2": 0.58}}
     assert train.gate_metrics({"test_round": 2023, "n": 1598, "model": {"mae": 5.9, "r2": 0.55}}, base) == []
     shifted = {"test_round": 2023, "n": 1598, "model": {"mae": 14.2, "r2": -1.3}}  # labels from a shifted column
-    assert len(train.gate_metrics(shifted, base)) == 2
+    assert len(train.gate_metrics(shifted, base)) == 3  # MAE, R2 against the published one, and R2 <= 0
     assert train.gate_metrics({"test_round": 2023, "n": 1500, "model": {"mae": 5.5, "r2": 0.58}}, base)
-    assert train.gate_metrics({"test_round": 2025, "n": 10, "model": {"mae": 99, "r2": -9}}, base) == []
+
+
+def test_a_new_headline_round_still_needs_to_beat_carry_forward_and_positive_r2():
+    base = {"test_round": 2023, "n": 1598, "model": {"mae": 5.55, "r2": 0.58}}
+    good = {"test_round": 2025, "n": 1598, "carry_forward_mae": 6.3, "model": {"mae": 5.8, "r2": 0.5}}
+    assert train.gate_metrics(good, base) == []
+    broken = {"test_round": 2025, "n": 1598, "carry_forward_mae": 6.3, "model": {"mae": 30.0, "r2": -0.5}}
+    assert len(train.gate_metrics(broken, base)) == 2
+
+
+def test_an_implausibly_better_headline_on_the_same_round_is_stopped():
+    base = {"test_round": 2023, "n": 1598, "model": {"mae": 5.55, "r2": 0.58}}
+    fractions = {"test_round": 2023, "n": 1598, "carry_forward_mae": 0.06, "model": {"mae": 0.055, "r2": 0.58}}
+    assert any("implausibly better" in p for p in train.gate_metrics(fractions, base))

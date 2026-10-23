@@ -54,13 +54,16 @@ def cmr_entry(name: str, host: str = "https://data.laadsdaac.earthdatacloud.nasa
         {"rel": "http://esipfed.org/ns/fedsearch/1.1/s3#", "href": f"s3://prod-lads/VNP46A4/{name}"}]}
 
 
-def mocked(laads_status: int, cmr_status: int = 200, seen: list | None = None) -> httpx.Client:
+def mocked(laads_status: int, cmr_status: int = 200, seen: list | None = None,
+           laads_names: list[str] | None = None) -> httpx.Client:
     names = [f"VNP46A4.A{y}001.{t}.002.2025162083150.h5" for y in (2024, 2025)
              for t in laads.PH_TILES + ("h29v06",)]
 
     def handler(req: httpx.Request) -> httpx.Response:
         if seen is not None:
             seen.append(str(req.url))
+        if req.url.host == "ladsweb.modaps.eosdis.nasa.gov" and laads_names is not None:
+            return httpx.Response(200, json={"content": [{"name": n} for n in laads_names]})
         if req.url.host == "ladsweb.modaps.eosdis.nasa.gov":
             return httpx.Response(laads_status, text="<html>Service Unavailable</html>")
         if req.url.host == "cmr.earthdata.nasa.gov":
@@ -88,6 +91,17 @@ def test_cmr_fallback_lists_days_of_a_year(monkeypatch):
         assert laads._days(client, "VNP46A4", 2025) == ["001"]
 
 
+def test_a_partial_or_empty_laads_listing_is_completed_from_cmr():
+    part = [f"VNP46A4.A2025001.{t}.002.2025162083150.h5" for t in laads.PH_TILES[:3]]
+    with mocked(200, laads_names=part) as client:
+        found = laads._listing(client, "VNP46A4", 2025, "001")
+    assert len(found) == len(laads.PH_TILES)
+    assert sum("ladsweb" in u for _, u in found) == 3  # LAADS links kept for the tiles it listed
+    with mocked(200, laads_names=[]) as client:
+        assert len(laads._listing(client, "VNP46A4", 2025, "001")) == len(laads.PH_TILES)
+        assert laads._days(client, "VNP46A4", 2025) == ["001"]
+
+
 def test_a_dead_source_fails_loudly():
     with mocked(503, cmr_status=503) as client, pytest.raises(httpx.HTTPStatusError):
         laads._listing(client, "VNP46A4", 2025, "001")
@@ -104,3 +118,14 @@ def test_committed_ratio_is_used_and_a_moved_ratio_fails(tmp_path):
     p.write_text(json.dumps({"overlap_year": 2019, "ratio": 1.2, "lit": {"x": {}}}))
     with pytest.raises(RuntimeError):
         laads.load_ratio(p)
+
+
+def test_a_vj113a1_year_with_few_composites_fails(monkeypatch, tmp_path):
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "h5py", sys.modules.get("h5py") or types.ModuleType("h5py"))  # not opened here
+    monkeypatch.setattr(laads, "_days", lambda client, product, year: ["001", "017", "033", "049"])
+    monkeypatch.setattr(laads, "_listing", lambda client, product, year, doy: [])
+    with pytest.raises(RuntimeError, match="0 composites"):
+        laads.vj113_year_mean(None, 2025, tmp_path)

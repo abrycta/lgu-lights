@@ -75,7 +75,7 @@ jobs:
       accept_metrics: ${{ steps.c.outputs.accept_metrics }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { sparse-checkout: ".github\nconfig" }
+        with: { sparse-checkout: ".github\nconfig\nscripts" }
       - id: c
         env:
           EVENT: ${{ github.event_name }}
@@ -116,7 +116,10 @@ jobs:
           [[ "$VERSION" =~ ^v[0-9]+$ ]] || { echo "::error::version '$VERSION' is not v<number>"; exit 1; }
           tags="data-$VERSION"; [ "$FEATURES" != true ] || tags="$tags features-$VERSION"
           for t in $tags; do
-            if gh release view "$t" -R "$GITHUB_REPOSITORY" --json tagName >/dev/null 2>&1; then
+            # release-status.sh tells "absent" (404) from an API error, which fails the step instead of
+            # letting the run overwrite an existing version (verifier gap A2-13).
+            st=$(scripts/release-status.sh "$t" | head -1) || { echo "::error::cannot check whether $t exists (GitHub API error)"; exit 1; }
+            if [ "$st" = present ]; then
               if [ "$OVERWRITE" = true ]; then
                 echo "::warning title=overwrite::$t exists and will be replaced; the current release is kept as $t-prev"
               else
@@ -317,12 +320,22 @@ jobs:
         run: |
           start=$(date +%s)
           gate=()
-          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)
-          if [[ "$latest" == data-* ]] && gh release download "$latest" -R "$GITHUB_REPOSITORY" -p metrics.json -O ../data/build/baseline-metrics.json --clobber; then
+          # The gate is skipped only when no data release exists at all. A GitHub API or download error fails
+          # the step instead of training ungated (verifier gap A4-11); accept_metrics stays the reviewed override.
+          retry() { local i; for i in 1 2 3; do "$@" && return 0; [ "$i" = 3 ] || sleep $((10 * i)); done; return 1; }
+          list_tags() { gh release list -R "$GITHUB_REPOSITORY" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName'; }
+          tags=$(retry list_tags) || { echo "::error title=metrics baseline::cannot list the releases (GitHub API error)"; exit 1; }
+          latest=$(grep -E '^data-v[0-9]+$' <<<"$tags" | sort -t v -k2 -n | tail -1 || true)
+          if [ -z "$latest" ]; then
+            echo "::warning title=no metrics baseline::no published data release yet; the metrics gate is skipped"
+          elif retry gh release download "$latest" -R "$GITHUB_REPOSITORY" -p metrics.json -O ../data/build/baseline-metrics.json --clobber; then
             gate=(--baseline ../data/build/baseline-metrics.json)
             echo "metrics gate: against $latest" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$ACCEPT_METRICS" = true ]; then
+            echo "::warning title=no metrics baseline::$latest/metrics.json could not be downloaded; accept_metrics is set, so the gate is skipped"
           else
-            echo "::warning title=no metrics baseline::no published data release with metrics.json; the metrics gate is skipped"
+            echo "::error title=metrics baseline::$latest/metrics.json could not be downloaded; not training ungated (re-run, or set accept_metrics after review)"
+            exit 1
           fi
           [ "$ACCEPT_METRICS" != true ] || gate+=(--accept-metrics)
           uv run python -m lgu train ${gate[@]+"${gate[@]}"}

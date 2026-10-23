@@ -44,7 +44,8 @@ import pytest
 YEARS = (2018, 2021, 2023)
 
 
-def annex(n: int = 1500, insert_population: bool = False, est=lambda i, k: 10.0 + k, header_se="Standard Error"):
+def annex(n: int = 1500, insert_population: bool = False, est=lambda i, k: 10.0 + k, header_se="Standard Error",
+          cvse=None):
     """A synthetic 2023 Annex 1 in PSA's layout (optionally with a population column inserted after the name)."""
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -60,7 +61,8 @@ def annex(n: int = 1500, insert_population: bool = False, est=lambda i, k: 10.0 
     for i in range(n):
         vals = [est(i, k) for k in range(3)]
         row = [140000 + i, "Abra" if i == 0 else None, f"Town {i}"] + ([35000 + i] if insert_population else [])
-        row += vals + [10.0] * 3 + [v / 10 for v in vals] + [x for v in vals for x in (v - 1, v + 1)]
+        cv, se = ([cvse] * 3, [cvse] * 3) if cvse is not None else ([10.0] * 3, [v / 10 for v in vals])
+        row += vals + cv + se + [x for v in vals for x in (v - 1, v + 1)]
         ws.append(row)
     buf = io.BytesIO()
     wb.save(buf)
@@ -84,6 +86,16 @@ def test_implausible_values_and_truncated_rounds_are_rejected():
         labels.parse_workbook(annex(est=lambda i, k: 35000.0 if i == 7 else 10.0), "psa-sae-2023")
     with pytest.raises(labels.SchemaError, match="1499 LGU rows"):
         labels.parse_workbook(annex(n=1499), "psa-sae-2023")
+
+
+def test_a_round_reissued_in_fractions_is_rejected():
+    with pytest.raises(labels.SchemaError, match="median estimate 0.105"):
+        labels.parse_workbook(annex(est=lambda i, k: 0.105), "psa-sae-2023")
+
+
+def test_nan_se_and_cv_cells_are_rejected():
+    with pytest.raises(labels.SchemaError, match="finite SE or CV"):
+        labels.parse_workbook(annex(cvse="nan"), "psa-sae-2023")
 
 
 def test_registry_hook_rejects_a_shape_changed_workbook(tmp_path):

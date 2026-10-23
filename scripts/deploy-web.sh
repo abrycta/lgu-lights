@@ -9,7 +9,7 @@
 #   1. the what-if WASM module (crates/lgu-wasm, cargo, wasm32) -> wasm/lgu_wasm.<sha256 prefix>.wasm (immutable cache)
 #   2. `npx vite build` in web/ with a staged public directory: web/public without data/ (so never the
 #      local v0 dev link) and with the fresh WASM
-#   3. the published data versions only: each read-models-<v>.tar.zst from the data-<v> GitHub release,
+#   3. the published data versions only: each read-models-<v>.tar.zst from the data-<v> GitHub release (data-<v>-prev if that is missing; an API error stops the deploy),
 #      its sha256 checked against the digest GitHub publishes for that asset, unpacked, its manifest's
 #      version checked, and only the files the app reads copied to dist/data/<v>/; then dist/data/latest.json, and
 #      <link rel=preload> tags in dist/index.html for LATEST's manifest.json, index.json, tiles-attrs.csv and tiles.json (the list of existing tiles)
@@ -49,6 +49,31 @@ step() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 case " $DATA_VERSIONS " in *" $LATEST "*) ;; *) die "LATEST=$LATEST is not in DATA_VERSIONS=($DATA_VERSIONS)";; esac
+command -v gh >/dev/null || die "gh is required"
+
+# Which release each data version comes from, resolved before anything is built. A GitHub API error (rate limit,
+# 5xx) stops the deploy: reading it as "release missing" would drop that version from the live site and 404 its URLs.
+# A version whose data-<v> release is really missing or incomplete (a swap that failed half-way) is served from
+# data-<v>-prev, the same version's previous build; only a version with neither is left out (LATEST never is).
+rel_versions=() rel_tags=() rel_digests=()
+for v in $DATA_VERSIONS; do
+  asset="read-models-$v.tar.zst" found=""
+  for t in "data-$v" "data-$v-prev"; do
+    out=$(GITHUB_REPOSITORY="$REPO" "$(dirname "$0")/release-status.sh" "$t" \
+      ".assets[] | select(.name == \"$asset\") | .digest") \
+      || die "GitHub API error while looking up the $t release; nothing was deployed, so the live site keeps every data version"
+    d=$(sed -n 2p <<<"$out")
+    if [[ "$d" == sha256:* ]]; then found="$t ${d#sha256:}"; break; fi
+  done
+  if [ -z "$found" ]; then
+    [ "$v" != "$LATEST" ] || die "neither data-$v nor data-$v-prev (LATEST) has a sha256 digest for $asset"
+    echo "::warning title=data version skipped::neither data-$v nor data-$v-prev has a sha256 digest for $asset; $v is left out of this deploy"
+    continue
+  fi
+  [ "${found%% *}" = "data-$v" ] \
+    || echo "::warning title=data version from -prev::data-$v is missing or incomplete; $v is deployed from data-$v-prev"
+  rel_versions+=("$v") rel_tags+=("${found%% *}") rel_digests+=("${found#* }")
+done
 # Homebrew's rustup keeps its cargo proxy (which honours rust-toolchain.toml) off PATH.
 if ! command -v cargo >/dev/null && [ -x /opt/homebrew/opt/rustup/bin/cargo ]; then PATH="/opt/homebrew/opt/rustup/bin:$PATH"; fi
 for t in node npx cargo gh zstd curl; do command -v "$t" >/dev/null || die "$t is required"; done
@@ -80,25 +105,17 @@ find "$web/dist" -name '*.map' -type f -delete
 
 step "Data versions: $DATA_VERSIONS (latest $LATEST)"
 mkdir -p "$cache" "$web/dist/data"
-for v in $DATA_VERSIONS; do
+for i in "${!rel_versions[@]}"; do
+  v=${rel_versions[$i]} tag=${rel_tags[$i]} want=${rel_digests[$i]}
   asset="read-models-$v.tar.zst"
-  want=$(gh api "repos/$REPO/releases/tags/data-$v" --jq ".assets[] | select(.name == \"$asset\") | .digest" 2>/dev/null) || want=""
-  if [[ "$want" != sha256:* ]]; then
-    # Only LATEST is required (audit L-C5): an older version whose release is missing or incomplete (e.g. a swap that
-    # failed half-way) is left out of this deploy with a warning instead of blocking every web deploy.
-    [ "$v" != "$LATEST" ] || die "data-$v (LATEST) has no sha256 digest for $asset"
-    echo "::warning title=data version skipped::data-$v has no sha256 digest for $asset; $v is left out of this deploy"
-    continue
-  fi
-  want="${want#sha256:}"
   have=""
   [ -f "$cache/$asset" ] && have=$(shasum -a 256 "$cache/$asset" | cut -d' ' -f1)
   if [ "$have" != "$want" ]; then
-    gh release download "data-$v" -R "$REPO" -p "$asset" -D "$cache" --clobber
+    gh release download "$tag" -R "$REPO" -p "$asset" -D "$cache" --clobber
     have=$(shasum -a 256 "$cache/$asset" | cut -d' ' -f1)
   fi
-  [ "$have" = "$want" ] || die "$asset: sha256 $have does not match the release digest $want"
-  echo "$asset: sha256 $have (matches the data-$v release)"
+  [ "$have" = "$want" ] || die "$asset: sha256 $have does not match the $tag release digest $want"
+  echo "$asset: sha256 $have (matches the $tag release)"
   rm -rf "$stage/data" && mkdir -p "$stage/data"
   zstd -dc "$cache/$asset" | tar -xf - -C "$stage/data"
   got=$(node -p 'require(process.argv[1]).version' "$stage/data/$v/manifest.json")

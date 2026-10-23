@@ -1,6 +1,6 @@
 # Monthly freshness check (audit L-C7): is newer upstream data available than the data runs use? Cheap (CMR and
 # OpenSTAT metadata only, about a minute), never touches data or releases. Findings become ::warning:: lines and one
-# deduplicated issue in the private archive repo (with ARCHIVE_READ_TOKEN, which has Issues: write there), so the
+# deduplicated issue in the private archive repo, check errors another (with ARCHIVE_READ_TOKEN, which has Issues: write there), so the
 # app never shows anything: a new data version is still a reviewed manual run (data.yml).
 name: Freshness
 
@@ -31,19 +31,36 @@ jobs:
           uv sync --locked
           uv run python -m lgu freshness > "$RUNNER_TEMP/freshness.json"
           { echo "### Freshness"; echo '```json'; cat "$RUNNER_TEMP/freshness.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-      - name: Open or update the freshness issue (private archive repo)
+      - name: Open or update the freshness issues (private archive repo)
         env:
           GH_TOKEN: ${{ secrets.ARCHIVE_READ_TOKEN }}
           ARCHIVE: abrycta/lgu-lights-archive
         run: |
-          n=$(jq '.findings | length' "$RUNNER_TEMP/freshness.json")
-          [ "$n" -gt 0 ] || { echo "no new upstream data"; exit 0; }
-          [ -n "$GH_TOKEN" ] || { echo "::warning::ARCHIVE_READ_TOKEN is not set; findings are only in this run's warnings"; exit 0; }
-          title="Freshness: new upstream data for lgu-lights"
-          body=$(jq -r '"New upstream data (run \(env.GITHUB_SERVER_URL)/\(env.GITHUB_REPOSITORY)/actions/runs/\(env.GITHUB_RUN_ID)):\n" + ([.findings[] | "- **\(.source)**: \(.new): \(.action)"] | join("\n"))' "$RUNNER_TEMP/freshness.json")
-          num=$(gh issue list -R "$ARCHIVE" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty' || true)
-          if [ -n "$num" ]; then
-            gh issue comment "$num" -R "$ARCHIVE" --body "$body" >/dev/null || echo "::warning::could not comment on $ARCHIVE#$num"
+          f="$RUNNER_TEMP/freshness.json"
+          run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          # one deduplicated issue per kind: new upstream data, and check errors (a dead source or a moved
+          # collection, which would otherwise read as "no new data" for months); never public
+          issue() {
+            local title=$1 body=$2 num
+            if [ -z "$GH_TOKEN" ]; then
+              echo "::warning::ARCHIVE_READ_TOKEN is not set; '$title' is only in this run's annotations"
+              return 0
+            fi
+            num=$(gh issue list -R "$ARCHIVE" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty' || true)
+            if [ -n "$num" ]; then
+              gh issue comment "$num" -R "$ARCHIVE" --body "$body" >/dev/null || echo "::warning::could not comment on $ARCHIVE#$num"
+            else
+              gh issue create -R "$ARCHIVE" --title "$title" --body "$body" >/dev/null || echo "::warning::could not open an issue in $ARCHIVE"
+            fi
+          }
+          if [ "$(jq '.findings | length' "$f")" -gt 0 ]; then
+            issue "Freshness: new upstream data for lgu-lights" \
+              "$(jq -r --arg run "$run" '"New upstream data (run \($run)):\n" + ([.findings[] | "- **\(.source)**: \(.new): \(.action)"] | join("\n"))' "$f")"
           else
-            gh issue create -R "$ARCHIVE" --title "$title" --body "$body" >/dev/null || echo "::warning::could not open an issue in $ARCHIVE"
+            echo "no new upstream data"
+          fi
+          if [ "$(jq '.errors | length' "$f")" -gt 0 ]; then
+            jq -r '.errors[] | "::error title=freshness check failed::\(.)"' "$f"
+            issue "Freshness: check errors for lgu-lights" \
+              "$(jq -r --arg run "$run" '"The freshness check could not read some sources (run \($run)). The app keeps serving the last published version.\n" + ([.errors[] | "- \(.)"] | join("\n"))' "$f")"
           fi

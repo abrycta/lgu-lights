@@ -24,7 +24,9 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import re
+import statistics
 import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -56,9 +58,10 @@ def _num(v: object) -> float | None:
     if v is None or v == "":
         return None
     try:
-        return float(v)  # type: ignore[arg-type]
+        f = float(v)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+    return f if math.isfinite(f) else None  # "nan"/"inf" cells are missing values, never numbers (gap A1-6)
 
 
 def _rows(ws) -> list[tuple[str, str, str, tuple]]:  # type: ignore[no-untyped-def]
@@ -152,16 +155,36 @@ def _require(cols: dict[tuple[str, int], int], fields: tuple[str, ...], years: t
         raise SchemaError(f"{where}: header columns not found: {', '.join(missing)}")
 
 
+# Real rounds (2006-2023) have medians of 19-34 %; a workbook in fractions would have a median below 1.
+MEDIAN_RANGE = (2.0, 70.0)
+MIN_SE_SHARE = 0.95
+
+
+def _finite(v: float | None) -> bool:
+    return v is not None and math.isfinite(v)
+
+
 def validate_rows(rows: list[SaeRow], years: tuple[int, ...], where: str) -> None:
-    """Plausibility of each round (audit L-C1): enough LGUs, estimate in [0, 100], SE >= 0, CI around the estimate."""
+    """Plausibility of each round (audit L-C1): enough LGUs, estimate in [0, 100] on the percent scale (median in
+    MEDIAN_RANGE, so a re-issue in fractions is caught), SE >= 0, finite SE for nearly every row, CI around the
+    estimate."""
     problems = []
     for y in years:
         rs = [r for r in rows if r.year == y]
         if len(rs) < MIN_ROWS:
             problems.append(f"{y}: {len(rs)} LGU rows with an estimate (expected >= {MIN_ROWS:,})")
+        if rs:
+            med = statistics.median(r.estimate for r in rs)
+            if not MEDIAN_RANGE[0] <= med <= MEDIAN_RANGE[1]:
+                problems.append(f"{y}: median estimate {med:g} is outside {MEDIAN_RANGE} (percent scale expected)")
+            finite = sum(_finite(r.se) or _finite(r.cv) for r in rs)
+            if finite < MIN_SE_SHARE * len(rs):
+                problems.append(f"{y}: only {finite} of {len(rs)} rows have a finite SE or CV")
         bad = {
             "estimate outside [0, 100]": sum(not 0 <= r.estimate <= 100 for r in rs),
             "negative SE or CV": sum((r.se is not None and r.se < 0) or (r.cv is not None and r.cv < 0) for r in rs),
+            "non-finite SE, CV or CI": sum(v is not None and not math.isfinite(v)
+                                           for r in rs for v in (r.se, r.cv, r.ci_lo, r.ci_hi)),
             "estimate outside its CI": sum(r.ci_lo is not None and r.ci_hi is not None
                                            and not r.ci_lo - 1e-6 <= r.estimate <= r.ci_hi + 1e-6 for r in rs),
         }

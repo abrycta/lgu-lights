@@ -53,3 +53,19 @@ def test_partial_terra_year_is_skipped_silently(tmp_path, capsys):
     assert rep["years"] == [2025] and rep["skipped_years"] == [2027]
     assert set(out.year) == {2025} and "veg_composites" not in out.columns
     assert "::notice::" in capsys.readouterr().out
+
+
+def test_a_radiance_jump_is_caught_in_a_store_with_gaps_between_years():
+    df = store(years=(2018, 2020, 2022))
+    assert features.gate_years(df) == []
+    df.loc[df.year == 2020, "bm_sum"] *= 5.0
+    assert any("bm_sum" in p and "2020" in p for p in features.gate_years(df))
+
+
+def test_vj_ndvi_is_gated_in_the_years_it_covers():
+    df = store()
+    df["vj_ndvi_mean"] = 0.5
+    df.loc[df.year == 2023, "vj_ndvi_mean"] = float("nan")  # before VJ113A1 coverage: not a problem
+    assert features.gate_years(df) == []
+    df.loc[(df.year == 2024) & (df.index % 10 == 0), "vj_ndvi_mean"] = float("nan")  # 10 % missing in a covered year
+    assert any("vj_ndvi_mean" in p and "2024" in p for p in features.gate_years(df))

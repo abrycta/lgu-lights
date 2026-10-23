@@ -31,6 +31,8 @@ from .labels import SchemaError
 from .rounds import ROUNDS
 
 PI = re.compile(r"^Poverty Incidence among Population")
+# A precision item for the same indicator ("... - Coefficient of Variation", "... Standard Error") is never the PI.
+NOT_PI = re.compile(r"coefficient|variation|\bcv\b|standard|error|interval|margin|lower|upper", re.IGNORECASE)
 
 # FIES names that differ from HDX COD-AB ADM2 names (normalised), -> ADM2 pcodes
 ALIAS = {
@@ -86,7 +88,10 @@ def read_jsonstat(path: Path) -> pd.DataFrame:
     arr = arr.reshape([n for k, n in zip(dims, size) if k in (geo, item, year)])
     kept = [k for k in dims if k in (geo, item, year)]
     arr = np.transpose(arr, [kept.index(geo), kept.index(item), kept.index(year)])
-    k = next(i for i, lab in enumerate(labels[item]) if PI.match(lab))
+    ks = [i for i, lab in enumerate(labels[item]) if PI.match(lab) and not NOT_PI.search(lab)]
+    if len(ks) != 1:
+        raise SchemaError(f"{path.name}: {len(ks)} poverty-incidence items (expected exactly 1): {labels[item]}")
+    k = ks[0]
     pis = arr[:, k, :]
     if np.isfinite(pis).any() and (np.nanmin(pis) < 0 or np.nanmax(pis) > 100):
         raise SchemaError(f"{path.name}: poverty incidence outside [0, 100] ({np.nanmin(pis)}, {np.nanmax(pis)})")

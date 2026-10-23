@@ -5,7 +5,7 @@ A cheap monthly check (.github/workflows/freshness.yml, no satellite work, no da
     listed in CMR (VNP46A4 or, from 2026, VJ146A4)?
   * PSA FIES (OpenSTAT): does a table's metadata list a year after the newest SAE round?
 Findings are printed as ::warning:: lines and as JSON; the workflow turns them into one deduplicated issue in the
-private archive repo. Nothing here is public: the app keeps serving the last published version.
+private archive repo, and check errors (a dead source, a moved collection) into another. Nothing here is public: the app keeps serving the last published version.
 New SAE rounds and PSGC quarters sit behind PSA's Cloudflare challenge and are not checked here.
 """
 from __future__ import annotations
@@ -25,13 +25,23 @@ FIES_TABLES = {
 }
 
 
-def black_marble(client: httpx.Client, year: int) -> dict | None:
-    """A finding when all PH tiles of `year` are in CMR."""
+def _bm_tiles(client: httpx.Client, year: int) -> tuple[str, set[str]]:
     product = laads.bm_product(year)
     day = f"{year}-01-01T00:00:00Z"
     tag = f".A{year}001."
     names = {(laads._data_link(e) or "").rsplit("/", 1)[-1] for e in laads._cmr_entries(client, product, day, day)}
-    tiles = {t for t in laads.PH_TILES for n in names if tag in n and f".{t}." in n}
+    return product, {t for t in laads.PH_TILES for n in names if tag in n and f".{t}." in n}
+
+
+def black_marble(client: httpx.Client, year: int) -> dict | None:
+    """A finding when all PH tiles of `year` are in CMR. The year before (already in the runs, so known to exist)
+    is queried first: if CMR has none of its tiles, the pinned collection version has moved and "no new data" would
+    be reported forever, so that is an error (verifier gap A2-9)."""
+    known, have = _bm_tiles(client, year - 1)
+    if len(have) < len(laads.PH_TILES):
+        raise ValueError(f"CMR lists {len(have)} of {len(laads.PH_TILES)} PH tiles of {known} {year - 1}, a year "
+                         f"the runs already use (collection version {laads.CMR_VERSION[known]} moved?)")
+    product, tiles = _bm_tiles(client, year)
     if len(tiles) == len(laads.PH_TILES):
         return {"source": f"black-marble ({product})", "new": str(year),
                 "action": f"run a data version with years ending {year} (features on, canary on)"}

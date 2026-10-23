@@ -12,7 +12,7 @@ STUB = Path(__file__).parent / "fixtures" / "gh-stub.sh"
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
 
 
-def swap(tmp_path: Path, fails: int, assets: int = 2) -> subprocess.CompletedProcess:
+def swap(tmp_path: Path, fails: int, assets: int = 2, **extra: str) -> subprocess.CompletedProcess:
     bin_ = tmp_path / "bin"
     bin_.mkdir(exist_ok=True)
     if not (bin_ / "gh").exists():
@@ -24,7 +24,7 @@ def swap(tmp_path: Path, fails: int, assets: int = 2) -> subprocess.CompletedPro
         files.append(str(f))
     env = os.environ | {"PATH": f"{bin_}:{os.environ['PATH']}", "GH_STATE": str(tmp_path), "SWAP_DELAY": "0",
                         "SWAP_ATTEMPTS": "3", "STUB_FAIL_PUBLISH": str(fails), "GITHUB_RUN_ID": "9",
-                        "GITHUB_RUN_ATTEMPT": "1", "GITHUB_REPOSITORY": "o/r"}
+                        "GITHUB_RUN_ATTEMPT": "1", "GITHUB_REPOSITORY": "o/r", "GH_DELAY": "0"} | extra
     return subprocess.run(["bash", str(ROOT / "scripts" / "swap-release.sh"), "data-v5", "newsha", "data-v5", "notes",
                            "false", *files], env=env, capture_output=True, text=True, check=False)
 
@@ -60,3 +60,11 @@ def test_first_publish_has_no_previous_release(tmp_path):
     r = swap(tmp_path, fails=0)
     assert r.returncode == 0, r.stdout + r.stderr
     assert state(tmp_path, "data-v5")[:2] == ["published", "newsha"] and state(tmp_path, "data-v5-prev") is None
+
+
+def test_a_move_github_applied_but_answered_502_is_not_retried_into_a_missing_tag(tmp_path):
+    old_release(tmp_path)
+    r = swap(tmp_path, fails=0, STUB_502_AFTER_MOVE="1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert state(tmp_path, "data-v5")[:3] == ["published", "newsha", "2"]
+    assert state(tmp_path, "data-v5-prev")[:2] == ["published", "oldsha"]
