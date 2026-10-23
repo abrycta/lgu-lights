@@ -477,11 +477,11 @@ export function nationalSentence(
   const [l1, l2] = [name(ranked[ranked.length - 1]!.r), name(ranked[ranked.length - 2]!.r)];
   const ja = lang === "ja";
   if (ja) {
-    const src = source === "official" ? "PSA公式値" : "Lightsのモデル推計、公式統計ではありません";
+    const src = source === "official" ? "PSA公式値" : "Lightsのモデル推計";
     const out = `${year}年（${src}）：地域ごとの市町村の平均で見ると、貧困率が最も高いのは${h1}と${h2}、最も低いのは${l1}と${l2}です。`;
     return left.length ? `${out}${left.map(name).join("、")}は値のある市町村が少ないため除いています。` : out;
   }
-  const src = source === "official" ? "PSA official figures" : "Lights model estimates, not official";
+  const src = source === "official" ? "PSA official figures" : "Lights model estimates";
   const out = `${year} (${src}): averaging each region's towns and cities, poverty rates are highest in ${h1} and ${h2}, and lowest in ${l1} and ${l2}.`;
   return left.length ? `${out} ${left.map(name).join(", ")} ${left.length === 1 ? "is" : "are"} left out (too few places with figures).` : out;
 }
@@ -503,7 +503,7 @@ export function plainSummary(args: { place: string; province: string; rec: YearR
         ? combined
           ? `この値はPSA（フィリピン統計庁）の${combined.replace(/^PSAの/, "")}したものです。`
           : "これはPSA（フィリピン統計庁）の公式統計（小地域推計）です。"
-        : `これはLightsのモデル推計で、公式統計ではありません（PSAの${rec.model!.from}年の値を出発点にしています）。`;
+        : `これはLightsのモデル推計で、PSAの${rec.model!.from}年の値を出発点にしています。`;
     return `${p}（${year}年）：${freq(f.est, lang)}が貧困線を下回る暮らしをしていました（100人あたりおそらく${lo}〜${hi}人）。${label}出典：Lights ${url}`;
   }
   const label =
@@ -511,7 +511,7 @@ export function plainSummary(args: { place: string; province: string; rec: YearR
       ? combined
         ? `This figure is ${combined} (Philippine Statistics Authority), weighted by population.`
         : "This is an official figure from the Philippine Statistics Authority (PSA small area estimate)."
-      : `This is a Lights model estimate, not an official figure; it starts from PSA's ${rec.model!.from} figure.`;
+      : `This is a Lights model estimate, starting from PSA's ${rec.model!.from} figure.`;
   return `${p}, ${year}: ${freq(f.est, lang)} people lived below the poverty line (likely between ${lo} and ${hi} in every 100). ${label} Source: Lights, ${url}`;
 }
 
