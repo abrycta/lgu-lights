@@ -11,7 +11,7 @@ on:
 
 permissions:
   contents: read
-  actions: write # dispatch the deploy workflow when live is stale
+  actions: write # dispatch the deploy workflow when live is stale; keep scheduled workflows enabled
 
 concurrency:
   # Runs on main never cancel each other (rule 24); other refs may.
@@ -33,3 +33,9 @@ jobs:
         run: |
           set -o pipefail
           .github/scripts/live-check.sh --redeploy | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Keep the scheduled workflows enabled (Freshness and this one)
+        if: always()
+        continue-on-error: true # a warning, not a live-check failure; tools/ci-red.sh reports a disabled workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/keepalive.sh

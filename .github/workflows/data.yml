@@ -13,7 +13,7 @@ name: Data
 
 on:
   # A run is requested from the Actions tab (workflow_dispatch), or by merging a change to .github/data-run.json
-  # ({"version": ..., "features": ..., "features_from": ..., "vj113a1": ...}) into main. Pushes to other branches
+  # ({"version": ..., "features": ..., "features_from": ..., "vj113a1": ..., "overwrite": ..., "accept_metrics": ...}) into main. Pushes to other branches
   # never start a run: this workflow replaces the features-<v> and data-<v> releases the site deploys from
   # (scripts/swap-release.sh: the new release is a complete draft before the old one is removed).
   push:
@@ -22,9 +22,17 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Data version (immutable folder name, e.g. v1)
-        required: true
-        default: v1
+        description: Data version (immutable folder name, e.g. v6); an existing one needs overwrite. Not needed with canary_only
+        required: false
+        default: ""
+      overwrite:
+        description: Replace an existing data-<version> (and features-<version>) release; the old one is kept as <tag>-prev
+        type: boolean
+        default: false
+      accept_metrics:
+        description: Publish even if the headline metrics are worse than the latest published version (a reviewed model change)
+        type: boolean
+        default: false
       features:
         description: Rebuild the feature store (zonal statistics); off = reuse the features-<features_from> release
         type: boolean
@@ -36,13 +44,17 @@ on:
         description: Feature years (empty = run_years in config/rounds.json)
         default: ""
       vj113a1:
-        description: Also compute NOAA-20 VJ113A1 NDVI (continuity series for MODIS, 2018 onwards; adds about 15 min)
+        description: Also compute NOAA-20 VJ113A1 NDVI/EVI for every year from 2018 (the overlap for re-calibrating; years MOD13Q1 leaves incomplete are always computed)
         type: boolean
         default: true
       canary:
         description: With features on, first run the satellite path for one year (the last of years) with every gate
         type: boolean
         default: true
+      canary_only:
+        description: Run only the canary (a check of the satellite path); nothing is built or published
+        type: boolean
+        default: false
 
 permissions:
   contents: read   # only the jobs that publish release assets (features, model) get contents: write
@@ -53,6 +65,12 @@ concurrency:
 
 env:
   GH_TOKEN: ${{ github.token }}
+
+# An explicit bash runs every step with `-eo pipefail`, so a failing command piped into `tee` fails its step
+# (the runner's implicit default is `bash -e` only, which reported a failed canary gate as a success).
+defaults:
+  run:
+    shell: bash
 
 jobs:
   config:
@@ -65,9 +83,11 @@ jobs:
       years: ${{ steps.c.outputs.years }}
       vj113a1: ${{ steps.c.outputs.vj113a1 }}
       canary: ${{ steps.c.outputs.canary }}
+      canary_only: ${{ steps.c.outputs.canary_only }}
+      accept_metrics: ${{ steps.c.outputs.accept_metrics }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { sparse-checkout: ".github\nconfig" }
+        with: { sparse-checkout: ".github\nconfig\nscripts" }
       - id: c
         env:
           EVENT: ${{ github.event_name }}
@@ -77,27 +97,58 @@ jobs:
           I_YEARS: ${{ inputs.years }}
           I_VJ: ${{ inputs.vj113a1 }}
           I_CANARY: ${{ inputs.canary }}
+          I_CANARY_ONLY: ${{ inputs.canary_only }}
+          I_OVERWRITE: ${{ inputs.overwrite }}
+          I_ACCEPT: ${{ inputs.accept_metrics }}
         run: |
           if [ "$EVENT" = push ]; then
             python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
           c = json.load(open(".github/data-run.json"))
-          print(f"version={c.get('version', 'v1')}")
+          print(f"version={c['version']}")
           print(f"features={str(c.get('features', True)).lower()}")
-          print(f"features_from={c.get('features_from') or c.get('version', 'v1')}")
+          print(f"features_from={c.get('features_from') or c['version']}")
           print(f"years={c.get('years') or json.load(open('config/rounds.json'))['run_years']}")
           print(f"vj113a1={str(c.get('vj113a1', True)).lower()}")
           print(f"canary={str(c.get('canary', True)).lower()}")
+          print("canary_only=false")
+          print(f"overwrite={str(c.get('overwrite', False)).lower()}")
+          print(f"accept_metrics={str(c.get('accept_metrics', False)).lower()}")
           PY
           else
             { echo "version=$I_VERSION"; echo "features=$I_FEATURES"; echo "features_from=${I_FROM:-$I_VERSION}"
-              echo "years=${I_YEARS:-$(jq -r .run_years config/rounds.json)}"; echo "vj113a1=$I_VJ"; echo "canary=$I_CANARY"; } >> "$GITHUB_OUTPUT"
+              echo "years=${I_YEARS:-$(jq -r .run_years config/rounds.json)}"; echo "vj113a1=$I_VJ"; echo "canary=$I_CANARY"
+              echo "canary_only=${I_CANARY_ONLY:-false}"
+              echo "overwrite=$I_OVERWRITE"; echo "accept_metrics=$I_ACCEPT"; } >> "$GITHUB_OUTPUT"
           fi
           cat "$GITHUB_OUTPUT"
+      - name: Data versions are write-once (audit L-C4)
+        # canary_only builds and publishes nothing, so it needs no version
+        if: steps.c.outputs.canary_only != 'true'
+        env:
+          VERSION: ${{ steps.c.outputs.version }}
+          FEATURES: ${{ steps.c.outputs.features }}
+          OVERWRITE: ${{ steps.c.outputs.overwrite }}
+        run: |
+          [[ "$VERSION" =~ ^v[0-9]+$ ]] || { echo "::error::version '$VERSION' is not v<number>"; exit 1; }
+          tags="data-$VERSION"; [ "$FEATURES" != true ] || tags="$tags features-$VERSION"
+          for t in $tags; do
+            # release-status.sh tells "absent" (404) from an API error, which fails the step instead of
+            # letting the run overwrite an existing version (verifier gap A2-13).
+            st=$(scripts/release-status.sh "$t" | head -1) || { echo "::error::cannot check whether $t exists (GitHub API error)"; exit 1; }
+            if [ "$st" = present ]; then
+              if [ "$OVERWRITE" = true ]; then
+                echo "::warning title=overwrite::$t exists and will be replaced; the current release is kept as $t-prev"
+              else
+                echo "::error title=version exists::$t already exists. Choose a new version, or set overwrite (the old release is kept as $t-prev)."
+                exit 1
+              fi
+            fi
+          done
 
   canary:
     needs: config
-    if: needs.config.outputs.features == 'true' && needs.config.outputs.canary == 'true'
+    if: needs.config.outputs.features == 'true' && (needs.config.outputs.canary == 'true' || needs.config.outputs.canary_only == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -131,7 +182,7 @@ jobs:
           year="${YEARS##*-}"
           echo "### Canary: year $year of $YEARS" >> "$GITHUB_STEP_SUMMARY"
           tools/zonal_parallel.sh "$year"
-      - name: VJ113A1 NDVI for one year (optional)
+      - name: VJ113A1 NDVI/EVI for one year (optional)
         if: needs.config.outputs.vj113a1 == 'true'
         working-directory: pipeline
         env:
@@ -140,6 +191,15 @@ jobs:
           EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
           YEARS: ${{ needs.config.outputs.years }}
         run: uv run python -m lgu zonal-vj --years "${YEARS##*-}"
+      - name: VJ113A1 for years MOD13Q1 leaves incomplete (Terra's end; Option A)
+        if: needs.config.outputs.vj113a1 != 'true'
+        working-directory: pipeline
+        env:
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+        # a no-op while every year has a complete MOD13Q1 year; incomplete VJ113A1 years are left out silently
+        run: uv run python -m lgu zonal-vj --years partial
       - name: Feature-store gates on the canary year
         working-directory: pipeline
         run: uv run python -m lgu features | tee -a "$GITHUB_STEP_SUMMARY"
@@ -148,7 +208,7 @@ jobs:
     needs: [config, canary]
     # Only after the canary passed (or when it was turned off).
     if: >-
-      !cancelled() && needs.config.outputs.features == 'true' &&
+      !cancelled() && needs.config.outputs.features == 'true' && needs.config.outputs.canary_only != 'true' &&
       (needs.canary.result == 'success' || (needs.canary.result == 'skipped' && needs.config.outputs.canary != 'true'))
     env:
       VERSION: ${{ needs.config.outputs.version }}
@@ -187,7 +247,7 @@ jobs:
           EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
           YEARS: ${{ needs.config.outputs.years }}
         run: tools/zonal_parallel.sh "$YEARS"
-      - name: VJ113A1 NDVI (optional)
+      - name: VJ113A1 NDVI/EVI (optional)
         if: needs.config.outputs.vj113a1 == 'true'
         working-directory: pipeline
         env:
@@ -199,6 +259,15 @@ jobs:
         run: |
           first=${YEARS%-*}; [ "$first" -gt 2018 ] || first=2018
           uv run python -m lgu zonal-vj --years "$first-${YEARS#*-}"
+      - name: VJ113A1 for years MOD13Q1 leaves incomplete (Terra's end; Option A)
+        if: needs.config.outputs.vj113a1 != 'true'
+        working-directory: pipeline
+        env:
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+          EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+          EARTHDATA_TOKEN: ${{ secrets.EARTHDATA_TOKEN }}
+        # a no-op while every year has a complete MOD13Q1 year; incomplete VJ113A1 years are left out silently
+        run: uv run python -m lgu zonal-vj --years partial
       - name: Feature store (gated)
         working-directory: pipeline
         run: uv run python -m lgu features | tee -a "$GITHUB_STEP_SUMMARY"
@@ -229,19 +298,24 @@ jobs:
         run: |
           cd data
           cp interim/zonal_*.parquet interim/provenance.json build/
+          extra=()
+          # a freshly derived S-NPP/NOAA-20 calibration, to be reviewed and committed as pipeline/inputs/bm_ratio.json
+          if [ -f interim/bm_ratio.json ]; then cp interim/bm_ratio.json build/ && extra+=(build/bm_ratio.json); fi
+          # sha256 of every VJ113A1 granule averaged (provenance of the calibrated vegetation years)
+          if [ -f interim/vj_granules.json ]; then cp interim/vj_granules.json build/ && extra+=(build/vj_granules.json); fi
           tag="features-$VERSION"
           # built as a draft under a temporary name, swapped in only when complete (audit M3)
           ../scripts/swap-release.sh "$tag" "$GITHUB_SHA" "$tag" \
             "Feature store for data version $VERSION (run $GITHUB_RUN_ID, commit $GITHUB_SHA)." true \
             build/features.parquet build/lgus.parquet build/labels.parquet build/provinces_fies.parquet build/provinces.json \
-            build/crosswalk-report.json build/provenance.json build/zonal_*.parquet build/geom.pmtiles
+            build/crosswalk-report.json build/provenance.json build/zonal_*.parquet build/geom.pmtiles ${extra[@]+"${extra[@]}"}
           du -h build/*.parquet build/geom.pmtiles | tee -a "$GITHUB_STEP_SUMMARY"
 
   model:
     needs: [config, canary, features]
     # features is skipped when the store is reused, never because the canary failed
     if: >-
-      !cancelled() && needs.config.result == 'success' &&
+      !cancelled() && needs.config.result == 'success' && needs.config.outputs.canary_only != 'true' &&
       (needs.canary.result == 'success' || needs.canary.result == 'skipped') &&
       (needs.features.result == 'success' || (needs.features.result == 'skipped' && needs.config.outputs.features != 'true'))
     env:
@@ -276,11 +350,32 @@ jobs:
         working-directory: pipeline
       - name: Design matrix (features derived by lgu-core)
         run: target/release/lgu design --build data/build --out data/build/design.csv
-      - name: Train and validate (forward-chaining, conformal intervals)
+      - name: Train and validate (forward-chaining, conformal intervals; metrics gate against the latest published version)
         working-directory: pipeline
+        env:
+          ACCEPT_METRICS: ${{ needs.config.outputs.accept_metrics }}
         run: |
           start=$(date +%s)
-          uv run python -m lgu train
+          gate=()
+          # The gate is skipped only when no data release exists at all. A GitHub API or download error fails
+          # the step instead of training ungated (verifier gap A4-11); accept_metrics stays the reviewed override.
+          retry() { local i; for i in 1 2 3; do "$@" && return 0; [ "$i" = 3 ] || sleep $((10 * i)); done; return 1; }
+          list_tags() { gh release list -R "$GITHUB_REPOSITORY" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName'; }
+          tags=$(retry list_tags) || { echo "::error title=metrics baseline::cannot list the releases (GitHub API error)"; exit 1; }
+          latest=$(grep -E '^data-v[0-9]+$' <<<"$tags" | sort -t v -k2 -n | tail -1 || true)
+          if [ -z "$latest" ]; then
+            echo "::warning title=no metrics baseline::no published data release yet; the metrics gate is skipped"
+          elif retry gh release download "$latest" -R "$GITHUB_REPOSITORY" -p metrics.json -O ../data/build/baseline-metrics.json --clobber; then
+            gate=(--baseline ../data/build/baseline-metrics.json)
+            echo "metrics gate: against $latest" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$ACCEPT_METRICS" = true ]; then
+            echo "::warning title=no metrics baseline::$latest/metrics.json could not be downloaded; accept_metrics is set, so the gate is skipped"
+          else
+            echo "::error title=metrics baseline::$latest/metrics.json could not be downloaded; not training ungated (re-run, or set accept_metrics after review)"
+            exit 1
+          fi
+          [ "$ACCEPT_METRICS" != true ] || gate+=(--accept-metrics)
+          uv run python -m lgu train ${gate[@]+"${gate[@]}"}
           echo "training: $(( $(date +%s) - start )) s" >> "$GITHUB_STEP_SUMMARY"
       - name: Parity gate (Rust core vs LightGBM predict, tolerance 1e-5)
         run: |

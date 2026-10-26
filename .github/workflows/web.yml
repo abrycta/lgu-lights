@@ -12,9 +12,9 @@ name: Web
 
 on:
   push:
-    paths: [web/**, config/**, scripts/deploy-web.sh, .github/workflows/web.yml, crates/**, Cargo.toml, Cargo.lock, rust-toolchain.toml]
+    paths: [web/**, config/**, scripts/deploy-web.sh, .github/workflows/web.yml, .github/scripts/deploy-gate.sh, crates/**, Cargo.toml, Cargo.lock, rust-toolchain.toml]
   pull_request:
-    paths: [web/**, config/**, scripts/deploy-web.sh, .github/workflows/web.yml, crates/**, Cargo.toml, Cargo.lock, rust-toolchain.toml]
+    paths: [web/**, config/**, scripts/deploy-web.sh, .github/workflows/web.yml, .github/scripts/deploy-gate.sh, crates/**, Cargo.toml, Cargo.lock, rust-toolchain.toml]
   workflow_dispatch:
 
 permissions:

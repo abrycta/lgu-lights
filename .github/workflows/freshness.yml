@@ -1,0 +1,79 @@
+# Monthly freshness check (audit L-C7): is newer upstream data available than the data runs use? Cheap (CMR and
+# OpenSTAT metadata only, about a minute), never touches data or releases. Findings become ::warning:: lines and one
+# deduplicated issue in the private archive repo, check errors another (with ARCHIVE_READ_TOKEN, which has Issues: write there), so the
+# app never shows anything: a new data version is still a reviewed manual run (data.yml).
+name: Freshness
+
+on:
+  schedule:
+    - cron: "17 1 3 * *" # 3rd of each month, 01:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: freshness
+  cancel-in-progress: false
+
+jobs:
+  # GitHub disables cron workflows in a public repository after 60 days without activity. Re-enabling resets
+  # that clock; live-check.yml runs the same script hourly, so each workflow can bring the other back.
+  keepalive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: { actions: write, contents: read }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { sparse-checkout: .github }
+      - name: Re-enable the scheduled workflows
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: .github/scripts/keepalive.sh
+
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { sparse-checkout: "pipeline\nconfig" }
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with: { enable-cache: true, cache-dependency-glob: pipeline/uv.lock }
+      - name: Check upstream sources
+        working-directory: pipeline
+        run: |
+          uv sync --locked
+          uv run python -m lgu freshness > "$RUNNER_TEMP/freshness.json"
+          { echo "### Freshness"; echo '```json'; cat "$RUNNER_TEMP/freshness.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Open or update the freshness issues (private archive repo)
+        env:
+          GH_TOKEN: ${{ secrets.ARCHIVE_READ_TOKEN }}
+          ARCHIVE: abrycta/lgu-lights-archive
+        run: |
+          f="$RUNNER_TEMP/freshness.json"
+          run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          # one deduplicated issue per kind: new upstream data, and check errors (a dead source or a moved
+          # collection, which would otherwise read as "no new data" for months); never public
+          issue() {
+            local title=$1 body=$2 num
+            if [ -z "$GH_TOKEN" ]; then
+              echo "::warning::ARCHIVE_READ_TOKEN is not set; '$title' is only in this run's annotations"
+              return 0
+            fi
+            num=$(gh issue list -R "$ARCHIVE" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty' || true)
+            if [ -n "$num" ]; then
+              gh issue comment "$num" -R "$ARCHIVE" --body "$body" >/dev/null || echo "::warning::could not comment on $ARCHIVE#$num"
+            else
+              gh issue create -R "$ARCHIVE" --title "$title" --body "$body" >/dev/null || echo "::warning::could not open an issue in $ARCHIVE"
+            fi
+          }
+          if [ "$(jq '.findings | length' "$f")" -gt 0 ]; then
+            issue "Freshness: new upstream data for lgu-lights" \
+              "$(jq -r --arg run "$run" '"New upstream data (run \($run)):\n" + ([.findings[] | "- **\(.source)**: \(.new): \(.action)"] | join("\n"))' "$f")"
+          else
+            echo "no new upstream data"
+          fi
+          if [ "$(jq '.errors | length' "$f")" -gt 0 ]; then
+            jq -r '.errors[] | "::error title=freshness check failed::\(.)"' "$f"
+            issue "Freshness: check errors for lgu-lights" \
+              "$(jq -r --arg run "$run" '"The freshness check could not read some sources (run \($run)). The app keeps serving the last published version.\n" + ([.errors[] | "- \(.)"] | join("\n"))' "$f")"
+          fi

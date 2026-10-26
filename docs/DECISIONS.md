@@ -231,3 +231,26 @@ Two data fixes from the 2026-10-22 bug audit (items 6 and 3); features reused fr
 - **City of Manila.** PSA publishes the capital only as its 14 districts, which have no polygons of their own, so v1–v4 left the city blank. Since v5 its figure for each round (2006–2023) is the population-weighted mean of the 14 district figures, weighted by each district's 2020 Census population from the PSGC (new source `psa-psgc`, 1Q 2025 publication datafile, Wayback-pinned and archived as `psa-psgc-2026-10-23`). Its SE is the weighted sum of the district SEs, the upper bound for correlated district errors. It enters training and the map like any official figure (e.g. 2023: 1.89 %, 90 % CI 1.56–2.23).
 - **No exact 0 %.** The model adds a predicted change to the last official figure; for low-poverty places with long gaps (mostly the NCR and other highly urbanised cities that have no 2018–2023 figure) that went below zero and was clamped to 0.0 % with an infinite CV (139 model estimates in v4). Since v5 a predicted fall to less than half of the previous official figure tapers hyperbolically (`f²/(2f − raw)`, `f` = half the previous figure; same value and slope at the joint), in the Rust core (`model::level`, also the what-if) and in validation (`train.level`). In the PSA rounds no LGU fell below 12 % of its previous figure.
 - **Effect (local canary against v4):** validation MAE 6.76 / 8.06 / 5.55 (v4 6.76 / 8.07 / 5.55); parity max |Δ| 3.9e-14. Model estimates at 0.0 %: 136 shown → 4; null model CVs 139 → 0. Retraining with the Manila rows moves other model estimates by a median 0.28 pp (90th percentile 0.88, max 4.0); official figures are unchanged.
+
+## Vegetation after Terra (audit L-C6), 2026-10-23
+
+**Option A chosen by Kurt 2026-10-23** (`docs/architecture/TERRA-SWITCH-OPTIONS.md`), without the NOAA-21 mirror.
+
+- A year takes NDVI and EVI from MODIS Terra MOD13Q1 when MOD13Q1 covers it in full (at least 20 of 23 composites);
+  otherwise from NOAA-20 VJ113A1 v002 (LAADS), calibrated onto MOD13Q1, when VJ113A1 covers it in full (at least 20
+  of the 23 composites on MOD13Q1's 16-day phase); otherwise the year is left out silently (the #46 guard).
+- Calibration (`pipeline/lgu/vegetation.py`, committed as `pipeline/inputs/veg_calibration.json`):
+  `mod13q1 = slope * vj113a1 + offset[LGU]` per index, national within-LGU slope, each LGU's own offset where it beats
+  the national offset out of sample (leave one year out) and the LGU has at least 5 overlap years; otherwise the
+  national offset. Offsets capped at ±0.15 from the national one; values clipped to the store's range.
+- No re-train: the v5 model is reused; every year MOD13Q1 covers keeps its MOD13Q1 values, so all published numbers
+  stay byte-identical (parity run in the PR).
+- Data runs compute VJ113A1 only for the years MOD13Q1 leaves incomplete (`lgu zonal-vj --years partial`); the
+  `vj113a1` run option computes every year from 2018 (to re-fit the calibration).
+- First calibration (2026-10-23, overlap 2018–2025; 2026 is added once Terra's 2026 year is complete): NDVI slope
+  0.624, 1,463 LGUs with their own offset and 172 on the national one; EVI slope 0.767, 1,369 own and 266 national
+  (7 LGUs have no VJ113A1 value). Out of sample (fit 2018–2023, test 2024–2025): NDVI median error 0.010 (median
+  three-year change 0.013), EVI 0.011 (0.017). Swap test with the published v5 model: replacing 2023 MOD13Q1 with
+  calibrated VJ113A1 moves the 3,262 later model estimates by a median 0.000 pp (p90 0.04, max 0.58); treating 2025 as
+  a Terra-less year moves its 1,631 estimates by a median 0.007 pp (p90 0.05, max 0.64). Well under the 0.5 pp median
+  limit set for falling back to Option C.

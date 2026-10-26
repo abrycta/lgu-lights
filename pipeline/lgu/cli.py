@@ -7,10 +7,14 @@
     fies         PSA OpenSTAT provincial poverty (FIES) -> data/build/provinces_fies.parquet (lgu/fies.py)
     zonal-ee     Earth Engine: MODIS NDVI/EVI, WorldPop, SRTM -> data/interim/zonal_ee.parquet
     zonal-bm     LAADS Black Marble VNP46A4 + exactextract -> data/interim/zonal_bm.parquet
-    zonal-vj     LAADS VJ113A1 NDVI + exactextract -> data/interim/zonal_vj.parquet (continuity; optional)
+    zonal-vj     LAADS VJ113A1 NDVI/EVI + exactextract -> data/interim/zonal_vj.parquet (after Terra; --years
+                 partial = only the years MOD13Q1 leaves incomplete, from zonal_ee.parquet)
+    veg-calibrate  VJ113A1 -> MOD13Q1 calibration from the overlap years (--features, --vj) -> --out JSON
+                 (default pipeline/inputs/veg_calibration.json) with an out-of-sample check (lgu/vegetation.py)
     features     merge zonal tables -> data/build/features.parquet (the feature store)
     train        design.csv (from the Rust CLI) -> models, metrics, parity expectations (lgu/train.py)
     to-parquet   estimates.csv (from the Rust CLI) -> estimates.parquet
+    freshness    is newer upstream data available (Black Marble year, FIES year)? JSON; never touches data
 """
 from __future__ import annotations
 
@@ -52,6 +56,16 @@ def run(cmd: str, argv: list[str]) -> int:
     ap.add_argument("--years", default=DEFAULT_YEARS)
     ap.add_argument("--design", type=Path, default=BUILD / "design.csv")
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--accept", action="store_true",
+                    help="labels/fies: accept changes against the committed reports in pipeline/inputs/ (reviewed)")
+    ap.add_argument("--baseline", type=Path, help="train: metrics.json of the published data version to compare with")
+    ap.add_argument("--accept-metrics", action="store_true", help="train: skip the metrics gate (a reviewed model change)")
+    ap.add_argument("--recompute-ratio", action="store_true",
+                    help="zonal-bm: re-derive the S-NPP/NOAA-20 calibration instead of pipeline/inputs/bm_ratio.json")
+    ap.add_argument("--features", type=Path, help="veg-calibrate: feature store or zonal_ee table with MOD13Q1 values")
+    ap.add_argument("--vj", type=Path, help="veg-calibrate: zonal_vj.parquet of the overlap years")
+    ap.add_argument("--granules", type=Path, nargs="*", default=[],
+                    help="veg-calibrate: vj_granules.json file(s) (file name -> sha256) of the overlap pull")
     a = ap.parse_args(argv)
     BUILD.mkdir(parents=True, exist_ok=True)
 
@@ -98,6 +112,14 @@ def run(cmd: str, argv: list[str]) -> int:
         df, rep = labels.build_labels(RAW / "psa" / "psa-sae-2018-2021.xlsx", RAW / "psa" / "psa-sae-2023.xlsx",
                                       adm3, labels.load_overrides(CROSSWALK_OVERRIDES), shas,
                                       psgc=RAW / "psa" / "psa-psgc.xlsx")
+        committed = COMMITTED / "crosswalk-report.json"
+        if committed.exists():  # audit L-C9: never adopt a workbook that silently loses LGUs
+            problems = labels.gate_report(rep, json.loads(committed.read_text()),
+                                          labels.load_overrides(CROSSWALK_OVERRIDES))
+            for msg in problems:
+                print(f"::{'warning' if a.accept else 'error'} title=labels gate::{msg}")
+            if problems and not a.accept:
+                return 1
         df.to_parquet(BUILD / "labels.parquet", index=False)
         labels.write_report(rep, BUILD / "crosswalk-report.json")
         # Committed copy (pipeline/inputs/): CI without ARCHIVE_READ_TOKEN uses it (lgu/direct.py).
@@ -116,6 +138,12 @@ def run(cmd: str, argv: list[str]) -> int:
         from . import fies
         adm2 = pd.read_excel(RAW / "boundaries" / "phl_admin_boundaries.xlsx", sheet_name="phl_admin2")
         df, rep = fies.build(RAW / "psa", adm2[["adm2_pcode", "adm2_name"]])
+        committed = COMMITTED / "provinces-fies-report.json"
+        problems = fies.gate_report(rep, json.loads(committed.read_text()) if committed.exists() else {})
+        for msg in problems:  # audit L-C8
+            print(f"::{'warning' if a.accept else 'error'} title=FIES gate::{msg}")
+        if problems and not a.accept:
+            return 1
         df.to_parquet(BUILD / "provinces_fies.parquet", index=False)
         COMMITTED.mkdir(exist_ok=True)
         df.to_parquet(COMMITTED / "provinces_fies.parquet", index=False)  # B4: CI without the archive token
@@ -130,12 +158,43 @@ def run(cmd: str, argv: list[str]) -> int:
 
     if cmd == "zonal-bm":
         from . import laads
-        laads.zonal_black_marble(INTERIM / "adm3.parquet", years_arg(a.years), a.out or INTERIM / "zonal_bm.parquet")
+        laads.zonal_black_marble(INTERIM / "adm3.parquet", years_arg(a.years), a.out or INTERIM / "zonal_bm.parquet",
+                                 recompute_ratio=a.recompute_ratio)
         return 0
 
     if cmd == "zonal-vj":
         from . import laads
-        laads.zonal_vj113a1(INTERIM / "adm3.parquet", years_arg(a.years), a.out or INTERIM / "zonal_vj.parquet")
+        if a.years == "partial":  # only the years MOD13Q1 leaves incomplete (Terra's end), from zonal_ee.parquet
+            import pandas as pd
+
+            from . import features, vegetation
+            ys = [y for y in features.partial_veg_years(pd.read_parquet(INTERIM / "zonal_ee.parquet"))
+                  if y >= vegetation.OVERLAP_FROM]
+            if not ys:
+                print("::notice::MOD13Q1 complete for every year: VJ113A1 not needed")
+                return 0
+        else:
+            ys = years_arg(a.years)
+        laads.zonal_vj113a1(INTERIM / "adm3.parquet", ys, a.out or INTERIM / "zonal_vj.parquet")
+        return 0
+
+    if cmd == "veg-calibrate":
+        import pandas as pd
+
+        from . import vegetation
+        mod, vj = pd.read_parquet(a.features), pd.read_parquet(a.vj)
+        cal = vegetation.fit(mod, vj)
+        ys = cal["overlap_years"]
+        cal["validation"] = vegetation.validate(mod, vj, ys[:-2], ys[-2:])
+        granules: dict[str, str] = {}
+        for g in a.granules:
+            granules |= json.loads(g.read_text())
+        if granules:
+            cal["granules"] = dict(sorted(granules.items()))
+        out = a.out or vegetation.CAL_PATH
+        out.write_text(json.dumps(cal, indent=1) + "\n")
+        print(json.dumps({k: {kk: vv for kk, vv in v.items() if kk != "offsets"} if isinstance(v, dict) else v
+                          for k, v in cal.items() if k != "granules"} | {"granules": len(granules)}, indent=1))
         return 0
 
     if cmd == "features":
@@ -147,10 +206,18 @@ def run(cmd: str, argv: list[str]) -> int:
     if cmd == "train":
         from . import train
         out = a.out or BUILD / "model"
-        rep = train.run(a.design, out)
+        rep = train.run(a.design, out, baseline=None if a.accept_metrics else a.baseline)
         print(json.dumps(rep["headline"], indent=1))
         return 0
 
+    if cmd == "freshness":
+        import httpx
+
+        from . import freshness
+        with httpx.Client(timeout=60, follow_redirects=True,
+                          headers={"User-Agent": "lgu-lights-pipeline/0.1 (+https://github.com/abrycta/lgu-lights)"}) as c:
+            print(json.dumps(freshness.check(c), indent=1))
+        return 0
     if cmd == "to-parquet":
         import pandas as pd
         src = a.out or BUILD

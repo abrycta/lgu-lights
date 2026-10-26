@@ -6,7 +6,7 @@
 // scale with the manifest's fixed breaks, and opacity/hatching follow lib/honesty.ts so the map,
 // legend and table make the same official-vs-model distinction.
 
-import { hatchFilter as akariHatchFilter, hatchPattern as akariHatchPattern, stepColor, type Expression as AkariExpression } from "@abrycta/akari/maps";
+import { hatchFilter as akariHatchFilter, hatchPattern as akariHatchPattern, scaleColors } from "@abrycta/akari/maps";
 import { flat } from "@abrycta/akari/tokens";
 
 import type { ExpressionSpecification as Expression } from "maplibre-gl";
@@ -78,10 +78,28 @@ export function sourceExpr(year: number, nat: NationalValues | null): Expression
   return attr("s", year, nat);
 }
 
+/**
+ * The poverty ramp, from the lowest to the highest class: darker always means poorer. Light themes use Akari's
+ * sequential scale (藍 ai). Akari's dark-theme scale runs the other way (the poorest brightest), so the dark themes
+ * use their own 藍 → 藤 ramp (indigo to wisteria) from Akari primitives, every step at least 3:1 on the panel:
+ * ai.90, ai.80, an indigo-wisteria step between them (oklch 0.71 0.10 281), fuji.62d, fuji.57; dark high contrast
+ * deepens to ai.78 and fuji.54. index.css (.seq-ramp) gives the legend, guide, people grid and chart the same steps.
+ */
+export const DARK_RAMP = ["#d0e0f7", "#a6c1e8", "#969adf", "#9970c4", "#9853bc"] as const;
+export const DARK_HC_RAMP = ["#d0e0f7", "#9dbbe6", "#9397dc", "#9970c4", "#8f4ab3"] as const;
+
+export function seqRamp(key: ThemeKey): readonly string[] {
+  if (key === "dark") return DARK_RAMP;
+  if (key === "dark-hc") return DARK_HC_RAMP;
+  return scaleColors("seq", "light");
+}
+
 export function fillColor(year: number, breaks: readonly number[], key: ThemeKey, nat: NationalValues | null): Expression {
   const v = valueExpr(year, nat);
-  const theme = key.startsWith("dark") ? "dark" : "light";
-  return ["case", ["<", v, 0], tokenColor("map.no-data", key), stepColor(v as AkariExpression, breaks, { scale: "seq", theme }) as unknown as Expression];
+  const colors = seqRamp(key);
+  if (breaks.length !== colors.length - 1) throw new Error(`fillColor: ${colors.length} colours need ${colors.length - 1} breaks (got ${breaks.length})`);
+  const step = ["step", v, colors[0], ...breaks.flatMap((b, i) => [b, colors[i + 1]])] as unknown as Expression;
+  return ["case", ["<", v, 0], tokenColor("map.no-data", key), step];
 }
 
 /** Official figures are opaque; model estimates are lighter; no data is Akari's map.no-data, opaque. */

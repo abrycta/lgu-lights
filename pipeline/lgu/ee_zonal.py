@@ -2,13 +2,15 @@
 
 Nothing is downloaded: polygons are sent in chunks and `reduceRegions` returns one row per LGU.
   * modis-mod13q1: yearly mean NDVI and EVI of 16-day composites with SummaryQA 0-1 (good, marginal),
-    250 m, area-weighted mean.
+    250 m, area-weighted mean. `veg_composites` records how many composites Earth Engine holds for the
+    year (23 in a full year), so the feature store can skip a partial vegetation year (Terra's end).
   * worldpop-phl-100m: population sum per LGU, 2012-2020 (WorldPop GP 100 m ends in 2020; later years are
     carried forward and flagged `pop_carried`).
   * srtm-dem: mean elevation and mean slope (static).
 
 Credentials: EE_SERVICE_ACCOUNT_KEY (JSON) in CI; locally the hex-encoded Keychain item earth-engine-sa-key.
 """
+
 from __future__ import annotations
 
 import concurrent.futures as cf
@@ -24,7 +26,7 @@ PROJECT = "lgu-lights"
 MODIS = "MODIS/061/MOD13Q1"
 WORLDPOP = "WorldPop/GP/100m/pop"
 DEM = "USGS/SRTMGL1_003"
-SIMPLIFY_DEG = 0.0005      # about 55 m, a fifth of a MODIS pixel; requests stay well under the 10 MB limit
+SIMPLIFY_DEG = 0.0005  # about 55 m, a fifth of a MODIS pixel; requests stay well under the 10 MB limit
 CHUNK_VERTICES = 120_000
 
 
@@ -33,8 +35,12 @@ def init() -> None:
 
     key = os.environ.get("EE_SERVICE_ACCOUNT_KEY")
     if not key:
-        hexkey = subprocess.run(["security", "find-generic-password", "-s", "earth-engine-sa-key", "-w"],
-                                capture_output=True, text=True, check=True).stdout.strip()
+        hexkey = subprocess.run(
+            ["security", "find-generic-password", "-s", "earth-engine-sa-key", "-w"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
         key = bytes.fromhex(hexkey).decode()
     email = json.loads(key)["client_email"]
     ee.Initialize(ee.ServiceAccountCredentials(email, key_data=key), project=PROJECT)
@@ -59,8 +65,9 @@ def _fc(rows):  # type: ignore[no-untyped-def]
     import ee
     from shapely.geometry import mapping
 
-    return ee.FeatureCollection([ee.Feature(ee.Geometry(mapping(r.geometry), geodesic=False),
-                                            {"adm3_pcode": r.adm3_pcode}) for r in rows])
+    return ee.FeatureCollection(
+        [ee.Feature(ee.Geometry(mapping(r.geometry), geodesic=False), {"adm3_pcode": r.adm3_pcode}) for r in rows]
+    )
 
 
 def _reduce(image, rows, reducer, scale: float) -> list[dict]:  # type: ignore[no-untyped-def]
@@ -74,22 +81,34 @@ def _reduce(image, rows, reducer, scale: float) -> list[dict]:  # type: ignore[n
     raise RuntimeError("Earth Engine reduceRegions failed 5 times")
 
 
+def name_outputs(props: dict, bands: list[str], stat: str) -> dict:
+    """Key reduceRegions output by band name for one band or many.
+
+    With several bands Earth Engine names each output after its band (``pop_2019``, ``pop_2020``); with a single
+    band it names the output after the reducer (``sum``, ``mean``), so a one-year run would find no ``pop_<year>``.
+    """
+    if len(bands) == 1 and bands[0] not in props and stat in props:
+        props = {**props, bands[0]: props[stat]}
+        del props[stat]
+    return props
+
+
 def images(years: list[int]):  # type: ignore[no-untyped-def]
     import ee
 
     def vi(y: int):  # type: ignore[no-untyped-def]
         col = ee.ImageCollection(MODIS).filterDate(f"{y}-01-01", f"{y + 1}-01-01")
-        good = col.map(lambda im: im.select(["NDVI", "EVI"]).multiply(0.0001)
-                       .updateMask(im.select("SummaryQA").lte(1)))
+        good = col.map(lambda im: im.select(["NDVI", "EVI"]).multiply(0.0001).updateMask(im.select("SummaryQA").lte(1)))
         return good.mean().rename([f"ndvi_{y}", f"evi_{y}"])
 
     veg = ee.Image.cat([vi(y) for y in years])
+    counts = ee.List([ee.ImageCollection(MODIS).filterDate(f"{y}-01-01", f"{y + 1}-01-01").size() for y in years])
     pop_years = sorted({min(y, 2020) for y in years})  # WorldPop GP ends in 2020
     wp = ee.ImageCollection(WORLDPOP).filter(ee.Filter.eq("country", "PHL"))
     pop = ee.Image.cat([wp.filter(ee.Filter.eq("year", y)).first().rename(f"pop_{y}") for y in pop_years])
     dem = ee.Image(DEM).select("elevation")
     terrain = ee.Image.cat([dem.rename("elev"), ee.Terrain.slope(dem).rename("slope")])
-    return veg, pop, terrain, pop_years
+    return veg, pop, terrain, pop_years, counts
 
 
 def zonal(adm3_path: Path, years: list[int], out: Path) -> Path:
@@ -100,25 +119,39 @@ def zonal(adm3_path: Path, years: list[int], out: Path) -> Path:
     init()
     gdf = gpd.read_parquet(adm3_path)[["adm3_pcode", "geometry"]]
     gdf["geometry"] = gdf.geometry.simplify(SIMPLIFY_DEG, preserve_topology=True)
-    veg, pop, terrain, pop_years = images(years)
+    veg, pop, terrain, pop_years, counts = images(years)
+    composites = dict(zip(years, counts.getInfo(), strict=True))
+    log.info("MOD13Q1 composites per year: %s", composites)
+    veg_bands = [f"{v}_{y}" for y in years for v in ("ndvi", "evi")] + ["elev", "slope"]
+    pop_bands = [f"pop_{y}" for y in pop_years]
     recs: dict[str, dict] = {}
     t0 = time.time()
     jobs = []
     for rows in _chunks(gdf):
-        jobs.append((veg.addBands(terrain), rows, ee.Reducer.mean(), 250))
-        jobs.append((pop, rows, ee.Reducer.sum(), 100))
+        jobs.append((veg.addBands(terrain), rows, ee.Reducer.mean(), 250, veg_bands, "mean"))
+        jobs.append((pop, rows, ee.Reducer.sum(), 100, pop_bands, "sum"))
     with cf.ThreadPoolExecutor(len(jobs)) as ex:  # interactive requests run concurrently on EE's side
-        for props_list in ex.map(lambda j: _reduce(*j), jobs):
+        for (*_, bands, stat), props_list in zip(jobs, ex.map(lambda j: _reduce(*j[:4]), jobs), strict=True):
             for props in props_list:
-                recs.setdefault(props["adm3_pcode"], {}).update(props)
+                recs.setdefault(props["adm3_pcode"], {}).update(name_outputs(props, bands, stat))
     log.info("Earth Engine: %d requests done in %.0f s", len(jobs), time.time() - t0)
     long = []
     for pcode, p in recs.items():
         for y in years:
             py = min(y, 2020)
-            long.append({"adm3_pcode": pcode, "year": y, "ndvi_mean": p.get(f"ndvi_{y}"), "evi_mean": p.get(f"evi_{y}"),
-                         "pop": p.get(f"pop_{py}"), "pop_carried": y not in pop_years,
-                         "elev_mean": p.get("elev"), "slope_mean": p.get("slope")})
+            long.append(
+                {
+                    "adm3_pcode": pcode,
+                    "year": y,
+                    "ndvi_mean": p.get(f"ndvi_{y}"),
+                    "evi_mean": p.get(f"evi_{y}"),
+                    "veg_composites": composites[y],
+                    "pop": p.get(f"pop_{py}"),
+                    "pop_carried": y not in pop_years,
+                    "elev_mean": p.get("elev"),
+                    "slope_mean": p.get("slope"),
+                }
+            )
     df = pd.DataFrame(long)
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out, index=False)

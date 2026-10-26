@@ -16,6 +16,11 @@ concurrency:
   group: rust-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Explicit bash = `-eo pipefail`: a failing command piped into `tee` fails its step.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   check:
     runs-on: ubuntu-24.04
