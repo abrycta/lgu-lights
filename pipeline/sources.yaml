@@ -51,6 +51,7 @@ sources:
     licence: "CC BY (PSA OpenSTAT terms of use); coverage of this workbook by those terms not yet confirmed by PSA"
     attribution: "Philippine Statistics Authority, City and Municipal Level Small Area Poverty Estimates 2000-2021"
     cadence: once per SAE round (about every 2-3 years)
+    status: archive-only   # psa.gov.ph answers every automated client, browser user agent included, with a Cloudflare challenge (403, cf-mitigated: challenge; checked 2026-10-29), so CI was always served the fallback; the archive copy is byte-identical to it. Same decision as the FIES tables (2026-10-23).
     pin: { wayback_timestamp: "20250521080034" }
     hooks: ["lgu.sources:check_sae"]
     links:
@@ -81,6 +82,7 @@ sources:
     licence: "CC BY (PSA OpenSTAT terms of use); coverage of this workbook by those terms not yet confirmed by PSA"
     attribution: "Philippine Statistics Authority, 2023 City and Municipal Level Small Area Estimates of Poverty"
     cadence: once
+    status: archive-only   # psa.gov.ph answers every automated client, browser user agent included, with a Cloudflare challenge (403, cf-mitigated: challenge; checked 2026-10-29), so CI was always served the fallback; the archive copy is byte-identical to it. Same decision as the FIES tables (2026-10-23).
     pin:
       original_name: "2_2023 SAE_with PSGC_noHUC_06Feb2026.xlsx"
       intake: "downloaded by hand in a browser on 2026-10-21 (release manual-psa-sae-2023-20261021); adopted with pipeline/tools/adopt_manual.py"
@@ -113,6 +115,7 @@ sources:
     licence: "PSA terms of use (free use with attribution)"
     attribution: "Philippine Statistics Authority, Philippine Standard Geographic Code (PSGC), 1st Quarter 2025; 2020 Census of Population and Housing"
     cadence: quarterly (the 2020 populations do not change until the next census)
+    status: archive-only   # psa.gov.ph answers every automated client, browser user agent included, with a Cloudflare challenge (403, cf-mitigated: challenge; checked 2026-10-29), so CI was always served the fallback; the archive copy is byte-identical to it. Same decision as the FIES tables (2026-10-23).
     pin:
       original_name: "PSGC-1Q-2025-Publication-Datafile.xlsx"
       wayback_timestamp: "20250520193006"
