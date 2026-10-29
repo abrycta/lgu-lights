@@ -4,7 +4,8 @@
 # STUB_FAIL_PUBLISH=N makes the first N attempts to publish a draft (edit <*-run*> --tag ...) fail like an HTTP 502.
 # STUB_502_AFTER_MOVE=N: the first N moves to a *-prev tag are applied but then answer 502 (the server did the move).
 # STUB_API_FAIL=N: the first N `gh api -i` calls answer HTTP 403 (a rate limit); STUB_API_FAIL_TAG limits that to one tag.
-# `gh api -i .../releases/tags/<t>` prints sha256:$GH_STATE/digest_<t> as the body when that file exists.
+# `gh api -i .../releases/tags/<t>` prints sha256:$GH_STATE/digest_<t> as the body when that file exists, or for the
+# auto-validated.json query (scripts/deploy-web.sh) true when $GH_STATE/auto_<t> exists, else false.
 set -u
 S=$GH_STATE
 a2=${2:-}; cmd="$1 $a2"; shift 2 || true
@@ -51,7 +52,10 @@ case "$cmd" in
     fi
     if [ -f "$S/rel_$t" ] && [ "$(cut -d' ' -f1 "$S/rel_$t")" = published ]; then
       printf 'HTTP/2.0 200 OK\r\n\r\n'
-      if [ -f "$S/digest_$t" ]; then echo "sha256:$(cat "$S/digest_$t")"; else echo "$t"; fi
+      case "$*" in
+        *auto-validated*) [ -f "$S/auto_$t" ] && echo true || echo false ;;
+        *) if [ -f "$S/digest_$t" ]; then echo "sha256:$(cat "$S/digest_$t")"; else echo "$t"; fi ;;
+      esac
     else
       printf 'HTTP/2.0 404 Not Found\r\n\r\n'; exit 1
     fi ;;

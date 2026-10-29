@@ -58,6 +58,8 @@ def run(cmd: str, argv: list[str]) -> int:
     ap.add_argument("--out", type=Path)
     ap.add_argument("--accept", action="store_true",
                     help="labels/fies: accept changes against the committed reports in pipeline/inputs/ (reviewed)")
+    ap.add_argument("--last-year", type=int,
+                    help="freshness: the last year the live data has (default: the end of run_years in config/rounds.json)")
     ap.add_argument("--baseline", type=Path, help="train: metrics.json of the published data version to compare with")
     ap.add_argument("--accept-metrics", action="store_true", help="train: skip the metrics gate (a reviewed model change)")
     ap.add_argument("--recompute-ratio", action="store_true",
@@ -216,7 +218,7 @@ def run(cmd: str, argv: list[str]) -> int:
         from . import freshness
         with httpx.Client(timeout=60, follow_redirects=True,
                           headers={"User-Agent": "lgu-lights-pipeline/0.1 (+https://github.com/abrycta/lgu-lights)"}) as c:
-            print(json.dumps(freshness.check(c), indent=1))
+            print(json.dumps(freshness.check(c, a.last_year), indent=1))
         return 0
     if cmd == "to-parquet":
         import pandas as pd

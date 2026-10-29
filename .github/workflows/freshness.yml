@@ -1,13 +1,39 @@
-# Monthly freshness check (audit L-C7): is newer upstream data available than the data runs use? Cheap (CMR and
-# OpenSTAT metadata only, about a minute), never touches data or releases. Findings become ::warning:: lines and one
-# deduplicated issue in the private archive repo, check errors another (with ARCHIVE_READ_TOKEN, which has Issues: write there), so the
-# app never shows anything: a new data version is still a reviewed manual run (data.yml).
+# Monthly freshness check and automatic data update (audit L-C7; docs/architecture/AUTO-DATA-UPDATES.md).
+#
+# check    is newer upstream data available than the live data version has? (CMR and OpenSTAT metadata only, about
+#          a minute). A new Black Marble year starts the automatic update below; new FIES years and check errors
+#          (a dead source, a moved collection) become deduplicated issues in the private archive repo, as before.
+# data     data.yml (workflow_call) builds the next version v<N+1> with the years extended to the new year: canary
+#          year first, full feature store, training with the metrics gate, the Rust parity gate, read models, then
+#          scripts/data-gates.py against the live version. The data release is created only if every gate passed.
+# publish  marks that release auto-validated (asset auto-validated.json), runs web.yml on main (the normal deploy,
+#          which serves the newest auto-validated version, scripts/deploy-web.sh) and checks that the live latest.json
+#          names it. If the deploy or that check fails, the mark is removed and the previous version is put back.
+# report   any failure becomes one deduplicated issue in the archive repo; the app keeps the previous version.
+#
+# Manual runs (Actions tab): mode dry-run builds and gates everything and publishes nothing (no release, no mark, no
+# deploy); force runs the pipeline even without new upstream data (with the live years); features off reuses the
+# newest feature store (a quick rehearsal without Earth Engine or LAADS). mode check-only is the check alone.
 name: Freshness
 
 on:
   schedule:
     - cron: "17 1 3 * *" # 3rd of each month, 01:17 UTC
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "auto: as the schedule (update and publish when new data passes every gate); dry-run: build and gate, publish nothing; check-only: the check alone"
+        type: choice
+        options: [auto, dry-run, check-only]
+        default: auto
+      force:
+        description: Run the pipeline even without new upstream data (with the live years)
+        type: boolean
+        default: false
+      features:
+        description: Rebuild the feature store (off = reuse the newest features release; only with force)
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -15,6 +41,13 @@ permissions:
 concurrency:
   group: freshness
   cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  LIVE_URL: https://lights.krtmtthw.dev
 
 jobs:
   # GitHub disables cron workflows in a public repository after 60 days without activity. Re-enabling resets
@@ -33,47 +66,209 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+      dry_run: ${{ steps.plan.outputs.dry_run }}
+      version: ${{ steps.plan.outputs.version }}
+      overwrite: ${{ steps.plan.outputs.overwrite }}
+      years: ${{ steps.plan.outputs.years }}
+      new_year: ${{ steps.plan.outputs.new_year }}
+      features: ${{ steps.plan.outputs.features }}
+      features_from: ${{ steps.plan.outputs.features_from }}
+      live: ${{ steps.live.outputs.live }}
+    env:
+      MODE: ${{ inputs.mode || 'auto' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { sparse-checkout: "pipeline\nconfig" }
+        with: { sparse-checkout: "pipeline\nconfig\n.github" }
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with: { enable-cache: true, cache-dependency-glob: pipeline/uv.lock }
+      - name: The live data version and its years
+        id: live
+        run: |
+          live=$(curl -fsS --retry 3 "$LIVE_URL/data/latest.json?t=$(date +%s)" | jq -re .version)
+          years=$(curl -fsS --retry 3 "$LIVE_URL/data/$live/manifest.json?t=$(date +%s)" | jq -re '.years | "\(first)-\(last)"')
+          { echo "live=$live"; echo "years=$years"; } >> "$GITHUB_OUTPUT"
+          echo "live: $live, years $years" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Check upstream sources
         working-directory: pipeline
+        env:
+          YEARS: ${{ steps.live.outputs.years }}
         run: |
           uv sync --locked
-          uv run python -m lgu freshness > "$RUNNER_TEMP/freshness.json"
+          uv run python -m lgu freshness --last-year "${YEARS#*-}" > "$RUNNER_TEMP/freshness.json"
           { echo "### Freshness"; echo '```json'; cat "$RUNNER_TEMP/freshness.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Open or update the freshness issues (private archive repo)
         env:
           GH_TOKEN: ${{ secrets.ARCHIVE_READ_TOKEN }}
-          ARCHIVE: abrycta/lgu-lights-archive
         run: |
           f="$RUNNER_TEMP/freshness.json"
           run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          # one deduplicated issue per kind: new upstream data, and check errors (a dead source or a moved
-          # collection, which would otherwise read as "no new data" for months); never public
-          issue() {
-            local title=$1 body=$2 num
-            if [ -z "$GH_TOKEN" ]; then
-              echo "::warning::ARCHIVE_READ_TOKEN is not set; '$title' is only in this run's annotations"
-              return 0
-            fi
-            num=$(gh issue list -R "$ARCHIVE" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty' || true)
-            if [ -n "$num" ]; then
-              gh issue comment "$num" -R "$ARCHIVE" --body "$body" >/dev/null || echo "::warning::could not comment on $ARCHIVE#$num"
-            else
-              gh issue create -R "$ARCHIVE" --title "$title" --body "$body" >/dev/null || echo "::warning::could not open an issue in $ARCHIVE"
-            fi
-          }
-          if [ "$(jq '.findings | length' "$f")" -gt 0 ]; then
-            issue "Freshness: new upstream data for lgu-lights" \
-              "$(jq -r --arg run "$run" '"New upstream data (run \($run)):\n" + ([.findings[] | "- **\(.source)**: \(.new): \(.action)"] | join("\n"))' "$f")"
+          # a new Black Marble year is handled by the automatic update (unless check-only); the rest needs a person
+          skip='^$'; [ "$MODE" = check-only ] || skip='^black-marble'
+          if [ "$(jq --arg s "$skip" '[.findings[] | select(.source | test($s) | not)] | length' "$f")" -gt 0 ]; then
+            .github/scripts/archive-issue.sh open "Freshness: new upstream data for lgu-lights" \
+              "$(jq -r --arg run "$run" --arg s "$skip" '"New upstream data (run \($run)):\n" + ([.findings[] | select(.source | test($s) | not) | "- **\(.source)**: \(.new): \(.action)"] | join("\n"))' "$f")"
           else
-            echo "no new upstream data"
+            echo "no new upstream data that needs a person"
           fi
           if [ "$(jq '.errors | length' "$f")" -gt 0 ]; then
             jq -r '.errors[] | "::error title=freshness check failed::\(.)"' "$f"
-            issue "Freshness: check errors for lgu-lights" \
+            .github/scripts/archive-issue.sh open "Freshness: check errors for lgu-lights" \
               "$(jq -r --arg run "$run" '"The freshness check could not read some sources (run \($run)). The app keeps serving the last published version.\n" + ([.errors[] | "- \(.)"] | join("\n"))' "$f")"
+          fi
+      - name: Plan the automatic update
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force || false }}
+          FEATURES: ${{ inputs.features == false && 'false' || 'true' }}
+          YEARS: ${{ steps.live.outputs.years }}
+        run: |
+          new=$(jq -r '[.findings[] | select(.source | startswith("black-marble")) | .new] | first // empty' "$RUNNER_TEMP/freshness.json")
+          run=false new_year="" years="$YEARS"
+          if [ "$MODE" = check-only ]; then
+            echo "check-only: no update"
+          elif [ -n "$new" ]; then
+            run=true new_year="$new" years="${YEARS%-*}-$new"
+            echo "new Black Marble year $new: update with years $years"
+          elif [ "$FORCE" = true ]; then
+            run=true
+            echo "forced: a run with the live years $years"
+          else
+            echo "no new Black Marble year: nothing to do"
+          fi
+          [ "$run" = true ] || FEATURES=true
+          # a new year always needs the satellite work, so a reused store is only for forced runs
+          [ -z "$new_year" ] || FEATURES=true
+          tags=$(gh release list -R "$GITHUB_REPOSITORY" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName')
+          last=$(grep -E '^data-v[0-9]+$' <<<"$tags" | sed 's/^data-v//' | sort -n | tail -1 || true)
+          version="v$(( ${last:-0} + 1 ))"
+          # a features-<v> without its data-<v> is what a failed earlier attempt left; it is replaced (kept as -prev)
+          overwrite=false; ! grep -qx "features-$version" <<<"$tags" || overwrite=true
+          from=$(grep -E '^features-v[0-9]+$' <<<"$tags" | sed 's/^features-//' | sort -t v -k2 -n | tail -1 || true)
+          dry=false; [ "$MODE" != dry-run ] || dry=true
+          {
+            echo "run=$run"; echo "dry_run=$dry"; echo "version=$version"; echo "overwrite=$overwrite"
+            echo "years=$years"; echo "new_year=$new_year"; echo "features=$FEATURES"; echo "features_from=$from"
+          } | tee -a "$GITHUB_OUTPUT"
+          {
+            echo "### Plan"
+            echo "mode $MODE, run $run, dry run $dry: version $version (overwrite $overwrite), years $years, features $FEATURES (else from $from)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  data:
+    needs: check
+    if: needs.check.outputs.run == 'true'
+    permissions:
+      contents: write # the features-<v> and data-<v> releases (none in a dry run)
+      actions: read
+    uses: ./.github/workflows/data.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.check.outputs.version }}
+      overwrite: ${{ needs.check.outputs.overwrite == 'true' }}
+      accept_metrics: false
+      features: ${{ needs.check.outputs.features == 'true' }}
+      features_from: ${{ needs.check.outputs.features_from }}
+      years: ${{ needs.check.outputs.years }}
+      vj113a1: false # Option A: VJ113A1 only for the years MOD13Q1 leaves incomplete
+      canary: true
+      canary_only: false
+      gates: true
+      new_year: ${{ needs.check.outputs.new_year }}
+      dry_run: ${{ needs.check.outputs.dry_run == 'true' }}
+
+  publish:
+    needs: [check, data]
+    if: needs.data.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write # the auto-validated.json asset
+      actions: write  # runs web.yml (the deploy)
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.check.outputs.version }}
+      LIVE_BEFORE: ${{ needs.check.outputs.live }}
+      DRY: ${{ needs.check.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { sparse-checkout: ".github\nscripts" }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: data-gates, path: "${{ runner.temp }}/gates" }
+      - name: The mark (auto-validated.json)
+        env:
+          YEARS: ${{ needs.check.outputs.years }}
+        run: |
+          jq --arg v "$VERSION" --arg years "$YEARS" --arg live "$LIVE_BEFORE" --arg sha "$GITHUB_SHA" \
+            --arg run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{version: $v, years: $years, replaces: $live, commit: $sha, run: $run, gates: .}' \
+            "$RUNNER_TEMP/gates/gates.json" > "$RUNNER_TEMP/auto-validated.json"
+          jq -e '.gates.passed == true and .gates.version == $v' --arg v "$VERSION" "$RUNNER_TEMP/auto-validated.json" >/dev/null \
+            || { echo "::error::the gate report does not say $VERSION passed"; exit 1; }
+          if [ "$DRY" = true ]; then
+            {
+              echo "### Dry run: nothing published"
+              echo "would add auto-validated.json to data-$VERSION, run web.yml on main and expect latest.json $VERSION"
+              echo "the live version stays $LIVE_BEFORE; a deploy now would serve: $(scripts/deploy-web.sh --versions | tr '\n' ' ')"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Mark data-${{ env.VERSION }} auto-validated
+        if: env.DRY != 'true'
+        run: |
+          gh release upload "data-$VERSION" "$RUNNER_TEMP/auto-validated.json" -R "$GITHUB_REPOSITORY" --clobber
+          got=$(scripts/deploy-web.sh --versions | sed -n 's/^LATEST=//p')
+          [ "$got" = "$VERSION" ] || { echo "::error::a deploy would serve $got, not $VERSION"; exit 1; }
+      - name: Deploy (web.yml on main) and check live
+        if: env.DRY != 'true'
+        run: .github/scripts/deploy-and-check.sh "$VERSION"
+      - name: Roll back (remove the mark; put the previous version back if the site moved)
+        if: failure() && env.DRY != 'true'
+        run: |
+          gh release delete-asset "data-$VERSION" auto-validated.json -R "$GITHUB_REPOSITORY" -y || true
+          now=$(curl -fsS "$LIVE_URL/data/latest.json?t=$(date +%s)" | jq -r .version || echo unknown)
+          if [ "$now" != "$LIVE_BEFORE" ]; then
+            echo "::warning::the site serves $now; redeploying so it serves $LIVE_BEFORE again"
+            .github/scripts/deploy-and-check.sh "$LIVE_BEFORE"
+          fi
+          echo "rolled back: data-$VERSION is not served; live is $LIVE_BEFORE" >> "$GITHUB_STEP_SUMMARY"
+
+  # Any failure is one deduplicated issue in the private archive repo (never public); a success closes it.
+  report:
+    needs: [check, data, publish]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { sparse-checkout: .github }
+      - name: Record the outcome
+        env:
+          GH_TOKEN: ${{ secrets.ARCHIVE_READ_TOKEN }}
+          CHECK: ${{ needs.check.result }}
+          DATA: ${{ needs.data.result }}
+          PUBLISH: ${{ needs.publish.result }}
+          RUN: ${{ needs.check.outputs.run }}
+          DRY: ${{ needs.check.outputs.dry_run }}
+          VERSION: ${{ needs.check.outputs.version }}
+          LIVE: ${{ needs.check.outputs.live }}
+        run: |
+          run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          title="Automatic data update failed for lgu-lights"
+          echo "### Outcome: check $CHECK, data $DATA, publish $PUBLISH (run $RUN, dry run $DRY)" >> "$GITHUB_STEP_SUMMARY"
+          failed=""
+          for j in "check:$CHECK" "data:$DATA" "publish:$PUBLISH"; do
+            case "${j#*:}" in failure|cancelled) failed="$failed ${j%%:*}" ;; esac
+          done
+          if [ "$DRY" = true ]; then
+            if [ -n "$failed" ]; then echo "::error::dry run failed in:$failed"; exit 1; fi
+            echo "dry run passed; nothing was published" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$failed" ]; then
+            .github/scripts/archive-issue.sh open "$title" \
+              "The automatic data update failed in:$failed (run $run). Version $VERSION was not published; the app keeps serving ${LIVE:-the last published version}. The next monthly run tries again."
+            exit 1
+          elif [ "$PUBLISH" = success ]; then
+            echo "published $VERSION (was $LIVE)" >> "$GITHUB_STEP_SUMMARY"
+            .github/scripts/archive-issue.sh close "$title" "Version $VERSION was published automatically (run $run)."
           fi

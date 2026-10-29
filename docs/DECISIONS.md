@@ -254,3 +254,10 @@ Two data fixes from the 2026-10-22 bug audit (items 6 and 3); features reused fr
   calibrated VJ113A1 moves the 3,262 later model estimates by a median 0.000 pp (p90 0.04, max 0.58); treating 2025 as
   a Terra-less year moves its 1,631 estimates by a median 0.007 pp (p90 0.05, max 0.64). Well under the 0.5 pp median
   limit set for falling back to Option C.
+
+## Automatic data updates, 2026-10-29
+
+- Kurt chose fully automatic data updates (both he and Claude are away for a long time): a new Black Marble year
+  found by the monthly `freshness.yml` is built, gated against the live version and published by CI only if every
+  check passes; otherwise the live version stays and an issue in the private archive repo records the failure.
+  Plan, gates, rollback and quotas: `docs/architecture/AUTO-DATA-UPDATES.md`.

@@ -2,8 +2,9 @@
 # Build and deploy the Lights web app to Cloudflare Pages (project lgu-lights, https://lights.krtmtthw.dev).
 # Run by web.yml's deploy job on main after the checks pass; the same script works from a laptop.
 #
-#   scripts/deploy-web.sh [--no-deploy]
+#   scripts/deploy-web.sh [--no-deploy | --versions]
 #     --no-deploy   build and stage web/dist (with the data) and stop: nothing is uploaded
+#     --versions    print the data versions this deploy would serve (DATA_VERSIONS=..., LATEST=...) and stop
 #
 # Steps:
 #   1. the what-if WASM module (crates/lgu-wasm, cargo, wasm32) -> wasm/lgu_wasm.<sha256 prefix>.wasm (immutable cache)
@@ -17,12 +18,18 @@
 #   5. live checks: /deploy.json is this commit, latest.json reports LATEST, the home page serves this build's script, /embed and the
 #      WASM answer 200, a missing tile answers 404 (retried for up to 2 minutes while the deploy propagates)
 #
+# Automatic data versions (docs/architecture/AUTO-DATA-UPDATES.md): unless DATA_VERSIONS or LATEST is set, the
+# data-v<N> releases after LATEST that carry an auto-validated.json asset (added by freshness.yml only after every
+# gate passed) are deployed too, the newest two at most, and the newest becomes LATEST. Without such a release the
+# deploy is exactly the committed list. Removing that asset (and re-running web.yml) rolls a version back.
+#
 # Env: DATA_VERSIONS (default "v1 v3 v4 v5"), LATEST (default v5), LIVE_URL (default https://lights.krtmtthw.dev),
 #      CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (locally: Keychain cloudflare-api-token and the
 #      account ID from ../typhoon-replay/.env.deploy when unset), GH_TOKEN for the release download in CI.
 # Needs: node 24, npm deps installed in web/ (npm ci), cargo with the wasm32 target, gh, zstd, curl.
 set -euo pipefail
 
+explicit="${DATA_VERSIONS:-}${LATEST:-}"
 DATA_VERSIONS="${DATA_VERSIONS:-v1 v3 v4 v5}"
 LATEST="${LATEST:-v5}"
 LIVE_URL="${LIVE_URL:-https://lights.krtmtthw.dev}"
@@ -35,7 +42,8 @@ deploy=1
 for a in "$@"; do
   case "$a" in
     --no-deploy) deploy=0 ;;
-    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --versions) deploy=versions ;;
+    -h|--help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
@@ -48,8 +56,27 @@ trap 'rm -rf "$stage"' EXIT
 step() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
-case " $DATA_VERSIONS " in *" $LATEST "*) ;; *) die "LATEST=$LATEST is not in DATA_VERSIONS=($DATA_VERSIONS)";; esac
 command -v gh >/dev/null || die "gh is required"
+# Automatic versions: probe data-v<N+1>, data-v<N+2>, ... after LATEST until one is absent (an API error stops the
+# deploy, as below); a release counts only with its auto-validated.json asset.
+if [ -z "$explicit" ] && [ "${AUTO_VERSIONS:-1}" != 0 ]; then
+  auto=() n=${LATEST#v}
+  for _ in $(seq 1 20); do
+    n=$((n + 1))
+    out=$(GITHUB_REPOSITORY="$REPO" "$(dirname "$0")/release-status.sh" "data-v$n" \
+      '[.assets[].name] | index("auto-validated.json") != null') \
+      || die "GitHub API error while looking for automatic data versions; nothing was deployed"
+    [ "$(head -1 <<<"$out")" = present ] || break
+    if [ "$(sed -n 2p <<<"$out")" = true ]; then auto+=("v$n"); fi
+  done
+  if [ ${#auto[@]} -gt 0 ]; then
+    keep=("${auto[@]: -2}")
+    DATA_VERSIONS="$DATA_VERSIONS ${keep[*]}" LATEST="${keep[${#keep[@]}-1]}"
+    echo "automatic data versions: ${keep[*]} (latest $LATEST)" >&2
+  fi
+fi
+case " $DATA_VERSIONS " in *" $LATEST "*) ;; *) die "LATEST=$LATEST is not in DATA_VERSIONS=($DATA_VERSIONS)";; esac
+if [ "$deploy" = versions ]; then printf 'DATA_VERSIONS=%s\nLATEST=%s\n' "$DATA_VERSIONS" "$LATEST"; exit 0; fi
 
 # Which release each data version comes from, resolved before anything is built. A GitHub API error (rate limit,
 # 5xx) stops the deploy: reading it as "release missing" would drop that version from the live site and 404 its URLs.
