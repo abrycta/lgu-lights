@@ -20,3 +20,7 @@ pipeline/snapshots/
 web/public/data/
 web/public/wasm/
 *.tsbuildinfo
+
+# Local secrets: wrangler's .dev.vars; .env examples stay tracked
+!.env*.example
+.dev.vars*
