@@ -8,6 +8,6 @@ publish.workspace = true
 
 [dependencies]
 lgu-core.workspace = true
-parquet = { version = "57", default-features = false, features = ["snap", "zstd"] }
+parquet = { version = "60", default-features = false, features = ["snap", "zstd"] }
 serde.workspace = true
 serde_json.workspace = true
