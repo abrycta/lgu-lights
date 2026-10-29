@@ -9,6 +9,11 @@
 # for one year, the last of `years` (about 7 % of the zonal work), and the full run starts only if it passes.
 # Earth Engine and Black Marble run in parallel and the first to fail stops the other
 # (pipeline/tools/zonal_parallel.sh); every job has a timeout; the run summary names what failed.
+#
+# Automatic data updates (docs/architecture/AUTO-DATA-UPDATES.md): freshness.yml calls this workflow
+# (workflow_call) with `gates` on, so the read models must also pass scripts/data-gates.py against the live
+# version before the data release is created, and with `dry_run` for a rehearsal: everything is built and gated, the
+# feature store and read models go to this run's artifacts, and no release is created or changed.
 name: Data
 
 on:
@@ -55,6 +60,32 @@ on:
         description: Run only the canary (a check of the satellite path); nothing is built or published
         type: boolean
         default: false
+      gates:
+        description: Before publishing, check the read models against the live version (scripts/data-gates.py)
+        type: boolean
+        default: false
+      new_year:
+        description: With gates, the last feature year the new version must have (empty = no such check)
+        default: ""
+      dry_run:
+        description: Build and gate everything, publish nothing (the feature store and read models become run artifacts)
+        type: boolean
+        default: false
+  # freshness.yml (automatic data updates): the same inputs
+  workflow_call:
+    inputs:
+      version: { type: string, default: "" }
+      overwrite: { type: boolean, default: false }
+      accept_metrics: { type: boolean, default: false }
+      features: { type: boolean, default: true }
+      features_from: { type: string, default: "" }
+      years: { type: string, default: "" }
+      vj113a1: { type: boolean, default: false }
+      canary: { type: boolean, default: true }
+      canary_only: { type: boolean, default: false }
+      gates: { type: boolean, default: true }
+      new_year: { type: string, default: "" }
+      dry_run: { type: boolean, default: false }
 
 permissions:
   contents: read   # only the jobs that publish release assets (features, model) get contents: write
@@ -85,6 +116,9 @@ jobs:
       canary: ${{ steps.c.outputs.canary }}
       canary_only: ${{ steps.c.outputs.canary_only }}
       accept_metrics: ${{ steps.c.outputs.accept_metrics }}
+      gates: ${{ steps.c.outputs.gates }}
+      new_year: ${{ steps.c.outputs.new_year }}
+      dry_run: ${{ steps.c.outputs.dry_run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { sparse-checkout: ".github\nconfig\nscripts" }
@@ -100,6 +134,9 @@ jobs:
           I_CANARY_ONLY: ${{ inputs.canary_only }}
           I_OVERWRITE: ${{ inputs.overwrite }}
           I_ACCEPT: ${{ inputs.accept_metrics }}
+          I_GATES: ${{ inputs.gates }}
+          I_NEW_YEAR: ${{ inputs.new_year }}
+          I_DRY: ${{ inputs.dry_run }}
         run: |
           if [ "$EVENT" = push ]; then
             python3 - <<'PY' >> "$GITHUB_OUTPUT"
@@ -114,12 +151,16 @@ jobs:
           print("canary_only=false")
           print(f"overwrite={str(c.get('overwrite', False)).lower()}")
           print(f"accept_metrics={str(c.get('accept_metrics', False)).lower()}")
+          print("gates=false")
+          print("new_year=")
+          print("dry_run=false")
           PY
           else
             { echo "version=$I_VERSION"; echo "features=$I_FEATURES"; echo "features_from=${I_FROM:-$I_VERSION}"
               echo "years=${I_YEARS:-$(jq -r .run_years config/rounds.json)}"; echo "vj113a1=$I_VJ"; echo "canary=$I_CANARY"
               echo "canary_only=${I_CANARY_ONLY:-false}"
-              echo "overwrite=$I_OVERWRITE"; echo "accept_metrics=$I_ACCEPT"; } >> "$GITHUB_OUTPUT"
+              echo "overwrite=$I_OVERWRITE"; echo "accept_metrics=$I_ACCEPT"
+              echo "gates=${I_GATES:-false}"; echo "new_year=$I_NEW_YEAR"; echo "dry_run=${I_DRY:-false}"; } >> "$GITHUB_OUTPUT"
           fi
           cat "$GITHUB_OUTPUT"
       - name: Data versions are write-once (audit L-C4)
@@ -294,7 +335,22 @@ jobs:
           start=$(date +%s)
           pipeline/tools/build_tiles.sh geometry data/interim/tiles/adm3.geojsonl data/interim/tiles/adm2.geojsonl data/build/geom.pmtiles
           echo "geometry tiles: $(( $(date +%s) - start )) s, $(stat -c %s data/build/geom.pmtiles) bytes" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Feature store as a run artifact (dry run)
+        if: needs.config.outputs.dry_run == 'true'
+        run: |
+          cd data
+          cp interim/zonal_*.parquet interim/provenance.json build/
+          for f in bm_ratio.json vj_granules.json; do [ ! -f "interim/$f" ] || cp "interim/$f" build/; done
+          mkdir -p "$RUNNER_TEMP/features" && cp build/features.parquet build/lgus.parquet build/labels.parquet \
+            build/provinces_fies.parquet build/provinces.json build/crosswalk-report.json build/provenance.json \
+            build/zonal_*.parquet build/geom.pmtiles "$RUNNER_TEMP/features/"
+          for f in bm_ratio.json vj_granules.json; do [ ! -f "build/$f" ] || cp "build/$f" "$RUNNER_TEMP/features/"; done
+          echo "dry run: features-$VERSION is a run artifact, no release was created" >> "$GITHUB_STEP_SUMMARY"
+      - if: needs.config.outputs.dry_run == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: { name: "features-${{ env.VERSION }}", path: "${{ runner.temp }}/features", retention-days: 3, if-no-files-found: error }
       - name: Publish the feature store release
+        if: needs.config.outputs.dry_run != 'true'
         run: |
           cd data
           cp interim/zonal_*.parquet interim/provenance.json build/
@@ -328,7 +384,12 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Feature store from this run (dry run with the store rebuilt)
+        if: needs.config.outputs.dry_run == 'true' && env.FEATURES_FROM == env.VERSION
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: "features-${{ env.VERSION }}", path: data/build }
       - name: Feature store from the features release
+        if: needs.config.outputs.dry_run != 'true' || env.FEATURES_FROM != env.VERSION
         run: |
           mkdir -p data/build && cd data/build
           gh release download "features-$FEATURES_FROM" --clobber
@@ -410,7 +471,47 @@ jobs:
         run: |
           export PATH="$HOME/.local/tippecanoe/bin:$PATH"
           pipeline/tools/build_tiles.sh export data/build/geom.pmtiles "data/dist/$VERSION"
+      - name: Gates against the live version (automatic updates; scripts/data-gates.py)
+        if: needs.config.outputs.gates == 'true'
+        env:
+          NEW_YEAR: ${{ needs.config.outputs.new_year }}
+        run: |
+          # the version the site serves now, which must also be what a deploy would serve (else a deploy is behind)
+          live=$(curl -fsS --retry 3 "https://lights.krtmtthw.dev/data/latest.json?t=$(date +%s)" | jq -re .version)
+          resolved=$(scripts/deploy-web.sh --versions | sed -n 's/^LATEST=//p')
+          [ "$live" = "$resolved" ] || { echo "::error title=data gate::the site serves $live but a deploy would serve $resolved; not stacking a new version on an unfinished deploy"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/live"
+          gh release download "data-$live" -p "read-models-$live.tar.zst" -D "$RUNNER_TEMP" --clobber
+          zstd -dc "$RUNNER_TEMP/read-models-$live.tar.zst" | tar -xf - -C "$RUNNER_TEMP/live"
+          args=(--new "data/dist/$VERSION" --prev "$RUNNER_TEMP/live/$live" --version "$VERSION" --report data/dist/gates.json)
+          [ -z "$NEW_YEAR" ] || args+=(--new-year "$NEW_YEAR")
+          rc=0; python3 scripts/data-gates.py "${args[@]}" > "$RUNNER_TEMP/gates.out" || rc=$?
+          { echo "### Gates: $VERSION against live $live"; echo '```json'; cat data/dist/gates.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          grep '^::' "$RUNNER_TEMP/gates.out" || true
+          jq --arg live "$live" '. + {live: $live}' data/dist/gates.json > "$RUNNER_TEMP/g.json" && mv "$RUNNER_TEMP/g.json" data/dist/gates.json
+          exit "$rc"
+      - name: Gate report as a run artifact
+        if: needs.config.outputs.gates == 'true' && !cancelled()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: { name: data-gates, path: data/dist/gates.json, retention-days: 30, if-no-files-found: warn }
+      - name: Read models as a run artifact (dry run)
+        if: needs.config.outputs.dry_run == 'true'
+        run: |
+          cd data/dist
+          tar -cf - "$VERSION" | zstd -q -19 -T0 -o "read-models-$VERSION.tar.zst"
+          cp ../build/model/metrics.json .
+          echo "dry run: data-$VERSION is a run artifact, no release was created" >> "$GITHUB_STEP_SUMMARY"
+      - if: needs.config.outputs.dry_run == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: "data-${{ env.VERSION }}"
+          path: |
+            data/dist/read-models-${{ env.VERSION }}.tar.zst
+            data/dist/metrics.json
+          retention-days: 3
+          if-no-files-found: error
       - name: Publish the data release (draft first, published after the archive is complete)
+        if: needs.config.outputs.dry_run != 'true'
         run: |
           cd data/dist
           tar -cf - "$VERSION" | zstd -q -19 -T0 -o "read-models-$VERSION.tar.zst"

@@ -4,8 +4,9 @@ A cheap monthly check (.github/workflows/freshness.yml, no satellite work, no da
   * Black Marble: are the five PH tiles of the year after the last run year (config/rounds.json run_years)
     listed in CMR (VNP46A4 or, from 2026, VJ146A4)?
   * PSA FIES (OpenSTAT): does a table's metadata list a year after the newest SAE round?
-Findings are printed as ::warning:: lines and as JSON; the workflow turns them into one deduplicated issue in the
-private archive repo, and check errors (a dead source, a moved collection) into another. Nothing here is public: the app keeps serving the last published version.
+Findings are printed as ::warning:: lines and as JSON. A new Black Marble year starts the automatic data update
+(docs/architecture/AUTO-DATA-UPDATES.md); other findings become one deduplicated issue in the private archive repo,
+and check errors (a dead source, a moved collection) another. `--last-year` is the live version's last year. Nothing here is public: the app keeps serving the last published version.
 New SAE rounds and PSGC quarters sit behind PSA's Cloudflare challenge and are not checked here.
 """
 from __future__ import annotations
