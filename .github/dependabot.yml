@@ -1,7 +1,10 @@
-# Dependency updates (Dependabot). Version updates: weekly, one grouped PR per ecosystem, at most 2 open.
-# Security updates are separate and immediate (repo setting: Dependabot security updates).
-# Majors of react, react-dom, astro, vite and maplibre-gl, and @abrycta/* (Akari, portfolio rule 23),
-# are upgraded by hand.
+# Dependency updates (Dependabot, portfolio MAINTAINING.md rule 24). Every ecosystem and directory
+# with a lockfile is covered. Version updates: weekly, minor and patch grouped into one PR per
+# directory; majors come one PR each (or are ignored below). Security fixes come as their own grouped
+# PR per directory (repo setting: Dependabot security updates). Few open PRs: 2 for the app, CI and
+# pipeline, 1 for each spike.
+# @abrycta/* (Akari) is upgraded by hand, one PR per release (portfolio rule 16). Majors of react,
+# react-dom, astro, vite, maplibre-gl, typescript and @types/node are upgraded by hand too.
 version: 2
 registries:
   # @abrycta/akari comes from GitHub Packages. Dependabot secret DEPENDABOT_PACKAGES_TOKEN: a classic
@@ -13,13 +16,18 @@ registries:
     scope: "@abrycta"
     token: ${{secrets.DEPENDABOT_PACKAGES_TOKEN}}
 updates:
+  # The app (web/).
   - package-ecosystem: npm
     directories: ["/web"]
     registries: [github-packages]
     schedule: { interval: weekly, day: monday, time: "06:00", timezone: Asia/Manila }
     open-pull-requests-limit: 2
     groups:
-      npm:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
         patterns: ["*"]
     ignore:
       - dependency-name: "@abrycta/*"
@@ -40,10 +48,76 @@ updates:
       # CI and the deploys run Node 24: keep @types/node on 24.x so the types match the runtime.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+
+  # The Rust workspace (crates/, including the WebAssembly crate the app loads).
+  - package-ecosystem: cargo
+    directories: ["/"]
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: Asia/Manila }
+    open-pull-requests-limit: 2
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # The data pipeline and model training (uv).
+  - package-ecosystem: uv
+    directories: ["/pipeline"]
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: Asia/Manila }
+    open-pull-requests-limit: 2
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # CI workflows and the local composite action.
   - package-ecosystem: github-actions
     directories: ["/", "/.github/actions/*"]
     schedule: { interval: weekly, day: monday, time: "06:00", timezone: Asia/Manila }
     open-pull-requests-limit: 2
     groups:
       github-actions:
+        patterns: ["*"]
+
+  # Spikes (spike/): kept so their lockfiles don't collect alerts; never deployed.
+  - package-ecosystem: npm
+    directories: ["/spike/worker", "/spike/bench-web"]
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: Asia/Manila }
+    open-pull-requests-limit: 1
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+    ignore:
+      - dependency-name: maplibre-gl
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: cargo
+    directories: ["/spike/rust", "/spike/worker"]
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: Asia/Manila }
+    open-pull-requests-limit: 1
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: uv
+    directories: ["/spike/python"]
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: Asia/Manila }
+    open-pull-requests-limit: 1
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
         patterns: ["*"]
