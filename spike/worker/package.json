@@ -1,1 +1,0 @@
-{"name":"lgu-worker-spike","private":true,"description":"Spike only: local wrangler dev, never deployed","dependencies":{"wrangler":"^4.158.0"}}

@@ -1,6 +1,6 @@
 # Decisions
 
-Decided 2026-10-21 by Kurt, after `ARCHITECTURE-RESEARCH.md`, `MODELING-PLAN.md`, `DATA-PLAN.md` and `OPEN-QUESTIONS.md`.
+Decided 2026-10-21 by Kurt, after `ARCHITECTURE-RESEARCH.md`, `MODELING-PLAN.md` and `DATA-PLAN.md`.
 
 | # | Area | Decision |
 |---|---|---|
@@ -13,7 +13,7 @@ Decided 2026-10-21 by Kurt, after `ARCHITECTURE-RESEARCH.md`, `MODELING-PLAN.md`
 | Q8 | Languages | **English + Japanese. No Filipino** (UI, narration or data labels). |
 | Q7 | Narration | **Captions first**; browser speech where a voice exists; Kokoro-82M pre-rendered clips for EN/JA intros; **no MMS-TTS**. |
 | Q10 | Before building | **1-day measurement spike first**; every `[U]` estimate is replaced by a measurement, and this file gets an addendum with the results. |
-| Q9, Q11–Q15 | Defaults | Accepted as documented in OPEN-QUESTIONS.md (CV 10/20 % reliability tiers; what-if sliders labelled hypothetical; archivekit format proposals; proceed with PSA attribution and email PSA in parallel; no OSM covariates in the headline model; Zenodo DOI per data release). |
+| Q9, Q11–Q15 | Defaults | Accepted as proposed (CV 10/20 % reliability tiers; what-if sliders labelled hypothetical; archivekit format proposals; proceed with PSA attribution and email PSA in parallel; no OSM covariates in the headline model; Zenodo DOI per data release). |
 
 ## Update 2026-10-21: single Rust implementation
 
@@ -21,7 +21,7 @@ Asked whether Lights should also have multiple backends like Typhoon Replay: **n
 
 ## Spike results (2026-10-21)
 
-The 1-day measurement spike (Q10) is in [SPIKE-RESULTS.md](SPIKE-RESULTS.md), and every performance or size **[U]** in ARCHITECTURE-RESEARCH.md now cites it. **Nothing in it threatens Architecture B.** Q1–Q15 stand, with these changes and additions:
+The 1-day measurement spike (Q10) replaced every performance or size **[U]** in ARCHITECTURE-RESEARCH.md with a measurement. **Nothing in it threatens Architecture B.** Q1–Q15 stand, with these changes and additions:
 
 | # | Change | Why (measured) |
 |---|---|---|

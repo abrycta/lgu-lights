@@ -45,7 +45,7 @@ sources:
       the pipeline reads the 2012 and 2015 sheets from it (2018 and 2021 come from the 2023 workbook,
       which also publishes standard errors).
     kind: file
-    format: zip                            # an xlsx is a zip; archivekit has no xlsx handler (OPEN-QUESTIONS Q12)
+    format: zip                            # an xlsx is a zip; archivekit has no xlsx handler (DECISIONS Q12)
     filename: psa-sae-2018-2021.xlsx
     local_path: data/raw/psa/psa-sae-2018-2021.xlsx
     licence: "CC BY (PSA OpenSTAT terms of use); coverage of this workbook by those terms not yet confirmed by PSA"
