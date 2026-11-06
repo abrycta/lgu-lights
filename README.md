@@ -2,11 +2,11 @@
 
 Lights estimates poverty incidence for every Philippine city and municipality (1,600+) for 2012–2025, from VIIRS night lights and MODIS/NOAA-20 vegetation indices, and compares each estimate with the Philippine Statistics Authority's official Small Area Estimates (2012, 2015, 2018, 2021, 2023).
 
-It extends the regional GRU study in [a paper the author co-wrote](https://link.springer.com/chapter/10.1007/978-3-032-23515-2_43) to the municipal level. A LightGBM model starts from the last PSA round and estimates how each place moved within its province; every estimate has split-conformal 50 % and 90 % intervals. One Rust core computes the numbers in CI and, compiled to WebAssembly, in the browser, matching the trained model to within 3.7e-14.
+It extends the regional GRU study in [a paper the author co-wrote](https://link.springer.com/chapter/10.1007/978-3-032-23515-2_43) to the municipal level. A LightGBM model starts from the last PSA round and estimates how each place moved within its province; every estimate has split-conformal 50 % and 90 % intervals. One Rust core computes the numbers in CI and, compiled to WebAssembly, in the browser; it matches the trained model to within 3.7e-14.
 
 Live at **https://lights.krtmtthw.dev** (English and Japanese).
 
-**Status (2026-11-06):** complete and live with data version v5: PSA official figures for 2012, 2015, 2018, 2021 and 2023, model estimates for the years between and after (2012–2025) with 50 % and 90 % intervals and reliability tiers, a plain-language reading for each place, and an in-browser what-if. The model's validation against a baseline that carries the last official figure forward is in [docs/DECISIONS.md](docs/DECISIONS.md) and on the site's About page.
+**Status (2026-11-06):** live with data version v5: PSA official figures for 2012, 2015, 2018, 2021 and 2023, model estimates for the years between and after (2012–2025) with 50 % and 90 % intervals and reliability tiers, a plain-language reading for each place, and an in-browser what-if. The model's validation against a baseline that carries the last official figure forward is in [docs/DECISIONS.md](docs/DECISIONS.md) and on the site's About page.
 
 ## How it works
 
@@ -15,7 +15,7 @@ Live at **https://lights.krtmtthw.dev** (English and Japanese).
 | `pipeline/` | Python (uv): fetches every source through the registry in `pipeline/sources.yaml`, builds labels and the crosswalk, runs Earth Engine and Black Marble zonal statistics, trains the model |
 | `crates/` | Rust core (`lgu-core`) with a CLI (`lgu design`, `lgu parity`, `lgu materialise`) and a WASM build for the browser's what-if |
 | `web/` | Static single-page app (Vite, React, Akari, MapLibre) on Cloudflare Pages; see [web/README.md](web/README.md) |
-| `.github/workflows/` | `pipeline.yml`, `rust.yml`, `web.yml` (checks), `data.yml` (the full data run), `freshness.yml` (monthly check for a new Black Marble year, which starts an automatic update) and `live-check.yml` (hourly check that the live site is up to date with main, redeploying when it is not) |
+| `.github/workflows/` | `pipeline.yml`, `rust.yml`, `web.yml` (checks), `data.yml` (the full data run), `freshness.yml` (monthly check for a new Black Marble year, which starts an automatic update) and `live-check.yml` (hourly check that the live site matches main; it redeploys when it does not) |
 
 Code layout and data flow: [docs/architecture/README.md](docs/architecture/README.md).
 
@@ -44,7 +44,7 @@ cd pipeline && uv sync --group sources --group train && uv run pytest -q
 
 | Document | What it holds |
 |---|---|
-| [docs/PAPER-NOTES.md](docs/PAPER-NOTES.md) | Faithful notes on the baseline paper: data, GRU design, validation, results, limitations, and what Lights keeps or changes |
+| [docs/PAPER-NOTES.md](docs/PAPER-NOTES.md) | Notes on the baseline paper: data, GRU design, validation, results, limitations, and what Lights keeps or changes |
 | [docs/ARCHITECTURE-RESEARCH.md](docs/ARCHITECTURE-RESEARCH.md) | Three candidate architectures with diagrams, sources and the recommendation |
 | [docs/MODELING-PLAN.md](docs/MODELING-PLAN.md) | The paper as baseline, the improved models (Fay-Herriot, gradient boosting, GRU/TCN), features, forward-chaining validation, metrics, conformal intervals, reporting |
 | [docs/DATA-PLAN.md](docs/DATA-PLAN.md) | Sources, licences, volumes, zonal-statistics tooling, feature store, versioning, update cadence, and the `archivekit` registry draft |
