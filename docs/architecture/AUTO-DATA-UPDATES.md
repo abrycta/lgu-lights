@@ -1,9 +1,8 @@
 # Automatic data updates (chosen 2026-10-29)
 
-Kurt chose fully automatic data updates (DECISIONS.md, 2026-10-29): when NASA publishes a newer Black Marble year,
-CI runs the pipeline, validates the result and publishes only if every check passes. Otherwise the live version stays
-and an issue in the private archive repo records the failure. Nothing public changes except the data itself: no
-notice, label or copy change (memory note "no public-perception content").
+When NASA publishes a newer Black Marble year, CI runs the pipeline, validates the result and publishes only if every
+check passes; otherwise the live version stays and an issue records the failure. Only the data changes; the site's
+copy stays as it is.
 
 ## Trigger
 

@@ -1,6 +1,6 @@
 # Open questions and decisions for Kurt
 
-Status: 2026-10-21, after the research in this folder. Nothing is implemented. Each item names the default the documents assume, so a "yes" to the defaults is enough to start.
+Status: written 2026-10-21, after the research in this folder and before the build. Each item names the default the documents assumed; the answers are recorded in [DECISIONS.md](DECISIONS.md).
 
 ## Decisions
 
@@ -11,7 +11,7 @@ Status: 2026-10-21, after the research in this folder. Nothing is implemented. E
 | Q3 | **Earth Engine registration** as an individual noncommercial project (Community tier, 150 EECU-h/month), with a service-account key stored as a GitHub secret | Register now; keep the site ad-free | Without GEE, the fallback is exactextract over LAADS/Black Marble only (VIIRS annual V2.2 from EOG is paid for programmatic access since 2026-06-01) |
 | Q4 | **Label rounds**: include 2006/2009 (DMSP era, 9-digit PSGC) as context, or VIIRS-era only (2012–2023)? | VIIRS-era for the models; 2006/2009 shown as history only | PSA file names and URLs must be confirmed by hand (psa.gov.ph blocks bots); the 2023 SAE file name is unknown |
 | Q5 | **Hosting of PMTiles and large files**: GitHub Pages (206 verified, 1 GB site), the HF dataset (206 after a 302), or R2 (10 GB free, requires Cloudflare's checkout flow and reportedly a payment method)? | GitHub Pages primary, HF fallback; **no R2** | Cloudflare Pages returns 200 to Range requests, so PMTiles cannot live on Pages |
-| Q6 | **Domain**: `lgu.krtmtthw.dev` CNAME → Pages, API at `lgu.krtmtthw.dev/api/*` via a Worker route on the same zone (needs the zone on Cloudflare) or at `lgu-api.krtmtthw.dev` | `lgu.krtmtthw.dev` + Worker route if the zone is on Cloudflare, else `lgu-api.krtmtthw.dev` | DNS changes are listed before being made (CLAUDE.md §5) |
+| Q6 | **Domain**: `lgu.krtmtthw.dev` CNAME → Pages, API at `lgu.krtmtthw.dev/api/*` via a Worker route on the same zone (needs the zone on Cloudflare) or at `lgu-api.krtmtthw.dev` | `lgu.krtmtthw.dev` + Worker route if the zone is on Cloudflare, else `lgu-api.krtmtthw.dev` | DNS changes are listed before being made (listed before any change) |
 | Q7 | **Narration**: captions-first with Web Speech when a Filipino voice exists (Android, Edge; not Apple), plus ≤ 100 pre-rendered EN/JA chapter clips via Kokoro-82M (Apache-2.0)? Meta MMS-TTS Tagalog is CC-BY-NC, which a portfolio site can use but the audio files would be non-commercial | Captions-first; Kokoro for EN/JA intros; **no MMS** | Japanese narration is optional polish |
 | Q8 | **Languages**: EN + Filipino required; Japanese? | EN + FIL + JA toggle (Akari already does EN/JA) | Adding `fil` is an Akari change |
 | Q9 | **Reliability tiers** at CV 10 / 20 % with hatching above 20 % | Yes | PSA's language is "CV < 20 % is reliable" |

@@ -1,6 +1,6 @@
-# Paper notes: the baseline LGU Lights builds on
+# Paper notes: the baseline Lights builds on
 
-Source: Clemente, M. C., Dela Cruz, J., Mendoza, K. R., **Nudo, K. M.**, Ancheta, C. Jr., Garrido, L., Bonifacio, J., Bustarde, J., Castro, E., Macam, A. (Saint Louis University, Baguio City). *Temporal Analysis of Nighttime Lights and Vegetation Indices for Poverty Forecasting: A Recurrent Neural Network Perspective.* 10 pages (local copy `~/Downloads/mct4sd.docm.pdf`, read 2026-10-21). Page numbers below refer to the PDF.
+Source: Clemente, M. C., Dela Cruz, J., Mendoza, K. R., **Nudo, K. M.**, Ancheta, C. Jr., Garrido, L., Bonifacio, J., Bustarde, J., Castro, E., Macam, A. (Saint Louis University, Baguio City). *Temporal Analysis of Nighttime Lights and Vegetation Indices for Poverty Forecasting: A Recurrent Neural Network Perspective.* 10 pages (Springer LNNS chapter, https://link.springer.com/chapter/10.1007/978-3-032-23515-2_43; page numbers refer to the author's PDF, read 2026-10-21).
 
 These notes are deliberately faithful: where the paper is ambiguous or internally inconsistent, that is recorded rather than smoothed over, because the project's baseline must reproduce the paper as written before improving on it.
 
@@ -69,11 +69,11 @@ Caveats a careful reader should note (not stated in the paper):
 
 - Only lights, EVI and NDVI were used; future work could add **land-use/land-cover time series**.
 - Multidimensional poverty (education, access to infrastructure; Alkire–Foster) and **asset-based urban features (roads, buildings, houses)** are suggested.
-- "**Regional-level data was utilized. Future work could consider conducting a more detailed spatial analysis at the municipal level.**" (p. 9). This sentence is the mandate for LGU Lights.
+- "**Regional-level data was utilized. Future work could consider conducting a more detailed spatial analysis at the municipal level.**" (p. 9). This sentence is the starting point for Lights.
 
-## 8. What LGU Lights keeps, changes, and why
+## 8. What Lights keeps and changes
 
-| Paper | LGU Lights | Why |
+| Paper | Lights | Why |
 |---|---|---|
 | Target: DHS PLWQ, regional (17 regions) | **PSA Small Area Estimates of poverty incidence, city/municipal (~1,600 LGUs)**, with their published standard errors | Municipal level is the paper's own future-work item; PSA SAE is open (CC BY), official and comes with uncertainty; DHS needs a data-use agreement and is regional |
 | Lights: DMSP-OLS v4, 2004–2013 | **VIIRS** (NOAA annual V2.2 and/or NASA Black Marble), 2012 onward | DMSP ended in 2013 and saturates in cities; VIIRS is radiometrically calibrated and current |

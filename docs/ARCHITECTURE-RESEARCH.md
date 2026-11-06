@@ -1,10 +1,10 @@
-# LGU Lights: architecture research
+# Lights: architecture research
 
-Status: research and recommendations, 2026-10-21. Nothing is implemented. Versions and limits were checked on the day against crates.io, npm, vendor docs and release pages; **[U]** marks an estimate or a claim that could not be verified on a primary page. The 2026-10-21 measurement spike replaced the performance and size estimates with measurements ([SPIKE-RESULTS.md](SPIKE-RESULTS.md)); the few [U] left are outside its scope and are listed there. Companion documents: [PAPER-NOTES.md](PAPER-NOTES.md), [MODELING-PLAN.md](MODELING-PLAN.md), [DATA-PLAN.md](DATA-PLAN.md), [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md).
+Status: research and recommendations written 2026-10-21, before the build. What was built is recorded in [DECISIONS.md](DECISIONS.md) and [architecture/README.md](architecture/README.md). Versions and limits were checked on the day against crates.io, npm, vendor docs and release pages; **[U]** marks an estimate or a claim that could not be verified on a primary page. The 2026-10-21 measurement spike replaced the performance and size estimates with measurements ([SPIKE-RESULTS.md](SPIKE-RESULTS.md)); the few [U] left are outside its scope and are listed there. Companion documents: [PAPER-NOTES.md](PAPER-NOTES.md), [MODELING-PLAN.md](MODELING-PLAN.md), [DATA-PLAN.md](DATA-PLAN.md), [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md).
 
 Constraints this document works within:
-- the backend is **Rust only**; optimise for **performance and accuracy**; the architecture must be **uniquely optimised for this project**, and the backend must follow a **named, widely recognised pattern** with its customisations written down (user direction, 2026-10-21);
-- shared standards: Akari design system for the UI, `archivekit` for external data, free tiers first; the user now has a card on Render (free plan, overages would bill), owns `krtmtthw.dev` (subdomain `lgu.krtmtthw.dev` possible), and has Cloudflare, GitHub, Neon, Hugging Face and (unregistered) Earth Engine accounts;
+- the backend is **Rust only**; optimise for **performance and accuracy**; the architecture must be **uniquely optimised for this project**, and the backend must follow a **named, widely recognised pattern** with its customisations written down;
+- shared standards: Akari design system for the UI, `archivekit` for external data, free tiers only (Render free plan); the project uses `krtmtthw.dev` (subdomain `lgu.krtmtthw.dev` possible), and has Cloudflare, GitHub, Neon, Hugging Face and (unregistered) Earth Engine accounts;
 - no heavy local computation.
 
 ## 0. Recommendation at a glance
@@ -67,14 +67,14 @@ Conclusion: a long-running server is not required for any user-facing path. A se
 **Pattern chosen: Hexagonal architecture (Ports and Adapters) for the code, combined with CQRS-style materialised read models for the data flow, delivered Jamstack-style.**
 
 - *Hexagonal*: Cockburn's 2005 pattern, intent "allow an application to equally be driven by users, programs, automated test or batch scripts, and to be developed and tested in isolation from its eventual run-time devices and databases"; primary (driving) adapters on one side, secondary (driven) adapters on the other, and "the asymmetry to exploit is … between inside and outside of the application" ([original article](https://alistair.cockburn.us/hexagonal-architecture/)). This is exactly the project's situation: the same application must be driven by a CI batch script, a browser and an HTTP edge function.
-- *CQRS / Materialised View*: separate models for updating and reading ([Fowler](https://martinfowler.com/bliki/CQRS.html)); precomputed views "store the results of complex computations or queries without requiring the database engine or client to recompute for every request" ([Azure Architecture Center: Materialized View](https://learn.microsoft.com/en-us/azure/architecture/patterns/materialized-view), [CQRS](https://learn.microsoft.com/azure/architecture/patterns/cqrs)). Fowler's warning that most systems "should be done in [CRUD] style" and that CQRS is "a significant mental leap" is taken seriously: LGU Lights uses only the *read-model half*. There are no runtime commands at all; the only write is the pipeline run.
+- *CQRS / Materialised View*: separate models for updating and reading ([Fowler](https://martinfowler.com/bliki/CQRS.html)); precomputed views "store the results of complex computations or queries without requiring the database engine or client to recompute for every request" ([Azure Architecture Center: Materialized View](https://learn.microsoft.com/en-us/azure/architecture/patterns/materialized-view), [CQRS](https://learn.microsoft.com/azure/architecture/patterns/cqrs)). Fowler's warning that most systems "should be done in [CRUD] style" and that CQRS is "a significant mental leap" is taken seriously: Lights uses only the *read-model half*. There are no runtime commands at all; the only write is the pipeline run.
 - *Jamstack*: "the entire front end is prebuilt into highly optimized static pages and assets during a build process" and served from a CDN, with APIs reached from the browser ([jamstack.org](https://jamstack.org/what-is-jamstack/)).
 - Why not Clean Architecture as the headline: its concentric Entities / Use Cases / Interface Adapters / Frameworks rings and Dependency Rule ([Martin 2012](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)) describe the same dependency direction, but the Use-Case ring would hold one-line functions here; hexagonal names the thing that actually varies in this project (the driving adapter), so it communicates better. The Dependency Rule is still enforced by `Cargo.toml` (the core crate has no I/O dependencies).
-- Why not a Lambda architecture: its batch, speed and serving layers ([Marz & Warren, summarised](https://motherduck.com/glossary/lambda-architecture/)) are for streaming data; LGU Lights has no speed layer. Its vocabulary is borrowed only to say "batch layer = Actions, serving layer = CDN".
+- Why not a Lambda architecture: its batch, speed and serving layers ([Marz & Warren, summarised](https://motherduck.com/glossary/lambda-architecture/)) are for streaming data; Lights has no speed layer. Its vocabulary is borrowed only to say "batch layer = Actions, serving layer = CDN".
 
 **Standard → our variant**
 
-| Hexagonal vocabulary | LGU Lights | Customisation and reason |
+| Hexagonal vocabulary | Lights | Customisation and reason |
 |---|---|---|
 | Application (inside the hexagon) | crate `lgu-core`: feature engineering from zonal statistics, model inference (GRU, tree ensemble), interval and reliability computation, classification breaks, PSGC harmonisation rules, narration templating | **No async, no I/O, `no_std`-compatible where practical**, so it compiles to native and `wasm32` unchanged. Pure functions over `&[f32]` slices; this is the performance choice (no allocation in the hot path) |
 | Driving (primary) ports | `Nowcast`, `WhatIf`, `Compare`, `Export` as plain Rust functions/traits | **Collapsed application layer**: there are no "use case" objects, because each use case is one function with no orchestration. Documented deviation from a textbook hexagon |
@@ -95,7 +95,7 @@ Conclusion: a long-running server is not required for any user-facing path. A se
 | worker (workers-rs) | 0.8.7 (2026-09-25) | the edge adapter | "no Tokio or async_std support"; axum/hyper usable via the `http` feature ([README](https://github.com/cloudflare/workers-rs/blob/main/README.md)) |
 | salvo 1.0.1 / poem 3.1.12 / rocket 0.5.1 | — | not used | poem's last release 2025-07; rocket's 2024-05 |
 
-TechEmpower was archived on 2026-03-24 after Round 23 ([secondary](https://dev.to/kaliumhexacyanoferrat/techempower-framework-benchmarks-are-now-archived-whats-next-3l0a)); HttpArena is its successor (axum: 1.08 M req/s at 4,096 connections, p99 6.68 ms, 192 MiB RSS under load, [http-arena](https://www.http-arena.com/frameworks/axum/)). For LGU Lights the framework's throughput is irrelevant (the dataset is 2.75 MB and reads are CDN-cached); the choice is about **ecosystem and portability**, and axum is the only one that runs unchanged on Workers and on a container.
+TechEmpower was archived on 2026-03-24 after Round 23 ([secondary](https://dev.to/kaliumhexacyanoferrat/techempower-framework-benchmarks-are-now-archived-whats-next-3l0a)); HttpArena is its successor (axum: 1.08 M req/s at 4,096 connections, p99 6.68 ms, 192 MiB RSS under load, [http-arena](https://www.http-arena.com/frameworks/axum/)). For Lights the framework's throughput is irrelevant (the dataset is 2.75 MB and reads are CDN-cached); the choice is about **ecosystem and portability**, and axum is the only one that runs unchanged on Workers and on a container.
 
 ### 3.3 Inference in Rust
 
@@ -211,7 +211,7 @@ flowchart LR
 - **Accuracy:** identical numbers everywhere (one core crate).
 - **Cost:** $0; nothing can bill.
 - **Risks:** a reviewer may ask "where is the backend?" The answer is the Rust workspace, but the deployed artefact is a static site, so the Rust story lives in CI and WASM only.
-- **What a recruiter sees:** a static-first engineer who knows that the right amount of server is sometimes zero; a Rust→WASM core with tests against tract.
+- **What it demonstrates:** a static-first engineer who knows that the right amount of server is sometimes zero; a Rust→WASM core with tests against tract.
 
 ### Architecture B (recommended): "Hexagonal core, materialised read models, edge API"
 
@@ -249,7 +249,7 @@ flowchart LR
 - **Cost:** $0, and *cannot* bill: the Worker hard-fails at the cap instead of charging.
 - **Customisations recorded:** no tokio in the Worker (workers-rs runs on the isolate's event loop); the driven `FeatureStore` port is backed by embedded bytes, not a DB; no auth, no sessions, no writes.
 - **Risks:** workers-rs toolchain friction (wasm-bindgen versions); if it stalls, ship A and keep B's crate as a tracked task.
-- **What a recruiter sees:** a textbook hexagonal design justified by a real need (three adapters), a Rust API with OpenAPI docs and p99 in the low hundreds of ms from Manila, an honest "why no database" note, and a static site that would survive the API being deleted.
+- **What it demonstrates:** a textbook hexagonal design justified by a real need (three adapters), a Rust API with OpenAPI docs and p99 in the low hundreds of ms from Manila, an honest "why no database" note, and a static site that would survive the API being deleted.
 
 ### Architecture C: "Rust service on Render" (classic layered service; Clean Architecture rings)
 
@@ -267,7 +267,7 @@ flowchart LR
 - **Accuracy:** same core crate, so the same numbers.
 - **Cost:** $0 until bandwidth exceeds the plan; **with the card on file, overages bill automatically** ([Render free](https://render.com/docs/free)).
 - **Risks:** the cold start alone breaks the LCP target for the first visitor every 15 minutes; overage exposure.
-- **What a recruiter sees:** a conventional containerised service, well made, but it does not answer "why a server?" for this workload. (It is the right shape for Typhoon Replay's live tracker, not for LGU Lights.)
+- **What it demonstrates:** a conventional containerised service, well made, but it does not answer "why a server?" for this workload. (It is the right shape for Typhoon Replay's live tracker, not for Lights.)
 
 ### 6.4 Overall recommendation
 

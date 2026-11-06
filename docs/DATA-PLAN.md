@@ -1,6 +1,6 @@
 # Data plan
 
-Status: research and proposal, 2026-10-21. No pipeline exists yet. Facts were checked against catalog pages, NASA/NOAA/EOG notices, HDX API metadata and vendor docs on the day; **[U]** marks an estimate or a claim that could not be confirmed on a primary page (psa.gov.ph sits behind a bot challenge, so PSA file names and URLs come from search snippets and PSA regional mirrors and must be confirmed by hand before the registry is used).
+Status: research and proposal written 2026-10-21, before the build. What was built is recorded in [DECISIONS.md](DECISIONS.md) and [architecture/README.md](architecture/README.md). Facts were checked against catalog pages, NASA/NOAA/EOG notices, HDX API metadata and vendor docs on the day; **[U]** marks an estimate or a claim that could not be confirmed on a primary page (psa.gov.ph sits behind a bot challenge, so PSA file names and URLs come from search snippets and PSA regional mirrors and must be confirmed by hand before the registry is used).
 
 ## 0. Summary
 

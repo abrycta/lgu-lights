@@ -12,7 +12,15 @@ spike/**/data/
 spike/**/out/
 spike/**/*.pmtiles
 spike/**/requests*.jsonl
-spike/rust/Cargo.lock.bak
+*.bak
+*.log
+
+# tool caches and editors
+coverage/
+.pytest_cache/
+.ruff_cache/
+.idea/
+.vscode/
 
 # build outputs
 target/

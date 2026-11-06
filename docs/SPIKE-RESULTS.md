@@ -1,6 +1,6 @@
 # Measurement spike results
 
-Run 2026-10-21 (Asia/Manila), as decided in [DECISIONS.md](DECISIONS.md) Q10. Each section gives the method, the numbers, and a pass/fail against the target in [ARCHITECTURE-RESEARCH.md](ARCHITECTURE-RESEARCH.md). The throwaway code is in `spike/` and large outputs are gitignored. Every script there regenerates its own inputs.
+Run 2026-10-21 (Asia/Manila), as decided in [DECISIONS.md](DECISIONS.md) Q10. Each section gives the method, the numbers, and a pass/fail against the target in [ARCHITECTURE-RESEARCH.md](ARCHITECTURE-RESEARCH.md). The spike code is in `spike/` and large outputs are gitignored. Every script there regenerates its own inputs.
 
 **Machine and caveats.** Apple M5 (4 performance + 6 efficiency cores), macOS, fanless, on a residential connection in the Philippines. Builds and heavy jobs ran under `taskpolicy -b`, which moves them onto the efficiency cores, so those wall times are pessimistic. Micro-benchmarks ran for a few seconds at normal priority, and each table says which applies. Map timings in headless Chromium use SwiftShader (software WebGL), so only their request counts and bytes matter, not their milliseconds.
 
