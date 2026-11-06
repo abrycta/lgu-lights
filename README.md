@@ -6,7 +6,7 @@ It extends the regional GRU study in [a paper the author co-wrote](https://link.
 
 Live at **https://lights.krtmtthw.dev** (English and Japanese).
 
-**Status (2026-10-21):** milestone 1 is live with data version v1: PSA official figures for 2012, 2015, 2018, 2021 and 2023, model estimates for the years between and after (2012–2025) with 90 % intervals and reliability tiers, a plain-language reading for each place, and an in-browser what-if. The model's validation against a carry-forward baseline (carrying the last official figure forward) is in [docs/DECISIONS.md](docs/DECISIONS.md) and on the site's About page. The next model version is in progress.
+**Status (2026-10-21):** milestone 1 is live with data version v1: PSA official figures for 2012, 2015, 2018, 2021 and 2023, model estimates for the years between and after (2012–2025) with 90 % intervals and reliability tiers, a plain-language reading for each place, and an in-browser what-if. The model's validation against a baseline that carries the last official figure forward is in [docs/DECISIONS.md](docs/DECISIONS.md) and on the site's About page. The next model version is in progress.
 
 ## How it works
 
@@ -15,7 +15,7 @@ Live at **https://lights.krtmtthw.dev** (English and Japanese).
 | `pipeline/` | Python (uv): fetches every source through the registry in `pipeline/sources.yaml`, builds labels and the crosswalk, runs Earth Engine and Black Marble zonal statistics, trains the model |
 | `crates/` | Rust core (`lgu-core`) with a CLI (`lgu design`, `lgu parity`, `lgu materialise`) and a WASM build for the browser's what-if |
 | `web/` | Static single-page app (Vite, React, Akari, MapLibre) on Cloudflare Pages; see [web/README.md](web/README.md) |
-| `.github/workflows/` | `pipeline.yml`, `rust.yml`, `web.yml` (checks), `data.yml` (the full data run), `freshness.yml` (monthly check for a new Black Marble year, which starts an automatic update) and `live-check.yml` (hourly check that the live site serves main's newest deployed commit) |
+| `.github/workflows/` | `pipeline.yml`, `rust.yml`, `web.yml` (checks), `data.yml` (the full data run), `freshness.yml` (monthly check for a new Black Marble year, which starts an automatic update) and `live-check.yml` (hourly check that the live site is up to date with main, redeploying when it is not) |
 
 Code layout and data flow: [docs/architecture/README.md](docs/architecture/README.md).
 
