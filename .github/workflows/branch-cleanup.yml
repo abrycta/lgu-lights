@@ -1,0 +1,41 @@
+# Weekly cleanup of finished branches: .github/scripts/branch-cleanup.sh deletes remote branches whose PR is merged
+# (the merged head is the branch's tip) or that are 0 commits ahead of main. It never touches main, gh-pages,
+# dependabot/*, changeset-release/* or a branch with an open PR. Merged PR branches are also deleted on merge
+# (repository setting); this catches the rest. Manual runs can be a dry run that only lists what would go.
+name: Branch cleanup
+
+on:
+  schedule:
+    - cron: "41 2 * * 1" # Mondays, 02:41 UTC
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: List the branches that would be deleted, delete nothing
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # delete branches
+  pull-requests: read # merged and open PRs
+
+concurrency:
+  group: branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Delete merged and empty branches
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github
+      - name: Delete branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry-run && '--dry-run' || '' }}
+        run: |
+          set -o pipefail
+          # shellcheck disable=SC2086 # DRY_RUN is empty or one flag
+          .github/scripts/branch-cleanup.sh $DRY_RUN | tee -a "$GITHUB_STEP_SUMMARY"
