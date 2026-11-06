@@ -52,3 +52,7 @@ cd pipeline && uv sync --group sources --group train && uv run pytest -q
 | [docs/architecture/README.md](docs/architecture/README.md) | Repository layout, data flow, read-model contract, commands |
 
 Every external source is listed in `pipeline/sources.yaml`, with automatic fallback to mirrors and then to a private snapshot archive (`abrycta/lgu-lights-archive`, managed by `archivekit`); only processed data is published, with each source's attribution.
+
+## License
+
+The code is released under the [MIT License](LICENSE). Data from third-party sources keeps its original terms and attribution, listed on the app's About page.
