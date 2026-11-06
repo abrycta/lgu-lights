@@ -1,5 +1,5 @@
 /**
- * An inline loading mark (CLAUDE.md rule 29a: loading is always the muted glyph, never "…" or a spinner): Lights'
+ * An inline loading mark (loading is always the muted glyph, never "…" or a spinner): Lights'
  * kanji glyph in a small muted tile exactly one line high (`1lh`), so it takes the place of the "…" it replaces
  * without moving anything. Decorative; the surrounding panel says what it is.
  */
