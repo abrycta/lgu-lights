@@ -48,7 +48,6 @@ cd pipeline && uv sync --group sources --group train && uv run pytest -q
 | [docs/ARCHITECTURE-RESEARCH.md](docs/ARCHITECTURE-RESEARCH.md) | Three candidate architectures with diagrams, sources and the recommendation |
 | [docs/MODELING-PLAN.md](docs/MODELING-PLAN.md) | The paper as baseline, the improved models (Fay-Herriot, gradient boosting, GRU/TCN), features, forward-chaining validation, metrics, conformal intervals, reporting |
 | [docs/DATA-PLAN.md](docs/DATA-PLAN.md) | Sources, licences, volumes, zonal-statistics tooling, feature store, versioning, update cadence, and the `archivekit` registry draft |
-| [docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md) | The questions put before the build, with the defaults later decided in DECISIONS.md |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Binding decisions, spike addendum, and milestone build notes |
 | [docs/architecture/README.md](docs/architecture/README.md) | Repository layout, data flow, read-model contract, commands |
 

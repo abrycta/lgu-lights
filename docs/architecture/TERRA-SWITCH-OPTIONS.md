@@ -125,6 +125,5 @@ pattern), and costs nothing. Add the completeness gate in any case.
 
 - Completeness gate for yearly vegetation means (composites per year) in `ee_zonal.py` / `features.py`.
 - `laads.zonal_vj113a1`: read EVI as well as NDVI, and only MOD13Q1's DOY phase; prove the path in one canary run.
-- Update `docs/DATA-PLAN.md` §1.2, which still names VNP13A1 as the continuity series, and `docs/OPEN-QUESTIONS.md`
-  (VJ113A1 on EE: answered, no).
+- Update `docs/DATA-PLAN.md` §1.2, which still names VNP13A1 as the continuity series.
 - Record the choice in `docs/DECISIONS.md`.

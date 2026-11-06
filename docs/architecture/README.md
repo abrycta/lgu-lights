@@ -39,7 +39,6 @@ flowchart LR
 | `pipeline/` | uv/Python: `sources.yaml` (archivekit registry), `lgu/` (labels, boundaries, Earth Engine, LAADS + exactextract, features, training), `inputs/` (committed labels; see B4), `tools/` | write side (offline) |
 | `web/` | Vite + React 19 + Akari + MapLibre static site | read side |
 | `.github/workflows/` | `rust.yml`, `pipeline.yml`, `web.yml` (checks), `data.yml` (full data run) | CI |
-| `spike/` | the 2026-10-21 measurement spike (frozen; evidence for SPIKE-RESULTS.md) | — |
 
 Dependency rule: `lgu-core` depends on nothing with I/O; `lgu-store` and the adapters depend on the core,
 never the reverse. Python never re-implements a feature: it trains on the design matrix the Rust CLI wrote.

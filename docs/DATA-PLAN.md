@@ -68,7 +68,7 @@ Known biases to document on the methodology page: EOG excludes moonlit data and 
 | FY2021 and FY2023 official poverty statistics (FIES) ([2023 publication, 2024-08-15](https://psa.gov.ph/sites/default/files/phdsd/2023%20FY%20Official%20Poverty%20Statistics%20Publication_15August2024.pdf)) | 2021, 2023 | provincial and HUC incidence; HUC rows for the map |
 | 2021 SAE highlights ([PDF](https://www.psa.gov.ph/system/files/phdsd/Highlights%20of%20the%202021%20SAE.pdf)) | 2021 | methodology text, CV counts |
 
-Terms: OpenSTAT datasets are "Open Data with Creative Commons Attribution License (cc-by)": credit PSA, link to the terms, indicate changes, no endorsement ([terms](https://openstat.psa.gov.ph/Terms), [product agreement](https://openstat.psa.gov.ph/Metadata/Open-Data-Product-Agreement)). Whether the SAE xlsx hosted on psa.gov.ph is covered by the OpenSTAT terms is **[U]**: the site will attribute PSA on every view and cite the terms page, and OPEN-QUESTIONS.md asks whether to email PSA for confirmation.
+Terms: OpenSTAT datasets are "Open Data with Creative Commons Attribution License (cc-by)": credit PSA, link to the terms, indicate changes, no endorsement ([terms](https://openstat.psa.gov.ph/Terms), [product agreement](https://openstat.psa.gov.ph/Metadata/Open-Data-Product-Agreement)). Whether the SAE xlsx hosted on psa.gov.ph is covered by the OpenSTAT terms is **[U]**: the site will attribute PSA on every view and cite the terms page (DECISIONS Q13).
 
 ### 1.5 Boundaries and codes
 
@@ -123,7 +123,7 @@ Sizes: about 23k feature rows × about 40 columns, a few MB; labels about 8k row
 
 ## 6. `archivekit` registry draft (proposal, not yet a file in use)
 
-Notes on fit with the kit's schema (`data-archive-kit/schema/sources.schema.json`): `format` has no `xlsx` or `tif` value, so PSA/PSGC workbooks are declared as `zip` with a `zip_member` check on a worksheet XML (an xlsx is a zip), and rasters are `remote-dataset` entries processed in GEE or fetched by the pipeline's own LAADS client. Adding `xlsx` and `hdf5`/`tif` formats to the kit is proposed in OPEN-QUESTIONS.md Q12.
+Notes on fit with the kit's schema (`data-archive-kit/schema/sources.schema.json`): `format` has no `xlsx` or `tif` value, so PSA/PSGC workbooks are declared as `zip` with a `zip_member` check on a worksheet XML (an xlsx is a zip), and rasters are `remote-dataset` entries processed in GEE or fetched by the pipeline's own LAADS client. Adding `xlsx` and `hdf5`/`tif` formats to the kit is proposed (DECISIONS Q12).
 
 ```yaml
 # yaml-language-server: $schema=../../data-archive-kit/schema/sources.schema.json
