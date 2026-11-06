@@ -1,14 +1,13 @@
 # Vegetation after Terra: options (audit L-C6)
 
-Status: **Option A chosen by Kurt 2026-10-23** (without the NOAA-21 mirror; see `docs/DECISIONS.md`). Researched 2026-10-23.
+Decided 2026-10-23: **Option A**, without the NOAA-21 mirror (see `docs/DECISIONS.md`). Researched the same day.
 
 ## 1. The problem in one paragraph
 
 Lights takes yearly NDVI and EVI per LGU from MODIS **Terra** `MOD13Q1` v061 (250 m, 16-day) in Earth Engine
-(`pipeline/lgu/ee_zonal.py:24`). The model uses three vegetation features: `ndvi`, `d_ndvi` (NDVI now minus NDVI
-in the last PSA round year) and `evi` (`pipeline/lgu/train.py:57`). Terra stops producing science data around
-**February 2027**, so no full 2027 year of MOD13Q1 will ever exist. The audit says such a run "fails safely". That is
-only partly true (§3).
+(`pipeline/lgu/ee_zonal.py:24`). The model uses three vegetation features: `ndvi`, `d_ndvi` (NDVI minus NDVI in the
+last PSA round year) and `evi` (`pipeline/lgu/train.py:57`). Terra science data ends around **February 2027**, so
+MOD13Q1 will never have a full 2027 year. The audit says such a run "fails safely"; that holds only in part (§3).
 
 ## 2. Facts checked today (2026-10-23)
 
@@ -18,7 +17,7 @@ only partly true (§3).
 | Aqua end of science | **September 2027** | same page |
 | S-NPP | new data deliveries **stop 2026-11-02** (so VNP13A1 ends too) | [Earthdata alert 22341](https://www.earthdata.nasa.gov/data/alerts-outages/content/data-alert-history/22341), [VIIRS transition resources](https://www.earthdata.nasa.gov/data/instruments/viirs/transition-resources) |
 | MOD13Q1 v061 | CMR and EE both current to composite 2026-09-30 | CMR `C1748066515-LPCLOUD`; EE STAC `MODIS_061_MOD13Q1` |
-| **VJ113A1 v002** (NOAA-20) | in CMR since **2018-01-01**, open-ended, latest composite 2026-09-22; LP DAAC cloud, **also on LAADS** `allData/5200/VJ113A1` (the path `laads.py` already uses; listing checked today) | CMR `C2519122065-LPCLOUD`, DOI 10.5067/VIIRS/VJ113A1.002 |
+| **VJ113A1 v002** (NOAA-20) | in CMR since **2018-01-01**, open-ended, latest composite 2026-09-22; LP DAAC cloud, **also on LAADS** `allData/5200/VJ113A1` (the path `laads.py` already uses) | CMR `C2519122065-LPCLOUD`, DOI 10.5067/VIIRS/VJ113A1.002 |
 | VJ113A1 on Earth Engine | **No.** EE STAC has `NASA_VIIRS_002_VNP13A1` (S-NPP, ends with S-NPP) but no `VJ113A1` or `VJ213A1` (404 today); spike S3 found the same | EE STAC catalog |
 | VJ113A1 grid and cadence | 500 m (463 m) MODIS sinusoidal, 16-day composites **released every 8 days (46 per year)**, layers NDVI, EVI, EVI2 + pixel reliability. MOD13Q1 is 250 m, 23 per year | LAADS listing 2025: DOY 001, 009, 017 … |
 | VJ113A1 size for the 5 PH tiles | about 94 MB per composite date → about 4.3 GB per year (2.2 GB if only MOD13Q1's DOY phase 001, 017, … is used) | LAADS listing, DOY 2026-265 |
@@ -29,70 +28,57 @@ only partly true (§3).
 
 ## 3. What actually happens in 2027 if nothing changes
 
-- A run cannot include 2027 before the NOAA-20 Black Marble yearly product for 2027 (`VJ146A4`) exists, since
-  `laads.py` raises on missing tiles. Judging by 2025 (published by October 2026), that is **around mid or late 2028**.
-- By then MOD13Q1 will hold **only January–February 2027 composites** (if Terra delivers to its end date). The
-  2027 yearly mean would be a dry-season mean, present for nearly every LGU, so the feature-store gate (`features.py`:
-  at least 95 % non-missing, values in range) **passes**. The run would publish biased 2027 vegetation silently, not
-  fail. Only if Terra delivers nothing in 2027 does the gate fail as the audit expects.
-- So, whatever Kurt chooses, Lights needs a **completeness gate**: a yearly vegetation mean counts only if it has
-  most of the year's composites (for example at least 20 of 23 for MOD13Q1). This is small, needs no choice, and is
-  listed as a follow-up below.
-- The `vj113a1` switch in `.github/data-run.json` exists but has **never run in CI** (`features-v1` has no
+- A run cannot include 2027 until the NOAA-20 Black Marble 2027 yearly product (`VJ146A4`) exists, because
+  `laads.py` raises on missing tiles. Going by 2025 (published by October 2026), that is **around mid or late 2028**.
+- By then MOD13Q1 holds **only January–February 2027 composites** (if Terra delivers to its end date). That
+  dry-season mean exists for nearly every LGU, so the feature-store gate (`features.py`: at least 95 % non-missing,
+  values in range) **passes** and the run publishes biased 2027 vegetation silently. The gate fails as the audit
+  expects only if Terra delivers nothing in 2027.
+- Lights therefore needs a **completeness gate** under any option: a yearly vegetation mean counts only if it has
+  most of the year's composites (e.g. at least 20 of 23 for MOD13Q1). See §8.
+- The `vj113a1` switch in `.github/data-run.json` has **never run in CI** (`features-v1` has no
   `zonal_vj.parquet`), and `laads.zonal_vj113a1` reads NDVI only, not EVI.
 
 ## 4. Options
 
 ### Option A. Calibrate NOAA-20 VJ113A1 onto the MODIS series (the Black Marble pattern) — recommended
 
-How: the vegetation product becomes per-year, like `bm_product()` in PR #40: `MOD13Q1` up to 2026, `VJ113A1` from
-2027. VJ113A1 NDVI and EVI are computed per LGU for the overlap years **2018–2026** (nine years; 2026 is the last
-full Terra year, complete around mid-January 2027). Each LGU gets its own mapping from VJ113A1 to MOD13Q1
-(offset per LGU, slope national, fitted separately for NDVI and EVI), with the national mapping where an LGU's fit
-is poor, the way `calibrate_lit` falls back to the national ratio. NOAA-21 `VJ213A1` is added as a mirror.
+How: the vegetation product becomes per-year, like `bm_product()` in PR #40: `MOD13Q1` to 2026, `VJ113A1` from 2027.
+VJ113A1 NDVI and EVI are computed per LGU for the overlap years **2018–2026** (nine years; 2026, the last full Terra
+year, completes around mid-January 2027). Each LGU gets a VJ113A1→MOD13Q1 mapping (offset per LGU, national slope,
+fitted separately for NDVI and EVI); a poorly fitting LGU uses the national mapping, as `calibrate_lit` falls back to
+the national ratio. NOAA-21 `VJ213A1` is added as a mirror.
 
-- **Model:** unchanged. No re-train; `d_ndvi` compares calibrated NOAA-20 values with MODIS values of the round
-  year, which is what the calibration is for.
-- **Proof before use:** fit on 2018–2024, test on 2025–2026: per-LGU error of calibrated VJ113A1 against MOD13Q1
-  must be well below the typical change in NDVI between rounds (median |`d_ndvi`|). A swap test then replaces 2023
-  MODIS values with calibrated VJ113A1 values, re-predicts 2023 with the published model and reports how far the
-  estimates move. If they move more than, say, 0.5 pp at the median, fall back to Option C.
-- **Past numbers:** unchanged. Every year to 2026 keeps MOD13Q1 values (already archived in the `features-v1`
-  release), the model file is reused, and a parity run like PR #40's shows the design rows and read models for
-  2012–2025 byte-identical.
-- **Cost:** free. LAADS with the existing Earthdata login; a nine-year backfill downloads about 20–40 GB once, then
-  about 2–4 GB per new year, on free public-repo runners. No new EE load.
-- **Risk:** low to medium. VIIRS and MODIS differ in bands and pixel size (500 m vs 250 m), so small LGUs
-  (Manila districts, island towns) fit worse; the national fallback covers them. NOAA-20 itself is an aging
-  satellite (launched 2017); NOAA-21 is the fallback with overlap from 2023.
-- **Effort:** about 1–2 agent days: read EVI too and only MOD13Q1's DOY phase in `laads.py`; `veg_product(year)`
-  and the calibration function with tests; completeness gate; `sources.yaml` mirror; one data run with
-  `vj113a1: true` for 2018–2026 (canary first, rule 18); the calibration report in `docs/`.
+- Model: unchanged, no re-train. `d_ndvi` compares calibrated NOAA-20 values with round-year MODIS values.
+- Proof before use: fit on 2018–2024, test on 2025–2026. Per-LGU error of calibrated VJ113A1 against MOD13Q1 must
+  be well below the median |`d_ndvi`| between rounds. A swap test then replaces 2023 MODIS values with calibrated
+  VJ113A1 values, re-predicts 2023 with the published model and reports how far estimates move; above about 0.5 pp
+  at the median, fall back to Option C.
+- Past numbers: unchanged. Years to 2026 keep MOD13Q1 values (archived in the `features-v1` release), the model file
+  is reused, and a parity run like PR #40's shows 2012–2025 design rows and read models byte-identical.
+- Cost: free. LAADS with the existing Earthdata login: about 20–40 GB once for the nine-year backfill, then 2–4 GB per
+  year, on free public-repo runners. No new EE load.
+- Risk: low to medium. VIIRS and MODIS differ in bands and pixel size (500 m vs 250 m), so small LGUs (Manila
+  districts, island towns) fit worse; the national fallback covers them. NOAA-20 launched in 2017; NOAA-21 is the
+  fallback, with overlap from 2023.
+- Effort: about 1–2 days: read EVI and only MOD13Q1's DOY phase in `laads.py`; `veg_product(year)` and the
+  calibration function with tests; completeness gate; `sources.yaml` mirror; one data run with `vj113a1: true` for
+  2018–2026 (canary first, rule 18); calibration report in `docs/`.
 
 ### Option B. Re-train on a VIIRS-only vegetation series (VJ113A1, or S-NPP VNP13A1 spliced to VJ113A1)
 
-How: drop MODIS entirely; vegetation comes from VIIRS for every year (VNP13A1 on EE 2012–2025, VJ113A1 after,
-itself calibrated across the two VIIRS satellites), and the model is re-trained on it.
-
-- **Model:** re-trained; results for every year change.
-- **Past numbers:** change. They stay available only as the old immutable releases (`data-v1`…`v5`); the site would
-  show a new data version with new numbers for all years, which needs a public note (not decided here).
-- **Cost:** free, but heavier: a 2012–2026 VIIRS backfill plus a second calibration (S-NPP → NOAA-20).
-- **Risk:** medium. It moves away from the paper's MOD13Q1 baseline, and still needs a satellite-to-satellite splice,
-  so it does not remove the calibration problem; it only moves it.
-- **Effort:** about 3–5 agent days plus a full re-train and review of all backtests.
+Drop MODIS and re-train on VIIRS vegetation for every year (VNP13A1 on EE 2012–2025, VJ113A1 after, calibrated across
+the two VIIRS satellites). Not chosen: every published number changes (a new data version beside the immutable
+`data-v1`…`v5`), it departs from the paper's MOD13Q1 baseline, and it still needs a satellite splice (S-NPP → NOAA-20)
+and a 2012–2026 VIIRS backfill. Effort: about 3–5 days plus a full re-train and review of all backtests.
 
 ### Option C. Drop vegetation from the model
 
-How: re-train without `ndvi`, `d_ndvi`, `evi`; stop fetching MOD13Q1 (Earth Engine still serves WorldPop and SRTM).
-
-- **Model:** re-trained. The v5 numbers suggest a very small loss (all satellite features together are worth
-  0.03 pp MAE), but a vegetation-only ablation has not been run and must be, before choosing this.
-- **Past numbers:** change in a new data version, as in B.
-- **Cost:** none; removes a source for good.
-- **Risk:** low technically; the project, its page and the paper it builds on describe Lights as night lights *and
-  vegetation*, so this changes the story told about it (Kurt's call).
-- **Effort:** about 1 agent day plus the re-train, the ablation and copy changes.
+Re-train without `ndvi`, `d_ndvi`, `evi` and stop fetching MOD13Q1 (Earth Engine still serves WorldPop and SRTM).
+In v5 all satellite features together are worth 0.03 pp MAE; a vegetation-only ablation must run before this option
+is used. Past numbers change in a new data version, as in B. Cost: none. Technical risk is low, but the project page
+and the paper describe Lights as night lights *and vegetation*, so the project description changes. Effort: about
+1 day plus the re-train, the ablation and copy changes.
 
 ### Rejected stopgaps
 
@@ -103,21 +89,21 @@ How: re-train without `ndvi`, `d_ndvi`, `evi`; stop fetching MOD13Q1 (Earth Engi
 
 ## 5. Recommendation
 
-**Option A**, with Option C as the fallback if the swap test fails. It keeps every published number, needs no
-re-train, reuses code and credentials that already exist (`laads.py`, Earthdata token, the PR #40 calibration
-pattern), and costs nothing. Add the completeness gate in any case.
+**Option A**, with Option C as fallback if the swap test fails: it keeps every published number, needs no re-train,
+reuses `laads.py`, the Earthdata token and the PR #40 calibration pattern, and costs nothing. Add the completeness gate
+in any case.
 
 ## 6. Deadline
 
-- **Hard deadline:** before the first data run that includes 2027, expected when NOAA-20 Black Marble 2027
-  (`VJ146A4`) appears, around mid or late 2028. Without the gate, that run would publish biased vegetation silently.
-- **Practical deadline: end of March 2027.** The calibration needs the full 2026 Terra year (complete around
-  mid-January 2027), and fitting it while Terra and NOAA-20 data are both fresh, with the result documented, avoids a
-  rushed change in 2028. The completeness gate can ship now as a small request.
+- Hard deadline: the first data run that includes 2027, expected when NOAA-20 Black Marble 2027 (`VJ146A4`) appears,
+  around mid or late 2028.
+- Practical deadline: **end of March 2027**. The calibration needs the full 2026 Terra year (complete around
+  mid-January 2027); fitting and documenting it while both series are fresh avoids a rushed change in 2028. The
+  completeness gate can ship now as a small PR.
 
 ## 7. What Kurt decides
 
-1. Option A, B or C (recommended: A, with C as fallback if the swap test shows estimates move more than about 0.5 pp).
+1. Option A, B or C (recommended: A, with C as fallback if the swap test moves estimates more than about 0.5 pp).
 2. Whether the completeness gate ships now as its own small PR (recommended: yes).
 3. Whether NOAA-21 `VJ213A1` is registered as the mirror for VJ113A1 (recommended: yes).
 

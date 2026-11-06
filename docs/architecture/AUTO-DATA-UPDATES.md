@@ -1,13 +1,13 @@
 # Automatic data updates (chosen 2026-10-29)
 
 When NASA publishes a newer Black Marble year, CI runs the pipeline, validates the result and publishes only if every
-check passes; otherwise the live version stays and an issue records the failure. Only the data changes; the site's
-copy stays as it is.
+check passes; otherwise the live version stays and an issue records the failure. Only the data changes; the site copy
+stays the same.
 
 ## Trigger
 
 - `freshness.yml`, monthly (3rd, 01:17 UTC), as before. The last year is now read from the **live** version
-  (`latest.json` → `manifest.json` years), so a published update is not found again next month.
+  (`latest.json` → `manifest.json` years), so a published update is not re-detected.
 - A new Black Marble year (all five PH tiles of VNP46A4, or VJ146A4 from 2026, in CMR) starts the update.
 - New FIES years and check errors stay issues for a person (adopting a PSA table needs a reviewed pin); new SAE
   rounds and PSGC quarters are not checked (PSA's Cloudflare challenge), as before.
@@ -44,12 +44,12 @@ copy stays as it is.
 2. `freshness.yml` adds the gate report as the asset `auto-validated.json` to that release.
 3. It runs `web.yml` on main (`workflow_dispatch`, the one event the workflow token may start). The deploy job
    ships main's newest covered commit through `scripts/deploy-web.sh`, which serves the committed list
-   (`v1 v3 v4 v5`) **plus the newest two auto-validated versions after LATEST**, the newest as LATEST. Without such a
-   release the deploy is unchanged (tested in `pipeline/tests/test_deploy_web.py`). Two at most keeps the deploy under
+   (`v1 v3 v4 v5`) plus the newest two auto-validated versions after LATEST, the newest as LATEST. Without such a
+   release the deploy is unchanged (tested in `pipeline/tests/test_deploy_web.py`). The cap of two keeps the deploy under
    Cloudflare Pages' 20,000 files (about 2,400 per version).
 4. It checks that the live `latest.json` names `v<N+1>`.
 
-No commit is made by CI: the version list lives in the releases, so main and its CI stay untouched.
+CI makes no commit: the version list lives in the releases, so main stays untouched.
 
 ## Rollback and failure handling
 
@@ -71,13 +71,13 @@ and read models become run artifacts; no release, no mark, no deploy. `features`
 - Actions minutes: public repository, so standard runners are free. Measured: canary about 4 min, feature store
   10–16 min, model 3–5 min, deploy about 3 min (`web.yml` on main); the monthly check about 2 min.
 - Earth Engine (noncommercial Community tier) and Earthdata/LAADS: one full feature-store run per new Black Marble
-  year (about once a year), the same work as a manual run; the monthly check reads CMR and OpenSTAT metadata only.
-- No new secrets, settings or credentials: `EE_SERVICE_ACCOUNT_KEY`, `EARTHDATA_*`, `ARCHIVE_READ_TOKEN`,
-  `CLOUDFLARE_*` and the workflow token, as today.
+  year (about once a year); the monthly check reads CMR and OpenSTAT metadata only.
+- No new secrets or settings: the existing `EE_SERVICE_ACCOUNT_KEY`, `EARTHDATA_*`, `ARCHIVE_READ_TOKEN`,
+  `CLOUDFLARE_*` and the workflow token.
 - The schedules stay enabled: `keepalive.sh` runs hourly (`live-check.yml`) and monthly (`freshness.yml`) and
   re-enables every workflow with a cron.
 
 ## Limits
 
 - The Earthdata login mints short-lived tokens in CI; the 60-day `EARTHDATA_TOKEN` is only a fallback.
-- A new SAE round, a new FIES year or a boundary change still needs a person (an issue says so).
+- A new SAE round, FIES year or boundary change still needs a person (an issue says so).

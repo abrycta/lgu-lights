@@ -15,7 +15,7 @@ scripts/build-wasm.sh                        # crates/lgu-wasm -> public/wasm/lg
 npm run dev
 ```
 
-On the fanless dev laptop run npm/cargo under `taskpolicy -b`. `public/data/` and `public/wasm/` are
+On a fanless laptop, run npm and cargo under `taskpolicy -b`. `public/data/` and `public/wasm/` are
 gitignored. `link-data.sh <dir> [version] [--copy]` symlinks by default; `--copy` copies only the files
 the app reads (for a deploy artifact).
 
@@ -27,19 +27,19 @@ npm run build     # dist/ for Cloudflare Pages (public/_headers sets caching and
 
 ## Deploy
 
-Deploys follow CI: on `main`, `.github/workflows/web.yml` runs `scripts/deploy-web.sh` (repo root) after
-the checks pass. The script builds the WASM module and the app from a staged `public/` (never the local
-`public/data/` dev links), adds only the published data versions (`DATA_VERSIONS`, default `v1 v3 v4 v5`) from
-their `data-<v>` GitHub releases with each tarball's sha256 checked against the release digest, writes
-`data/latest.json` (`LATEST`, default `v5`), runs `wrangler pages deploy`, then checks the live site. To
+CI deploys: on `main`, `.github/workflows/web.yml` runs `scripts/deploy-web.sh` (repo root) after the
+checks pass. The script builds the WASM module and the app from a staged `public/` (never the local
+`public/data/` dev links) and adds only the published data versions (`DATA_VERSIONS`, default `v1 v3 v4 v5`)
+from their `data-<v>` GitHub releases; each tarball's sha256 must match the release digest. It then writes
+`data/latest.json` (`LATEST`, default `v5`), runs `wrangler pages deploy` and checks the live site. To
 publish a new data release, change the two defaults in the script and push, or run the workflow on `main`.
 `scripts/deploy-web.sh --no-deploy` stages `dist/` locally without uploading.
 
 ## Data contract
 
 `/data/latest.json` → `{"version","base"}`; everything else is read from that immutable version folder:
-`manifest.json`, `index.json`, `metrics.json`, `tiles-attrs.csv` (every place's value, tier and source per year:
-the map's colours, stripes and popups, looked up by tile feature id, and the national and province comparisons),
+`manifest.json`, `index.json`, `metrics.json`, `tiles-attrs.csv` (each place's value, tier and source per year,
+keyed by tile feature id; drives the map's colours, stripes and popups and the national and province comparisons),
 `lgu/<pcode>.json`, `tiles/{z}/{x}/{y}.pbf` (uncompressed MVT, layers `lgu` and `prov`; from data v4 geometry,
 feature id and `pcode` only; v1–v3 tiles also carry per-year `v/t/s` properties, which the map reads only when
 the CSV is missing), `whatif/snapshot.bin` + `whatif/model.json`.
@@ -62,7 +62,7 @@ Missing tiles (open sea) come back from Pages as the SPA's `index.html`; the `lg
 | `src/pages/` | map page, about/method page (sources, honesty statement, validation headline) |
 
 **URL state** (no router library): `/` and `/about`; `?year=2024&prov=PH07022&lgu=PH0702217&lang=ja`.
-Selections push history entries (Back works), the year slider replaces the current one. Cloudflare
+Selections push history entries (Back works); the year slider replaces the current entry. Cloudflare
 Pages serves `index.html` for `/about` (SPA fallback, no top-level `404.html`).
 
 **Honesty rules in the UI:** model estimates are lighter on the map (fill opacity), italic in tables,

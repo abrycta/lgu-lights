@@ -1,9 +1,9 @@
 # Lights: code layout and data flow (milestone 1)
 
-Architecture B as decided (DECISIONS Q1): a **hexagonal Rust core** (`lgu-core`) with **CQRS-style
+Architecture B (DECISIONS Q1): a **hexagonal Rust core** (`lgu-core`) with **CQRS-style
 materialised read models**, delivered **Jamstack**-style. Milestone 1 builds "A first": the batch adapter
-(CLI in GitHub Actions) and the browser adapter (WASM in a Web Worker). The Cloudflare Worker API is the
-third driving adapter and comes later, same-origin under `/api/*` on the Pages project (Build notes B9).
+(CLI in GitHub Actions) and the browser adapter (WASM in a Web Worker). The Cloudflare Worker API, the
+third driving adapter, comes later, same-origin under `/api/*` on the Pages project (Build notes B9).
 
 ```mermaid
 flowchart LR
@@ -73,9 +73,9 @@ never the reverse. Python never re-implements a feature: it trains on the design
 | `whatif/` | `snapshot.bin` (panel, f32; version 2 since v3 adds the provincial FIES table, version 1 still readable) and `model.json` for the WASM what-if |
 | `estimates.csv` / `.parquet` | the long table (also published with the data release) |
 
-**Which value the map shows:** the PSA official estimate in round years; otherwise the model estimate
-from the latest earlier PSA round (`between` for 2013–2022 gaps, `nowcast` for 2024–2025). In round years
-the panel also shows the **backtest**: what a model trained only on earlier rounds would have said.
+The map shows the PSA official estimate in round years and otherwise the model estimate from the latest
+earlier PSA round (`between` for 2013–2022 gaps, `nowcast` for 2024–2025). In round years the panel also
+shows the **backtest**, the estimate from a model trained only on earlier rounds.
 
 ## Model v3 (see docs/DECISIONS.md, "v2 enhancement" and "v3 enhancement", and `metrics.json`)
 
@@ -91,7 +91,7 @@ Training labels: the PSA SAE rounds 2006–2023 (2006 and 2009 since v3; no sate
   each kept only when inner forward-chaining inside the training rounds prefers it.
 
 Split-conformal 50/90 % intervals from residuals on rounds the model had not seen, binned by the previous
-official level; model CV = (90 % half-width / 1.645) / estimate, tiers at 10/20 %. Validated
+official level; model CV = (90 % half-width / 1.645) / estimate, tiers at 10/20 %. Validation is
 forward-chaining: F1 → 2018, F2 → 2021, F3 → 2023 (headline), with carry-forward, drift and no-satellite
 baselines on the same rows, plus province-level MAE against PSA's SAE aggregates and FIES.
 
@@ -106,6 +106,6 @@ cd pipeline && uv sync --group sources --group train && uv run pytest -q
 gh release download data-v1 -R abrycta/lgu-lights -p 'read-models-v1.tar.zst'   # then web/scripts/link-data.sh
 ```
 
-The full data run happens in Actions only (`data.yml`). A run is started from the Actions tab
-(`workflow_dispatch`) or by merging a change to `.github/data-run.json` into `main`; pushes to other
-branches never start one, because the run replaces the `features-<v>` and `data-<v>` releases.
+The full data run happens only in Actions (`data.yml`), started from the Actions tab (`workflow_dispatch`)
+or by merging a change to `.github/data-run.json` into `main`. Pushes to other branches never start one
+because the run replaces the `features-<v>` and `data-<v>` releases.

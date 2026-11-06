@@ -1,8 +1,8 @@
 # Lights: architecture research
 
-Status: research and recommendations written 2026-10-21, before the build. What was built is recorded in [DECISIONS.md](DECISIONS.md) and [architecture/README.md](architecture/README.md). Versions and limits were checked on the day against crates.io, npm, vendor docs and release pages; **[U]** marks an estimate or a claim that could not be verified on a primary page. The 2026-10-21 measurement spike replaced the performance and size estimates with measurements ([DECISIONS.md](DECISIONS.md#spike-results-2026-10-21)); the few [U] left are outside its scope. Companion documents: [PAPER-NOTES.md](PAPER-NOTES.md), [MODELING-PLAN.md](MODELING-PLAN.md), [DATA-PLAN.md](DATA-PLAN.md).
+Status: research and recommendations written 2026-10-21, before the build. What was built: [DECISIONS.md](DECISIONS.md), [architecture/README.md](architecture/README.md). Versions and limits checked that day against crates.io, npm, vendor docs and release pages; **[U]** marks an estimate or a claim not verified on a primary page. The 2026-10-21 spike replaced the performance and size estimates with measurements ([DECISIONS.md](DECISIONS.md#spike-results-2026-10-21)); the few [U] left are outside its scope. Companion documents: [PAPER-NOTES.md](PAPER-NOTES.md), [MODELING-PLAN.md](MODELING-PLAN.md), [DATA-PLAN.md](DATA-PLAN.md).
 
-Constraints this document works within:
+Constraints:
 - the backend is **Rust only**; optimise for **performance and accuracy**; the architecture must be **uniquely optimised for this project**, and the backend must follow a **named, widely recognised pattern** with its customisations written down;
 - shared standards: Akari design system for the UI, `archivekit` for external data, free tiers only (Render free plan); the project uses `krtmtthw.dev` (subdomain `lgu.krtmtthw.dev` possible), and has Cloudflare, GitHub, Neon, Hugging Face and (unregistered) Earth Engine accounts;
 - no heavy local computation.
@@ -11,7 +11,7 @@ Constraints this document works within:
 
 **Architecture B, "Hexagonal core, materialised read models, edge API"**: one Rust workspace whose pure core (features, inference, intervals, classification) is driven by three adapters: a **CLI** that runs in GitHub Actions and *materialises* every result the site shows (per-LGU JSON, Parquet, PMTiles), a **WASM module** the browser calls for instant what-if sliders, and a **Cloudflare Worker (Rust/WASM)** that exposes the same core as a public JSON/CSV API with OpenAPI docs. The site is static (Cloudflare Pages at `lgu.krtmtthw.dev`); polygons are PMTiles on a host that honours Range requests; nothing in the critical path has a cold start or an overage path. Architecture A (the same without the Worker) is the fallback; C (a Render container) is documented and rejected.
 
-Why it is uniquely optimal here, in one paragraph: the workload is **about 1,640 LGUs × 14 years × about 30 features ≈ 690k floats (about 2.75 MB)** plus a model with about 6k parameters whose forward pass costs 83,328 MACs (about 167k FLOPs; measured 11.5 µs native, 17 µs in browser WASM). That is small enough to precompute everything, embed the whole dataset in a WASM module, and run inference in well under a millisecond anywhere, including a browser tab and a Worker's 10 ms CPU budget. A database, a long-running server or a native ONNX runtime would add cold starts, egress and failure modes without improving a single number the user sees. What the project needs instead is **one tested Rust implementation of the maths, compiled three ways**, so the number on the map, the number from the API and the number under the slider are provably the same.
+Why: the workload is **about 1,640 LGUs × 14 years × about 30 features ≈ 690k floats (about 2.75 MB)** plus a model with about 6k parameters whose forward pass costs 83,328 MACs (about 167k FLOPs; measured 11.5 µs native, 17 µs in browser WASM). That is small enough to precompute everything, embed the whole dataset in a WASM module and run inference in well under a millisecond anywhere, including a browser tab and a Worker's 10 ms CPU budget. A database, long-running server or native ONNX runtime would add cold starts, egress and failure modes without improving any number a visitor sees. The design is **one tested Rust implementation of the maths, compiled three ways**, so the map, the API and the slider show provably the same number.
 
 | Area | Recommendation | Runner-up |
 |---|---|---|
@@ -27,14 +27,14 @@ Why it is uniquely optimal here, in one paragraph: the workload is **about 1,640
 
 ## 1. Area: accuracy
 
-Full treatment in [MODELING-PLAN.md](MODELING-PLAN.md). The architectural consequences:
-1. **Five label rounds in the VIIRS era (2012, 2015, 2018, 2021, 2023).** PSA released a 2023 SAE on 2026-02-16 using Census EB and EOG nighttime lights (snippet-verified: [PSA](https://psa.gov.ph/content/881-cities-and-municipalities-recorded-poverty-incidence-20-percent-or-lower-2023), [Bohol repost](https://bohol.gov.ph/2026/02/16/more-bohol-towns-record-lower-poverty-incidence-in-2023-psa/)). The pipeline must treat label rounds as a growing list, not a fixed four.
-2. **Expect modest lift from lights.** PSA's own 2018 test moved adjusted R² from 55.09 % to 55.52 % ([PSA at UNSD 2022](https://unstats.un.org/sdgs/files/meetings/sdg-inter-workshop-jan-2022/5.4-Use-of-Non-Traditional-Data-Sources-for-Philippine-SDG-Indicator-Monitoring-Philippines.pdf)); Yeh et al. 2020 find nightlights-only change prediction r² < 0.01 ([PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC7244551/)). The product must therefore be built around *honest comparison with official numbers*, which is a UI and data-model requirement (§5), not just a modelling one.
+Details: [MODELING-PLAN.md](MODELING-PLAN.md). Consequences for the architecture:
+1. **Five label rounds in the VIIRS era (2012, 2015, 2018, 2021, 2023).** PSA released a 2023 SAE on 2026-02-16 using Census EB and EOG nighttime lights (snippet-verified: [PSA](https://psa.gov.ph/content/881-cities-and-municipalities-recorded-poverty-incidence-20-percent-or-lower-2023), [Bohol repost](https://bohol.gov.ph/2026/02/16/more-bohol-towns-record-lower-poverty-incidence-in-2023-psa/)). The pipeline treats label rounds as a growing list.
+2. **Expect modest lift from lights.** PSA's own 2018 test moved adjusted R² from 55.09 % to 55.52 % ([PSA at UNSD 2022](https://unstats.un.org/sdgs/files/meetings/sdg-inter-workshop-jan-2022/5.4-Use-of-Non-Traditional-Data-Sources-for-Philippine-SDG-Indicator-Monitoring-Philippines.pdf)); Yeh et al. 2020 find nightlights-only change prediction r² < 0.01 ([PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC7244551/)). The product is therefore built around *comparison with official numbers*, a UI and data-model requirement (§5) as well as a modelling one.
 3. **Every served number carries an interval and a reliability tier**, so the read model (§3.4) has those columns from day one.
 
 ## 2. Area: data and ETL
 
-Full treatment in [DATA-PLAN.md](DATA-PLAN.md) (sources, licences, volumes, the `archivekit` registry draft, cadence). The findings that shape the architecture:
+Details: [DATA-PLAN.md](DATA-PLAN.md) (sources, licences, volumes, the `archivekit` registry draft, cadence). Findings that shape the architecture:
 
 | Option | Facts (verified 2026-10-21) | Recommendation |
 |---|---|---|
@@ -50,7 +50,7 @@ Full treatment in [DATA-PLAN.md](DATA-PLAN.md) (sources, licences, volumes, the 
 
 ### 3.0 What is the backend *for* here?
 
-Workload analysis (all numbers derived from the project's own sizes):
+Workload (numbers from the project's own sizes):
 
 | Need | Shape | Cheapest correct mechanism |
 |---|---|---|
@@ -60,17 +60,17 @@ Workload analysis (all numbers derived from the project's own sizes):
 | Compare two LGUs, CSV export, programmatic access | occasional, small | static JSON is enough; an **API** adds OpenAPI docs and server-side CSV |
 | Rebuild everything when PSA or VIIRS publishes | batch, a few times a year | **GitHub Actions** running the Rust CLI |
 
-Conclusion: a long-running server is not required for any user-facing path. A server is *useful* for one thing only, a public, documented API, and on this workload that API can run as an edge function with hard, free limits. The "Rust backend" is therefore defined as **the Rust workspace that computes, materialises and serves every number**, with the deployment target chosen per adapter.
+Conclusion: no user-facing path needs a long-running server. A server is useful only for a public, documented API, and on this workload that API can run as an edge function with hard, free limits. The "Rust backend" is therefore **the Rust workspace that computes, materialises and serves every number**, with the deployment target chosen per adapter.
 
 ### 3.1 The standard pattern and its customisations
 
 **Pattern chosen: Hexagonal architecture (Ports and Adapters) for the code, combined with CQRS-style materialised read models for the data flow, delivered Jamstack-style.**
 
-- *Hexagonal*: Cockburn's 2005 pattern, intent "allow an application to equally be driven by users, programs, automated test or batch scripts, and to be developed and tested in isolation from its eventual run-time devices and databases"; primary (driving) adapters on one side, secondary (driven) adapters on the other, and "the asymmetry to exploit is … between inside and outside of the application" ([original article](https://alistair.cockburn.us/hexagonal-architecture/)). This is exactly the project's situation: the same application must be driven by a CI batch script, a browser and an HTTP edge function.
-- *CQRS / Materialised View*: separate models for updating and reading ([Fowler](https://martinfowler.com/bliki/CQRS.html)); precomputed views "store the results of complex computations or queries without requiring the database engine or client to recompute for every request" ([Azure Architecture Center: Materialized View](https://learn.microsoft.com/en-us/azure/architecture/patterns/materialized-view), [CQRS](https://learn.microsoft.com/azure/architecture/patterns/cqrs)). Fowler's warning that most systems "should be done in [CRUD] style" and that CQRS is "a significant mental leap" is taken seriously: Lights uses only the *read-model half*. There are no runtime commands at all; the only write is the pipeline run.
+- *Hexagonal*: Cockburn's 2005 pattern, intent "allow an application to equally be driven by users, programs, automated test or batch scripts, and to be developed and tested in isolation from its eventual run-time devices and databases"; primary (driving) adapters on one side, secondary (driven) adapters on the other, and "the asymmetry to exploit is … between inside and outside of the application" ([original article](https://alistair.cockburn.us/hexagonal-architecture/)). Lights fits this: one application driven by a CI batch script, a browser and an HTTP edge function.
+- *CQRS / Materialised View*: separate models for updating and reading ([Fowler](https://martinfowler.com/bliki/CQRS.html)); precomputed views "store the results of complex computations or queries without requiring the database engine or client to recompute for every request" ([Azure Architecture Center: Materialized View](https://learn.microsoft.com/en-us/azure/architecture/patterns/materialized-view), [CQRS](https://learn.microsoft.com/azure/architecture/patterns/cqrs)). Per Fowler's warning that most systems "should be done in [CRUD] style" and that CQRS is "a significant mental leap", Lights uses only the *read-model half*: no runtime commands; the only write is the pipeline run.
 - *Jamstack*: "the entire front end is prebuilt into highly optimized static pages and assets during a build process" and served from a CDN, with APIs reached from the browser ([jamstack.org](https://jamstack.org/what-is-jamstack/)).
-- Why not Clean Architecture as the headline: its concentric Entities / Use Cases / Interface Adapters / Frameworks rings and Dependency Rule ([Martin 2012](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)) describe the same dependency direction, but the Use-Case ring would hold one-line functions here; hexagonal names the thing that actually varies in this project (the driving adapter), so it communicates better. The Dependency Rule is still enforced by `Cargo.toml` (the core crate has no I/O dependencies).
-- Why not a Lambda architecture: its batch, speed and serving layers ([Marz & Warren, summarised](https://motherduck.com/glossary/lambda-architecture/)) are for streaming data; Lights has no speed layer. Its vocabulary is borrowed only to say "batch layer = Actions, serving layer = CDN".
+- Clean Architecture not chosen as the headline: its concentric Entities / Use Cases / Interface Adapters / Frameworks rings and Dependency Rule ([Martin 2012](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)) give the same dependency direction, but the Use-Case ring would hold one-line functions here, and hexagonal names what varies (the driving adapter). `Cargo.toml` still enforces the Dependency Rule (the core crate has no I/O dependencies).
+- Lambda architecture not chosen: its batch, speed and serving layers ([Marz & Warren, summarised](https://motherduck.com/glossary/lambda-architecture/)) are for streaming data, and Lights has no speed layer. Only its vocabulary is borrowed: "batch layer = Actions, serving layer = CDN".
 
 **Standard → our variant**
 
@@ -78,7 +78,7 @@ Conclusion: a long-running server is not required for any user-facing path. A se
 |---|---|---|
 | Application (inside the hexagon) | crate `lgu-core`: feature engineering from zonal statistics, model inference (GRU, tree ensemble), interval and reliability computation, classification breaks, PSGC harmonisation rules, narration templating | **No async, no I/O, `no_std`-compatible where practical**, so it compiles to native and `wasm32` unchanged. Pure functions over `&[f32]` slices; this is the performance choice (no allocation in the hot path) |
 | Driving (primary) ports | `Nowcast`, `WhatIf`, `Compare`, `Export` as plain Rust functions/traits | **Collapsed application layer**: there are no "use case" objects, because each use case is one function with no orchestration. Documented deviation from a textbook hexagon |
-| Driving adapters | `lgu-cli` (Actions batch), `lgu-wasm` (browser, `wasm-bindgen`), `lgu-worker` (Cloudflare Workers, `workers-rs` + axum through its `http` feature) | Three adapters for one core is the point of the design: the same inference binary-for-binary |
+| Driving adapters | `lgu-cli` (Actions batch), `lgu-wasm` (browser, `wasm-bindgen`), `lgu-worker` (Cloudflare Workers, `workers-rs` + axum through its `http` feature) | Three adapters, one core: the same inference binary-for-binary |
 | Driven (secondary) ports | `FeatureStore` (read features), `ModelWeights` (read a model), `ReadModelSink` (write outputs) | `FeatureStore` has exactly two implementations (Parquet in CI, embedded Arrow IPC/rkyv bytes in WASM), which is the only reason it is a trait. No repository abstraction over a database, because there is no database |
 | Driven adapters | `parquet` crate reader; `include_bytes!` snapshot; filesystem writer (JSON, Parquet, GeoJSON for tippecanoe) | — |
 | CQRS write side | the pipeline run (Python/R training + Rust CLI materialisation) | **Offline only**; the command is "rebuild data version N" |
@@ -95,20 +95,20 @@ Conclusion: a long-running server is not required for any user-facing path. A se
 | worker (workers-rs) | 0.8.7 (2026-09-25) | the edge adapter | "no Tokio or async_std support"; axum/hyper usable via the `http` feature ([README](https://github.com/cloudflare/workers-rs/blob/main/README.md)) |
 | salvo 1.0.1 / poem 3.1.12 / rocket 0.5.1 | — | not used | poem's last release 2025-07; rocket's 2024-05 |
 
-TechEmpower was archived on 2026-03-24 after Round 23 ([secondary](https://dev.to/kaliumhexacyanoferrat/techempower-framework-benchmarks-are-now-archived-whats-next-3l0a)); HttpArena is its successor (axum: 1.08 M req/s at 4,096 connections, p99 6.68 ms, 192 MiB RSS under load, [http-arena](https://www.http-arena.com/frameworks/axum/)). For Lights the framework's throughput is irrelevant (the dataset is 2.75 MB and reads are CDN-cached); the choice is about **ecosystem and portability**, and axum is the only one that runs unchanged on Workers and on a container.
+TechEmpower was archived on 2026-03-24 after Round 23 ([secondary](https://dev.to/kaliumhexacyanoferrat/techempower-framework-benchmarks-are-now-archived-whats-next-3l0a)); HttpArena is its successor (axum: 1.08 M req/s at 4,096 connections, p99 6.68 ms, 192 MiB RSS under load, [http-arena](https://www.http-arena.com/frameworks/axum/)). Throughput does not matter for Lights (the dataset is 2.75 MB and reads are CDN-cached); axum was chosen for **ecosystem and portability**, as the only one that runs unchanged on Workers and on a container.
 
 ### 3.3 Inference in Rust
 
 | Option | Version | GRU support | WASM | Size / cost | Verdict |
 |---|---|---|---|---|---|
-| **Hand-written GRU + tree evaluator in `lgu-core`** | — | by construction | yes, zero deps | weights a few kB; 83,328 MACs per forward: measured **11.5 µs native, 16.6–29 µs in WASM** (Chrome 156, opt-level 3+simd128 to z); equals tract to 5.96e-7 | **Primary.** Fastest, smallest, and the same code runs in CI, browser and Worker |
+| **Hand-written GRU + tree evaluator in `lgu-core`** | — | by construction | yes, zero deps | weights a few kB; 83,328 MACs per forward: measured **11.5 µs native, 16.6–29 µs in WASM** (Chrome 156, opt-level 3+simd128 to z); equals tract to 5.96e-7 | **Primary.** Fastest and smallest; the same code runs in CI, browser and Worker |
 | tract (`tract-onnx`) | 0.23.9 (2026-10-15) | yes: GRU/LSTM/RNN ops, fused `GruSeq` since 0.23.8 ([CHANGELOG](https://github.com/sonos/tract/blob/main/CHANGELOG.md)) | yes (wasm32, simd128, [README](https://github.com/sonos/tract/blob/main/README.md)) | pure Rust, larger binary | **Test oracle**: CI loads the Keras→ONNX export in tract and asserts the hand-written pass matches to 1e-5. Runner-up for runtime if ONNX must stay the artefact |
 | burn / burn-onnx | 0.22.1 (2026-10-20) | GRU, LSTM, RNN listed ([SUPPORTED-ONNX-OPS](https://raw.githubusercontent.com/tracel-ai/burn-onnx/main/SUPPORTED-ONNX-OPS.md)) | yes | build-time codegen, heavy dependency tree | Not needed |
 | candle / candle-onnx | 0.11.0 (2026-06-26) | ONNX import has LSTM and RNN but **no GRU** arm ([eval.rs](https://raw.githubusercontent.com/huggingface/candle/main/candle-onnx/src/eval.rs)) | yes | — | Rejected |
 | ort | 2.0.0-rc.15 (2026-10-19), binds ONNX Runtime 1.31 | yes | only via experimental alternative backends ([backends](https://ort.pyke.io/backends)) | CPU-only `libonnxruntime` about 20 MB installed (Arch package, [secondary](https://packages.cachyos.org/package/extra/x86_64/onnxruntime-cpu)) | Rejected: 20 MB of runtime for 6k parameters |
 | Trees | `lightgbm` 0.2.3 (2021, FFI) stale; `gbdt` 0.1.3; `linfa` 0.8.1 has no GBDT | — | — | — | Dump LightGBM trees to JSON and evaluate them in about 40 lines of core code; ONNX `TreeEnsembleRegressor` is deprecated in ai.onnx.ml v5 ([onnx.ai](https://onnx.ai/onnx/operators/onnx_aionnxml_TreeEnsembleRegressor.html)) |
 
-Browser alternatives rejected: onnxruntime-web 1.30.0 ships a 14.2 MB WASM (28.3 MB for WebGPU) and its WebGPU operator table lists no GRU/LSTM ([webgpu-operators.md](https://unpkg.com/onnxruntime-web@1.30.0/docs/webgpu-operators.md), [dist listing](https://app.unpkg.com/onnxruntime-web@1.30.0/files/dist)); TensorFlow.js's last release is 4.22.0 from 2024-10-21 ([releases](https://github.com/tensorflow/tfjs/releases)). The prior proposal's TF.js plan is therefore dropped.
+Browser alternatives rejected: onnxruntime-web 1.30.0 ships a 14.2 MB WASM (28.3 MB for WebGPU) and its WebGPU operator table lists no GRU/LSTM ([webgpu-operators.md](https://unpkg.com/onnxruntime-web@1.30.0/docs/webgpu-operators.md), [dist listing](https://app.unpkg.com/onnxruntime-web@1.30.0/files/dist)); TensorFlow.js's last release is 4.22.0 from 2024-10-21 ([releases](https://github.com/tensorflow/tfjs/releases)). The earlier TF.js plan is dropped.
 
 Accuracy guard: the training pipeline exports weights as JSON/binary **and** ONNX; a CI test runs 1,000 random inputs through tract (ONNX) and the core (weights) and fails on any divergence > 1e-5, so the served numbers equal the trained model.
 
@@ -118,7 +118,7 @@ Accuracy guard: the training pipeline exports weights as JSON/binary **and** ONN
 |---|---|---|
 | **Parquet (canonical feature store) via `parquet` 60.0.0 / `arrow`** | [crates.io](https://crates.io/api/v1/crates/parquet) | **Yes**: typed, columnar, compressed, readable by pandas/R/DuckDB for research, and by Rust in CI |
 | **Embedded snapshot (Arrow IPC or `rkyv` 0.8.18) in the WASM/CLI binaries** | 2.75 MB raw; `rkyv` is zero-copy ([crates.io](https://crates.io/api/v1/crates/rkyv)) | **Yes**: no network hop, no cold start; loads in < 10 ms (measured 0.4–2 ms decode in WASM, 5.2 ms first Worker request) |
-| duckdb-rs 1.10506.1 (DuckDB 1.5.6), DuckDB-WASM 1.32.0 | `bundled` compiles DuckDB from source; DuckDB-WASM is 34–39 MB uncompressed ([registry](https://registry.npmjs.org/@duckdb/duckdb-wasm), jsdelivr sizes) | No: an analytical engine for 690k values is pure overhead. (Typhoon Replay uses DuckDB-WASM for terabyte-derived data; that is why it is right there and wrong here) |
+| duckdb-rs 1.10506.1 (DuckDB 1.5.6), DuckDB-WASM 1.32.0 | `bundled` compiles DuckDB from source; DuckDB-WASM is 34–39 MB uncompressed ([registry](https://registry.npmjs.org/@duckdb/duckdb-wasm), jsdelivr sizes) | No: an analytical engine is overhead for 690k values (Typhoon Replay uses DuckDB-WASM for terabyte-derived data) |
 | SQLite (rusqlite 0.40.2) / Turso (libsql 0.10.0; free: 5 GB, 500 M row reads/month) | [Turso pricing](https://turso.tech/pricing) | No for serving (an extra network hop); possible as a local analysis file |
 | Neon PostGIS (free: 100 CU-h/project/month, 1 GB, scale-to-zero after 5 min, cold start "a few hundred milliseconds", PostGIS 3.6.4 on PG18, Singapore) | [plans](https://neon.com/docs/introduction/plans), [scale-to-zero](https://neon.com/docs/introduction/scale-to-zero), [extensions](https://neon.com/docs/extensions/pg-extensions) | Optional for ad-hoc spatial SQL during research; never in the serving path |
 | Cache | Cloudflare CDN cache for files (immutable, versioned paths, `Cache-Control: public, max-age=31536000, immutable`); the Worker holds everything in memory, so `moka` is unnecessary | — |
@@ -133,7 +133,7 @@ Accuracy guard: the training pipeline exports weights as JSON/binary **and** ONN
 | Hugging Face dataset | 302 to CDN then **206 verified today**; public storage "best-effort" free ([storage limits](https://huggingface.co/docs/hub/storage-limits)) | none | none | Versioned Parquet + PMTiles fallback base URL |
 | Cloudflare R2 | 10 GB-month, free egress ([pricing](https://developers.cloudflare.com/r2/pricing/)); enabling requires "the checkout flow to add an R2 subscription" ([get started](https://developers.cloudflare.com/r2/get-started/)) | none | low, but a payment method is reportedly prompted | Flagged decision (DECISIONS Q5) |
 | Render free | 750 instance-hours/month, 0.1 CPU / 512 MB, spin-down after 15 min, spin-up "about one minute"; **with a payment method on file, bandwidth/pipeline overages bill a "supplementary amount"** ([free docs](https://render.com/docs/free)); Hobby bandwidth cut to 5 GB/month on 2026-08-01, $0.15/GB ([secondary](https://jwatte.com/blog/render-com-platform-review.md)) | about 60 s | **Yes** (bandwidth, build minutes) | Documented variant C; not recommended |
-| Fly.io / Railway / Koyeb / Shuttle | no free tier ([Fly](https://docs.fly.io/about/pricing/)); $1 credit/month ([Railway](https://docs.railway.com/reference/pricing/plans)); one free 512 MB service in EU/US with card pre-auth reported **[U]** (rejected option; not measured in the spike); Shuttle is "ceasing operations" ([shutdown](https://docs.shuttle.dev/docs/shuttle-shutdown.md)) | — | — | Rejected |
+| Fly.io / Railway / Koyeb / Shuttle | no free tier ([Fly](https://docs.fly.io/about/pricing/)); $1 credit/month ([Railway](https://docs.railway.com/reference/pricing/plans)); one free 512 MB service in EU/US with card pre-auth reported **[U]** (not measured); Shuttle is "ceasing operations" ([shutdown](https://docs.shuttle.dev/docs/shuttle-shutdown.md)) | — | — | Rejected |
 
 ### 3.6 Latency targets and why they hold
 
@@ -145,22 +145,22 @@ Accuracy guard: the training pipeline exports weights as JSON/binary **and** ONN
 | What-if | browser WASM | < 1 ms compute per LGU (17 µs); a whole-map recompute is 41 ms, so it runs off the main thread | 83,328 MACs |
 | Rebuild | Actions | minutes | tiny data |
 
-These were estimates; the 2026-10-21 spike measured them. Targets now apply to warm connections; the first request to each origin pays about 90 ms of TCP+TLS to Singapore, hence `preconnect` to the tile and API hosts.
+Measured in the 2026-10-21 spike. Targets apply to warm connections; the first request to each origin pays about 90 ms of TCP+TLS to Singapore, hence `preconnect` to the tile and API hosts.
 
 ## 4. Area: front end
 
 Verified versions and facts (2026-10-21):
 - **MapLibre GL JS 6.15.0** (2026-10-18): WebGL2 required, ESM-only since 6.0.0 (2026-07-22), 293.9 kB gzipped ([releases](https://github.com/maplibre/maplibre-gl-js/releases), [bundlephobia](https://bundlephobia.com/api/size?package=maplibre-gl@6.15.0)); globe since v5; `fill-extrusion-height/-base/-color` are data-driven; **`global-state` expressions** (`map.setGlobalStateProperty`) let one numeric `t` interpolate across per-year properties with no per-feature calls ([state spec](https://maplibre.org/maplibre-style-spec/state/), [layers spec](https://maplibre.org/maplibre-style-spec/layers/)); `flyTo` already honours reduced motion unless `essential: true` ([Map API](https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/)). WebGPU: not mentioned in any 2026 release ([newsletter](https://maplibre.org/news/2026-09-02-maplibre-newsletter-august-2026/)).
 - **pmtiles 4.5.0** npm; protocol registered once per app ([docs](https://docs.protomaps.com/pmtiles/maplibre)).
-- **deck.gl 9.4.0** (2026-09-05): WebGPU "not recommended for production"; `@deck.gl/maplibre` supports maplibre ^6 ([what's new](https://deck.gl/docs/whats-new)). Not needed for 1,640 extruded polygons (building layers routinely draw tens of thousands); it would add about 125 kB+ gzipped.
+- **deck.gl 9.4.0** (2026-09-05): WebGPU "not recommended for production"; `@deck.gl/maplibre` supports maplibre ^6 ([what's new](https://deck.gl/docs/whats-new)). Not needed for 1,640 extruded polygons (building layers draw tens of thousands); it would add 125 kB+ gzipped.
 - Basemaps: OpenFreeMap `dark` and `fiord` styles return 200 today, no key, no limits ([openfreemap](https://openfreemap.org/quick_start/)); Protomaps PH extract via `pmtiles extract --bbox=116.9,4.5,126.6,21.2 --maxzoom=12` as a self-hosted fallback (measured with `--dry-run` on build 20261020: 77 MB at z0–12, 15 MB at z0–10); terrain from Mapterhorn (Terrarium WebP, z0–17, Cloudflare-sponsored, [data access](https://mapterhorn.com/data-access)) or AWS Terrain Tiles.
-- Scrollytelling: **react-scrollama 2.4.2** (IntersectionObserver, React 19 peer) for step triggers; GSAP 3.15 is now free for commercial use including ScrollTrigger ([license](https://gsap.com/community/standard-license/)) if pinned/scrubbed sequences are wanted; CSS `animation-timeline` is at 87.84 % support and not Baseline ([caniuse](https://caniuse.com/mdn-css_properties_animation-timeline)), so it is used only for progressive enhancement.
-- Narration: `speechSynthesis` at 95.9 % support ([caniuse](https://caniuse.com/speech-synthesis)); iOS requires a user gesture; Filipino voices exist on Android (Google TTS) and in Edge (Azure `fil-PH-BlessicaNeural` / `AngeloNeural`, [Azure voice list](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts)) but **not on Apple platforms** ([Apple VoiceOver languages, archived 2023](https://support.apple.com/en-ae/101364)). Open pre-rendered voices: Piper has no Filipino or Japanese ([VOICES.md](https://github.com/rhasspy/piper/blob/master/VOICES.md)); Kokoro-82M (Apache-2.0) has Japanese, no Tagalog ([VOICES.md](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md)); Meta MMS-TTS `tgl` is **CC-BY-NC 4.0** ([model card](https://huggingface.co/facebook/mms-tts-tgl)). Pre-rendering 1,640 × 3 min of audio would be about 0.6–1.2 GB **[U, arithmetic]** (moot: captions-first; not measured in the spike): infeasible and pointless. **Decision: captions-first, templated narration**; Web Speech where an EN/JA voice exists (no Filipino: DECISIONS Q8); optional pre-rendered chapter intros (≤ 100 clips) for EN/JA via Kokoro.
+- Scrollytelling: **react-scrollama 2.4.2** (IntersectionObserver, React 19 peer) for step triggers; GSAP 3.15 is free for commercial use including ScrollTrigger ([license](https://gsap.com/community/standard-license/)) for pinned or scrubbed sequences; CSS `animation-timeline` is at 87.84 % support and not Baseline ([caniuse](https://caniuse.com/mdn-css_properties_animation-timeline)), so it is progressive enhancement only.
+- Narration: `speechSynthesis` at 95.9 % support ([caniuse](https://caniuse.com/speech-synthesis)); iOS requires a user gesture; Filipino voices exist on Android (Google TTS) and in Edge (Azure `fil-PH-BlessicaNeural` / `AngeloNeural`, [Azure voice list](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts)) but **not on Apple platforms** ([Apple VoiceOver languages, archived 2023](https://support.apple.com/en-ae/101364)). Open pre-rendered voices: Piper has no Filipino or Japanese ([VOICES.md](https://github.com/rhasspy/piper/blob/master/VOICES.md)); Kokoro-82M (Apache-2.0) has Japanese, no Tagalog ([VOICES.md](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md)); Meta MMS-TTS `tgl` is **CC-BY-NC 4.0** ([model card](https://huggingface.co/facebook/mms-tts-tgl)). Pre-rendering 1,640 × 3 min of audio would be about 0.6–1.2 GB **[U, arithmetic]**, so it was rejected. **Decision: captions-first, templated narration**; Web Speech where an EN/JA voice exists (no Filipino: DECISIONS Q8); optional pre-rendered chapter intros (≤ 100 clips) for EN/JA via Kokoro.
 - Performance: Core Web Vitals thresholds unchanged, LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 at p75 ([web.dev](https://web.dev/articles/vitals)); enforce with `size-limit` 14.2.0 and `treosh/lighthouse-ci-action` 12.6.2 in CI. Fonts: load `latin`/`latin-ext` subsets of Shippori Mincho B1 and Zen Kaku Gothic New for EN/FIL and the `japanese` CSS only on `ja` (fontsource's `unicode-range` slices). Cloudflare Free zones compress with Zstandard by default ([compression](https://developers.cloudflare.com/speed/optimization/content/compression/)). `<link rel=preload>` cannot express a Range, so the PMTiles header is warmed with an early `fetch(..., {headers: {Range: "bytes=0-16383"}})`.
 - Accessibility (WCAG 2.2 AA): 2.5.7 Dragging Movements (W3C's own example is a draggable map that must also offer pan buttons, [Understanding 2.5.7](https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements.html)), 2.5.8 target size ≥ 24 px, 2.4.11 focus not obscured by sticky story panels, 2.2.2 pause control for the year animation, 1.2.1 transcript for narration. MapLibre exposes polygons only as one canvas, so the app provides an LGU combobox, a sortable data table (value, CI, CV, tier per year) and an `aria-live` region.
-- i18n: BCP 47 tag **`fil`** (`tl` is legacy); `Intl` supports `fil-PH`, `en-PH`, `ja-JP` in Node 24 (verified locally by the research agent; browsers to be checked in CI). Superseded by DECISIONS Q8: EN + JA only, so Akari's existing `<T en ja />` / `useT()` suffices. PSGC names are English-only in PSA's masterlist ([PSGC](https://psa.gov.ph/classification/psgc/)); Filipino rendering changes only generics ("Lungsod ng", "Bayan ng").
+- i18n: BCP 47 tag **`fil`** (`tl` is legacy); `Intl` supports `fil-PH`, `en-PH`, `ja-JP` in Node 24 (verified locally; browsers to be checked in CI). Superseded by DECISIONS Q8: EN + JA only, so Akari's existing `<T en ja />` / `useT()` suffices. PSGC names are English-only in PSA's masterlist ([PSGC](https://psa.gov.ph/classification/psgc/)); Filipino rendering changes only generics ("Lungsod ng", "Bayan ng").
 
-**Akari gaps found (to be raised as Akari issues, not patched in the app):**
+**Akari gaps (to be raised as Akari issues, not patched in the app):**
 1. ~~`<T>` and `useT()` are EN/JA only; add `fil`.~~ Not needed: EN + JA only (DECISIONS Q8).
 2. `maps`: `stepColor` / `choroplethLayers` cover classed fills; missing helpers for `global-state` year tweens, `fill-extrusion` height/colour expressions and `fill-pattern` hatching for unreliable classes.
 3. `MapLegend` has no reliability (hatching/greyed) swatches and no bivariate value–uncertainty variant.
@@ -173,7 +173,7 @@ Verified versions and facts (2026-10-21):
 - **Fixed breaks across years:** natural breaks differ per year and "complicate comparisons across maps" ([Axis Maps guide](https://www.axismaps.com/guide/choropleth)); the animated map uses manual round-number breaks applied to all years, matching Akari's 5-step sequential scale (four breaks, e.g. 10/20/30/40 %) and the 7-step diverging scale with a zero midpoint for change maps. Same breaks in map, legend, table and narration.
 - **Labelling:** every tooltip and panel says "PSA official (2021)" or "Model estimate (2024)"; model years are visually distinct (dashed outline or desaturated class) so the two are never confused in a screenshot.
 - **Provenance:** footer and methodology page show data version, "data as of", PSGC vintage, model version and git SHA, validation table, and the licence/attribution of each input (archivekit `data_version_metadata`).
-- **Narration honesty:** the template always speaks the interval ("between 18 and 29 percent") and the tier ("an estimate, not an official figure").
+- **Narration:** the template always speaks the interval ("between 18 and 29 percent") and the tier ("an estimate, not an official figure").
 
 ## 6. Three complete architectures
 
@@ -210,8 +210,8 @@ flowchart LR
 - **Performance:** no origin, no cold start; static p50 46 ms warm / 156 ms on a fresh connection from PH; what-if in microseconds.
 - **Accuracy:** identical numbers everywhere (one core crate).
 - **Cost:** $0; nothing can bill.
-- **Risks:** a reviewer may ask "where is the backend?" The answer is the Rust workspace, but the deployed artefact is a static site, so the Rust story lives in CI and WASM only.
-- **What it demonstrates:** a static-first engineer who knows that the right amount of server is sometimes zero; a Rust→WASM core with tests against tract.
+- **Risks:** the deployed artefact is a static site, so the Rust workspace shows only in CI and WASM.
+- **What it demonstrates:** a static-first design with no server; a Rust→WASM core tested against tract.
 
 ### Architecture B (recommended): "Hexagonal core, materialised read models, edge API"
 
@@ -244,12 +244,12 @@ flowchart LR
     API[Programmatic users] --> WK
 ```
 
-- **Performance:** same static path as A; the API answers from memory in < 1 ms CPU, isolate start in ms; hard limits 100k req/day, 10 ms CPU; the 2.75 MB snapshot fits comfortably in the Worker's 128 MB and the (secondary-sourced) 64 MiB script cap.
+- **Performance:** same static path as A; the API answers from memory in < 1 ms CPU, isolate start in ms; hard limits 100k req/day, 10 ms CPU; the 2.75 MB snapshot fits in the Worker's 128 MB and 64 MiB script cap.
 - **Accuracy:** the API, the map and the slider share one compiled core; a contract test asserts the Worker's JSON equals the static JSON for every LGU.
-- **Cost:** $0, and *cannot* bill: the Worker hard-fails at the cap instead of charging.
+- **Cost:** $0 with no billing path: the Worker hard-fails at the cap.
 - **Customisations recorded:** no tokio in the Worker (workers-rs runs on the isolate's event loop); the driven `FeatureStore` port is backed by embedded bytes, not a DB; no auth, no sessions, no writes.
-- **Risks:** workers-rs toolchain friction (wasm-bindgen versions); if it stalls, ship A and keep B's crate as a tracked task.
-- **What it demonstrates:** a textbook hexagonal design justified by a real need (three adapters), a Rust API with OpenAPI docs and p99 in the low hundreds of ms from Manila, an honest "why no database" note, and a static site that would survive the API being deleted.
+- **Risks:** workers-rs toolchain friction (wasm-bindgen versions); fallback is to ship A and track B's crate as a task.
+- **What it demonstrates:** a hexagonal design with three real adapters; a Rust API with OpenAPI docs and p99 in the low hundreds of ms from Manila; a "why no database" note; a static site that works without the API.
 
 ### Architecture C: "Rust service on Render" (classic layered service; Clean Architecture rings)
 
@@ -263,15 +263,15 @@ flowchart LR
     GA[Actions] -- image --> RS
 ```
 
-- **Performance:** warm p50 40–80 ms **[U]** (rejected option; not measured in the spike, though the warm edge path from PH measured 50 ms); **cold p99 about 60 s** after 15 min idle; Martin 2.0 needs x86-64-v3 CPUs ([releases](https://github.com/maplibre/martin/releases)) and adds nothing over range requests for one small PMTiles.
+- **Performance:** warm p50 40–80 ms **[U]** (not measured; the warm edge path from PH measured 50 ms); **cold p99 about 60 s** after 15 min idle; Martin 2.0 needs x86-64-v3 CPUs ([releases](https://github.com/maplibre/martin/releases)) and adds nothing over range requests for one small PMTiles.
 - **Accuracy:** same core crate, so the same numbers.
 - **Cost:** $0 until bandwidth exceeds the plan; **with the card on file, overages bill automatically** ([Render free](https://render.com/docs/free)).
 - **Risks:** the cold start alone breaks the LCP target for the first visitor every 15 minutes; overage exposure.
-- **What it demonstrates:** a conventional containerised service, well made, but it does not answer "why a server?" for this workload. (It is the right shape for Typhoon Replay's live tracker, not for Lights.)
+- **What it demonstrates:** a conventional containerised service; this workload gives no reason to run a server (the shape suits Typhoon Replay's live tracker).
 
 ### 6.4 Overall recommendation
 
-**B.** It is the only option that is simultaneously free with no billing path, cold-start free, and a *recognisable* backend architecture whose shape is forced by this project's facts: a 2.75 MB dataset, a 6k-parameter model, three different callers (CI, browser, API). The hexagon is not ceremony here, because each of its three driving adapters is a real deployment target, and the single driven port exists because the feature store really does have two implementations. A is the safety net and is built first by construction (B is A plus one crate). C is kept as documentation of why a long-running server was rejected.
+**B.** It is the only option that is free with no billing path, has no cold start and has a recognisable backend architecture. Its shape follows from the project's facts: a 2.75 MB dataset, a 6k-parameter model and three callers (CI, browser, API). Each of the three driving adapters is a real deployment target, and the one driven port exists because the feature store has two implementations. A is the fallback and is built first (B is A plus one crate). C records why a long-running server was rejected.
 
 ## 7. Rust workspace layout (proposal)
 
@@ -291,4 +291,4 @@ lgu-lights/
 └── docs/
 ```
 
-Rules enforced by `Cargo.toml` and CI: `lgu-core` depends on nothing with I/O (`cargo deny` + a dependency-graph test); `lgu-wasm` and `lgu-worker` must build for `wasm32-unknown-unknown`; the tract oracle test runs natively in CI.
+`Cargo.toml` and CI enforce: `lgu-core` has no I/O dependencies (`cargo deny` + a dependency-graph test); `lgu-wasm` and `lgu-worker` build for `wasm32-unknown-unknown`; the tract oracle test runs natively.
