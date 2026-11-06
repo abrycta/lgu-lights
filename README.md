@@ -6,7 +6,7 @@ It extends the regional GRU study in [a paper the author co-wrote](https://link.
 
 Live at **https://lights.krtmtthw.dev** (English and Japanese).
 
-**Status (2026-10-21):** milestone 1 is live with data version v1: PSA official figures for 2012, 2015, 2018, 2021 and 2023, model estimates for the years between and after (2012–2025) with 90 % intervals and reliability tiers, a plain-language reading for each place, and an in-browser what-if. The model's validation against a baseline that carries the last official figure forward is in [docs/DECISIONS.md](docs/DECISIONS.md) and on the site's About page. The next model version is in progress.
+**Status (2026-11-06):** complete and live with data version v5: PSA official figures for 2012, 2015, 2018, 2021 and 2023, model estimates for the years between and after (2012–2025) with 50 % and 90 % intervals and reliability tiers, a plain-language reading for each place, and an in-browser what-if. The model's validation against a baseline that carries the last official figure forward is in [docs/DECISIONS.md](docs/DECISIONS.md) and on the site's About page.
 
 ## How it works
 
