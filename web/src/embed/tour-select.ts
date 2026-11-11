@@ -1,5 +1,5 @@
-// Chooses the /embed tour from the published data (CLAUDE.md rule 27: the richest moments, chosen from the
-// data; the reduced-motion still is the densest one). Pure and deterministic: the same data gives the same tour.
+// Chooses the /embed tour from the published data: the richest moments, chosen from the data; the
+// reduced-motion still is the densest one. Pure and deterministic: the same data gives the same tour.
 // Used at build time by scripts/build-embed.mjs (Node strips the types) and reusable by any other renderer.
 //
 // The rule, for one year (a PSA round):
